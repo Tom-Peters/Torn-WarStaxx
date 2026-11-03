@@ -1720,7 +1720,7 @@
     const enemies=state.data.enemies;
     const summary=enemies.map(p=>({p,pat:pattern('enemies',p.id)})).sort((a,b)=>b.pat.count-a.pat.count);
     return statusNote()+card('Activity evidence','<p>Sampled online, travelling and abroad states are collected only while Torn PDA is open with WarStaxx installed. Percentages are percentages of sampled checks, not real time spent.</p>'+
-      '<p>Moderate confidence requires at least 60 observations across 12 distinct UTC hours. No past-war travel history can be reconstructed from official war reports alone.</p>')+
+      '<p>Moderate confidence requires at least 60 observations across 12 distinct UTC hours. No past-war travel history can be reconstructed from official war reports alone.</p>'+
       '<div class="ws-table-wrap"><table><thead><tr><th>Enemy</th><th>Samples</th><th>Online checks</th><th>Travelling/abroad</th><th>Observed peak TCT</th><th>Confidence</th></tr></thead><tbody>'+
       summary.map(x=>'<tr><td>'+esc(x.p.name)+'</td><td>'+fmt(x.pat.count)+'</td><td>'+fmt(x.pat.online)+'%</td>'+
         '<td>'+fmt(x.pat.travel)+'%</td><td>'+esc(x.pat.peak===null?'—':x.pat.peak+':00')+'</td><td>'+pill(x.pat.reliability)+'</td></tr>').join('')+
