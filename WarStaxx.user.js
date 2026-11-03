@@ -1750,7 +1750,7 @@
         '<td>'+esc(x.reason)+(x.details?.known?'<br><small>'+x.details.verdict+'; model FF '+x.details.ff.toFixed(2)+'x</small>':'')+'</td>'+
         '<td>'+(x.enemy?a('Profile',link(x.enemy.id))+' '+a('Attack',attackLink(x.enemy.id)):'')+
           ' '+b('Clear order','clear-assign:'+x.friend.id)+'</td></tr>').join('')+'</tbody></table></div>'))+
-      '<p class="ws-small">Orders are local on this device; they are not sent to other members, posted to faction chat, or executed automatically.</p>');
+      '<p class="ws-small">Orders are local on this device; they are not sent to other members, posted to faction chat, or executed automatically.</p>';
   }
   function alertView(){
     return statusNote()+(state.alerts.length?state.alerts.map(x=>card(x.title,'<p>'+esc(x.detail)+'</p>'+b('Review now','tab:'+x.tab))).join(''):empty('No active actionable war alerts.')) ;
