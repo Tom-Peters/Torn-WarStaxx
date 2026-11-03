@@ -1237,9 +1237,10 @@
   const link=id=>'https://www.torn.com/profiles.php?XID='+positive(id);
   const attackLink=id=>'https://www.torn.com/loader.php?sid=attack&user2ID='+positive(id);
   const apiKeyPda=typeof window.PDA_APIKEY==='string'?window.PDA_APIKEY:'###PDA-APIKEY###';
-  const defaults={key:'',ourId:0,enemyId:0,refreshSeconds:120,historyLimit:8,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},spies:{},notes:{},hidden:false};
+  const defaults={key:'',ourId:0,enemyId:0,refreshSeconds:120,historyLimit:8,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},blackSkulls:{},spies:{},notes:{},hidden:false};
   const cfg=Object.assign({},defaults,safeRead(CONFIG,{}));
   cfg.assignments=cfg.assignments&&typeof cfg.assignments==='object'?cfg.assignments:{};
+  cfg.blackSkulls=cfg.blackSkulls&&typeof cfg.blackSkulls==='object'?cfg.blackSkulls:{};
   cfg.spies=cfg.spies&&typeof cfg.spies==='object'?cfg.spies:{};
   cfg.notes=cfg.notes&&typeof cfg.notes==='object'?cfg.notes:{};
   const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},sampleCount:0});
@@ -1444,11 +1445,12 @@
       reason:live?'Currently Okay and online':ready?'Currently Okay; last action not online':kind==='hospital'?'Hospitalised; check expiry':kind==='away'?'Travelling/abroad':'Check live status'};
   }
   function assignments(){
-    const ours=state.data.ours.filter(p=>memberState(p)!=='hospital'&&memberState(p)!=='jail');
+    const ours=state.data.ours.slice().sort((a,b)=>Number(Boolean(cfg.blackSkulls[b.id]))-Number(Boolean(cfg.blackSkulls[a.id])) || Number(isOnline(b))-Number(isOnline(a)));
     const enemies=state.data.enemies.filter(p=>evaluate(p).ready);
     const ranked=enemies.slice().sort((a,b)=>evaluate(b).score-evaluate(a).score);
     const used=new Set();
     return ours.map(p=>{
+      if(memberState(p)!=='okay')return {friend:p,enemy:null,reason:memberState(p)==='hospital'?'Recover / monitor hospital expiry':memberState(p)==='away'?'Travelling · return and prepare':'Unavailable · standby and support',details:null};
       const fixed=positive(cfg.assignments[p.id]);
       let target=ranked.find(e=>e.id===fixed);
       let reason=target?'Your saved manual order':'';
@@ -1461,6 +1463,15 @@
       if(target)used.add(target.id);
       return {friend:p,enemy:target,reason,details:target?matchup(p,target):null};
     });
+  }
+  function copiedWarOrders(){
+    const rows=assignments(),last=Math.max(n(state.data.updated.enemies),n(state.data.updated.ours));
+    return 'WarStaxx · '+(state.data.war?.opponentName||('Opponent faction '+(positive(cfg.enemyId)||'unknown')))+'\n'+
+      'Generated '+new Date().toISOString()+' · roster '+age(last)+'\n'+
+      rows.map(x=>(cfg.blackSkulls[x.friend.id]?'[BLACK SKULL] ':'')+x.friend.name+' ['+x.friend.id+'] → '+
+        (x.enemy?x.enemy.name+' ['+x.enemy.id+']':'Scout / Support / Standby')+' — '+x.reason+
+        (x.details?.known?'; FF approx. '+x.details.ff.toFixed(2)+'x':'')).join('\n')+'\n'+
+      'Review live Torn status & verify targets before attacking. No orders were executed.';
   }
   function warScore(){
     const w=state.data.war,our=w?.factions?.find(f=>f.id===positive(cfg.ourId)),theirs=w?.factions?.find(f=>f.id!==positive(cfg.ourId));
@@ -1794,11 +1805,13 @@
     const rows=assignments();
     return statusNote()+card('Member-by-member orders','<p>Auto-assigned targets require manually entered, comparable battle stats for both players. Otherwise the tool recommends reconnaissance rather than pretending a hit is safe. Saved manual orders always take priority.</p>'+
       (!rows.length?empty('Your faction roster is missing. Refresh to load members.'):
+      '<div class="ws-toolbar">'+b('Copy war orders','copy-orders')+'</div>'+ 
       '<div class="ws-table-wrap"><table><thead><tr><th>Our member</th><th>Next assignment</th><th>Reason / confidence</th><th>Actions</th></tr></thead><tbody>'+
-      rows.map(x=>'<tr><td>'+esc(x.friend.name)+''+(isOnline(x.friend)?' '+pill('Online','good'):'')+'</td>'+
+      rows.map(x=>'<tr><td>'+esc(x.friend.name)+(cfg.blackSkulls[x.friend.id]?' '+pill('Black Skull','good'):'')+(isOnline(x.friend)?' '+pill('Online','good'):'')+'</td>'+
         '<td>'+esc(x.enemy?x.enemy.name:'Scout / Support / Standby')+'</td>'+
         '<td>'+esc(x.reason)+(x.details?.known?'<br><small>'+x.details.verdict+'; model FF '+x.details.ff.toFixed(2)+'x</small>':'')+'</td>'+
         '<td>'+(x.enemy?a('Profile',link(x.enemy.id))+' '+a('Attack',attackLink(x.enemy.id)):'')+
+          ' '+b(cfg.blackSkulls[x.friend.id]?'Unmark Black Skull':'Mark Black Skull','black-skill:'+x.friend.id)+
           ' '+b('Clear order','clear-assign:'+x.friend.id)+'</td></tr>').join('')+'</tbody></table></div>'))+
       '<p class="ws-small">Orders are local on this device; they are not sent to other members, posted to faction chat, or executed automatically.</p>';
   }
@@ -1893,6 +1906,18 @@
     if(action.startsWith('assign:')){const [friend,enemy]=action.slice(7).split(':').map(positive);
       if(friend&&enemy){cfg.assignments[friend]=enemy;saveCfg();navigate('assignments');}return;}
     if(action.startsWith('clear-assign:')){delete cfg.assignments[positive(action.slice(13))];saveCfg();render();return;}
+    if(action.startsWith('black-skill:')){const id=positive(action.slice(12));if(cfg.blackSkulls[id])delete cfg.blackSkulls[id];else if(id)cfg.blackSkulls[id]=true;saveCfg();render();return;}
+    if(action==='copy-orders'){
+      const text=copiedWarOrders();
+      if(navigator.clipboard&&typeof navigator.clipboard.writeText==='function'){
+        navigator.clipboard.writeText(text).then(()=>{state.error='War plan copied to clipboard; paste it into faction chat when ready.';render();}).catch(()=>{state.error='Clipboard permission denied. The plan remains available here.';render();});
+      }else{
+        const el=document.createElement('textarea');el.value=text;el.style.position='fixed';el.style.left='-9999px';document.body.appendChild(el);el.select();
+        let ok=false;try{ok=document.execCommand('copy');}catch(_){}el.remove();
+        state.error=ok?'War plan copied; paste into faction chat when ready.':'Clipboard unavailable; use the visible orders table.';render();
+      }
+      return;
+    }
     if(action==='clear-key'){cfg.key='';saveCfg();render();return;}
     if(action==='reset-activity'){state.data.activity={};state.data.sampleCount=0;save();render();return;}
     if(action==='reset-orders'){cfg.assignments={};saveCfg();render();return;}
