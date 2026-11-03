@@ -1421,7 +1421,8 @@
     const manual=bsScore(b),third=ffscouter(enemy.id),sb=manual!==null?manual:(third&&positive(third.bss)?positive(third.bss):null);
     if(sa===null||sb===null)return {known:false,ff:null,ratio:null,verdict:'Unverified stats',confidence:'Unknown'};
     const r=sb/Math.max(1,sa);
-    const ff=Math.max(1,Math.min(3,1+(8/3)*(sb/Math.min(100000,sa))));
+    // Approximate uncapped FF curve. Official top-1000 BSS cap varies over time; do not hardcode it.
+    const ff=Math.max(1,Math.min(3,1+(8/3)*(sb/Math.max(1,sa))));
     const old=Math.max(n(a?.observedAt),n(b?.observedAt));
     return {known:true,ratio:r,ff,verdict:r>=1.15?'Likely tougher':r>=0.8?'Close fight':'Favourable on BS score',
       confidence:manual===null?'FFScouter public BSS estimate':old&&Date.now()-old<7*24*HOUR?'Recent manual spy':'Older manual spy'};
