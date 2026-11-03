@@ -10,6 +10,8 @@ https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js
 
 WarStaxx registers in the **existing StaxxHub** sidebar as WS. No second persistent FAB is installed. It shares top navigation, notices, summaries and the action queue with ProfitStaxx, Company Helper and Happy Jump.
 
+**Version 0.1.1 visibility fix:** if Torn PDA loaded WarStaxx before the Hub, registration is re-announced after startup and periodically while the page is visible. On Torn faction/war pages an unobtrusive **Open WarStaxx** button appears inside the page as a fallback. On other Torn pages open **StaxxHub (S) → Tools → WarStaxx**. If you already installed v0.1.0, update the installed script using the same raw URL and reload the Torn page. This is not another floating launcher.
+
 ## Getting started
 
 1. Add the above URL to Torn PDA as a userscript.
