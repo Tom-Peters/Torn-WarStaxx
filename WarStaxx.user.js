@@ -1275,9 +1275,9 @@
   }
   function warHistory(j){
     return parseArray(unpack(j,'rankedwars')).map(w=>{
-      const factions=parseArray(w.factions||w.participants||{});
-      const ids=factions.map(f=>positive(f.id||f.faction_id)).filter(Boolean);
       const details=w.war&&typeof w.war==='object'?w.war:w;
+      const factions=parseArray(details.factions||details.participants||{});
+      const ids=factions.map(f=>positive(f.id||f.faction_id)).filter(Boolean);
       const t=positive(details.start||details.started||details.start_time);
       return {id:positive(w.id||w.war_id||details.id),start:t,end:positive(details.end||details.ended||details.end_time),
         winner:positive(details.winner||details.winner_id),factions:ids,
@@ -1812,8 +1812,8 @@
       '<label>Automatic refresh<select id="ws-interval">'+[90,120,180,300].map(s=>'<option value="'+s+'" '+(cfg.refreshSeconds===s?'selected':'')+'>'+s+' seconds while visible</option>').join('')+'</select></label>'+
       '<label>Historical wars per side<select id="ws-limit">'+[3,5,8,12,20].map(s=>'<option value="'+s+'" '+(cfg.historyLimit===s?'selected':'')+'>'+s+' wars</option>').join('')+'</select></label>'+
       '<label><input type="checkbox" id="ws-attacks" '+(cfg.enableAttacks?'checked':'')+'> Read my faction attacks for observed fair-fight data (extra API permission)</label>'+ 
-      '<h3>FFScouter · optional, independent service</h3><p>Use your own key already registered with FFScouter. This sends that key and selected opponent IDs to FFScouter; unlike Torn API requests, this is a third-party service. Read the <a href="https://ffscouter.com/#data-policy" target="_blank" rel="noopener noreferrer">FFScouter data policy</a> and consider their premium plans if useful.</p>'+ 
-      '<label>Registered FFScouter API key<input id="ws-ffkey" type="password" autocomplete="off" placeholder="'+(cfg.ffKey?'Key saved · leave blank to keep':'Separate registered FFScouter key')+'"></label>'+ 
+      '<h3>FFScouter · optional, independent service</h3><p>Enter your own Torn API key that you have registered with FFScouter. This sends that key and selected opponent IDs to FFScouter; unlike the standard Torn API requests, this is a third-party service. Read the <a href="https://ffscouter.com/#data-policy" target="_blank" rel="noopener noreferrer">FFScouter data policy</a> and consider their premium plans if useful.</p>'+ 
+      '<label>Registered FFScouter API key<input id="ws-ffkey" type="password" autocomplete="off" placeholder="'+(cfg.ffKey?'Key saved · leave blank to keep':'Torn key registered with FFScouter')+'"></label>'+ 
       '<label><input type="checkbox" id="ws-ff-consent" '+(cfg.ffConsent?'checked':'')+'> I have read the FFScouter data policy and knowingly enable this third-party lookup.</label>'+ 
       '<label><input type="checkbox" id="ws-ff-enable" '+(cfg.ffEnabled?'checked':'')+'> Fetch FFScouter estimates using my registered key, no more than once per 10 minutes.</label>'+
       '<div class="ws-toolbar">'+b('Save settings','save-settings')+b('Refresh all now','refresh')+b('Clear stored API key','clear-key')+'</div>'+
