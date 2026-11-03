@@ -24,9 +24,10 @@ WarStaxx registers in the **existing StaxxHub** sidebar as WS. No second persist
 - **Targets:** live status, last action, hospitalization, travel/abroad flags, profile and attack-page navigation.
 - **Matchups:** personal manual spies with Strength/Speed/Defense/Dexterity, modelled relative battle-stat scores and modelled fair-fight multiplier. Unknown pairs always show as unverified.
 - **Optional observed fair fights:** actual modifier from own faction attack records, separately labelled from estimates.
+- **Opt-in FFScouter:** with your independently entered *Torn API key already registered with FFScouter*, read public estimated fair-fight / public battle-stat scores for up to 205 opponents, no more than once per 10 minutes. The key and opponent IDs go to FFScouter only after explicit consent, not automatically.
 - **Orders:** assignments for each member; only suggests provisional auto-hits when both sides have comparable known stats; unknown pairs default to scout/support/standby. Manual assignments override auto ones.
 - **History:** fetches up to 20 ranked wars per faction and incrementally stores up to 40 official detailed war reports, with individual points/attacks and winners.
-- **Activity:** keeps a 14-day capped sample history for both rosters from foreground checks. Shows travel/online proportions, samples and confidence (insufficient/early/moderate).
+- **Activity:** keeps a 14-day capped sample history for both rosters from foreground checks. Separates the travel share *observed during wars* from general samples; shows online proportions, sample counts and confidence (insufficient/early/moderate).
 - **StaxxHub:** registration, summary, notices, action cards, deep links, diagnostics, read-only context event, and links to the other three helpers.
 - **Reliability:** API cooldown/backoff, evidence age, local persistence, no gameplay writes.
 
@@ -42,6 +43,8 @@ WarStaxx registers in the **existing StaxxHub** sidebar as WS. No second persist
 | /faction/attacks | Optional faction attacks and actual observed FF modifiers |
 
 Torn API returns only data permitted by your key. An unavailable or denied endpoint stays missing and appears in Diagnostics rather than being silently estimated.
+
+**External service, only if you opt in:** FFScouter `GET https://ffscouter.com/api/v1/get-stats` with your own registered Torn API key and up to 205 opponent IDs. Estimates are not official Torn measurements. See [FFScouter's API data policy](https://ffscouter.com/openapi). This optional external lookup shares your submitted key with the independent service; turning it off prevents further FFScouter calls.
 
 ## Confidence and limitations
 
