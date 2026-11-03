@@ -1219,7 +1219,7 @@
 (function () {
   'use strict';
   if (typeof document === 'undefined' || typeof window === 'undefined' ||
-      !/^(www\\.)?torn\\.com$/i.test(location.hostname) ||
+      !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
   const id='war', version='0.1.2';
@@ -1285,7 +1285,7 @@
 
 (function () {
   'use strict';
-  if (typeof document === 'undefined' || !/^(www\\.)?torn\\.com$/i.test(location.hostname) ||
+  if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
   const ID='war', VER='0.1.2', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
