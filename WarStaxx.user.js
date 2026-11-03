@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      0.1.0
+// @version      0.1.1
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -1221,7 +1221,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='0.1.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='0.1.1', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','targets','matchups','strategy','activity','history','assignments','alerts','settings','diagnostics'];
   const labels={overview:'Command',targets:'Targets',matchups:'Matchups',strategy:'Strategy',activity:'Activity',history:'History',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -1492,9 +1492,12 @@
     return out.slice(0,10);
   }
   function event(name,detail){document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}
+  function announce(){
+    event('register',{id:ID,label:'WarStaxx',icon:'WS',desc:'Ranked wars · Live targets · Matchups',trendMetric:'Hittable enemies',freshnessMs:300000,sections:sections.map(id=>({id,label:labels[id]}))});
+  }
   function publish(){
     const a=currentAlerts();state.alerts=a;
-    event('register',{id:ID,label:'WarStaxx',icon:'WS',desc:'Ranked wars · Live targets · Matchups',trendMetric:'Hittable enemies',freshnessMs:300000,sections:sections.map(id=>({id,label:labels[id]}))});
+    announce();
     const observed=Math.max(n(state.data.updated.wars),n(state.data.updated.enemies),n(state.data.updated.ours));
     const hittable=state.data.enemies.filter(e=>evaluate(e).ready).length;
     if(observed)event('summary',{id:ID,headline:state.data.war?'Ranked war detected':'War scouting / standby',
@@ -1965,16 +1968,42 @@
     detail:'War data sampled while Torn is in the foreground; no automatic game actions.'
   }));
   const styleSheet=()=>{if(!$('#warstaxx-css')){css.id='warstaxx-css';document.head.appendChild(css);}};
+  function factionRoute(){
+    return /^\/(factions|war)\.php$/i.test(location.pathname) ||
+      (/^\/page\.php$/i.test(location.pathname) && /^(rankedwar|factionwar|war)$/i.test(new URLSearchParams(location.search).get('sid')||''));
+  }
+  function mountFactionShortcut(){
+    if(!factionRoute() || document.getElementById('warstaxx-faction-open'))return;
+    const host=document.querySelector('#mainContainer, #mainWrapper, #mainContent, #main-content, main, [role="main"]');
+    if(!host || host.closest('#staxx-hub-root, #warstaxx-root'))return;
+    const bar=document.createElement('div');
+    bar.id='warstaxx-faction-open';
+    bar.style.cssText='display:flex;justify-content:flex-end;align-items:center;gap:6px;margin:8px 0;padding:4px 0;clear:both;';
+    const button=document.createElement('button');
+    button.type='button';button.textContent='⚔ Open WarStaxx';
+    button.setAttribute('aria-label','Open WarStaxx ranked-war intelligence');
+    button.style.cssText='border:1px solid #54d7fa;border-radius:9px;background:#103b60;color:#ddf8ff;padding:8px 12px;font:600 12px/1.3 system-ui,sans-serif;cursor:pointer;min-height:38px;';
+    button.addEventListener('click',()=>{open({section:'overview'});});
+    bar.appendChild(button);
+    host.insertBefore(bar,host.firstChild);
+  }
   function boot(){
     if(!document.body){document.addEventListener('DOMContentLoaded',boot,{once:true});return;}
-    styleSheet();document.body.appendChild(root);publish();
-    // Shared sidebar is the only persistent launcher. WarStaxx is opened from the Hub.
+    styleSheet();document.body.appendChild(root);
+    // Show a low-profile, on-page fallback on faction routes; never create another floating FAB.
+    mountFactionShortcut();
+    publish();
+    // Torn PDA can load userscripts in any order. Re-announce after the Hub has mounted.
     document.dispatchEvent(new CustomEvent('staxx:ping'));
+    setTimeout(announce,2500);
+    setTimeout(announce,9000);
     if(effectiveKey())setTimeout(()=>{if(!document.hidden)refresh(false);},2000);
   }
+  // Registration maintenance is local-only; it does not query the Torn API.
+  const registrationTimer=setInterval(()=>{if(!document.hidden){announce();mountFactionShortcut();}},45000);
   const refreshTimer=setInterval(()=>{
     if(!document.hidden&&effectiveKey()&&!state.loading&&Date.now()-state.lastRefresh>cfg.refreshSeconds*1000)refresh(false);
   },30000);
-  window.addEventListener('beforeunload',()=>clearInterval(refreshTimer),{once:true});
+  window.addEventListener('beforeunload',()=>{clearInterval(refreshTimer);clearInterval(registrationTimer);},{once:true});
   boot();
 })();
