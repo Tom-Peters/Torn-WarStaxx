@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      0.1.1
+// @version      0.1.2
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -1215,13 +1215,80 @@
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",startHub,{once:true});else startHub();
 })();
 
+/* WarStaxx loader probe · independent of the optional API and full WarStaxx UI */
+(function () {
+  'use strict';
+  if (typeof document === 'undefined' || typeof window === 'undefined' ||
+      !/^(www\\.)?torn\\.com$/i.test(location.hostname) ||
+      window.top !== window.self || window.__warStaxxProbe) return;
+  window.__warStaxxProbe = true;
+  const id='war', version='0.1.2';
+  function emit(name,detail) {
+    try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
+  }
+  function register() {
+    emit('register',{id,label:'WarStaxx',icon:'WS',
+      desc:window.__warStaxxReady?'Ranked war command centre':'Ranked war intelligence · checking startup',
+      sections:[{id:'overview',label:'Command'},{id:'targets',label:'Targets'},
+        {id:'matchups',label:'Matchups'},{id:'strategy',label:'Strategy'},
+        {id:'assignments',label:'Orders'},{id:'settings',label:'Settings'}]});
+  }
+  let fallback=null;
+  function closeFallback(){
+    if(fallback){fallback.remove();fallback=null;}
+    emit('panel',{id,open:false});
+  }
+  function openFallback(){
+    if(window.__warStaxxReady)return;
+    if(!fallback){
+      fallback=document.createElement('section');
+      fallback.id='warstaxx-startup-help';
+      fallback.setAttribute('role','dialog');
+      fallback.setAttribute('aria-label','WarStaxx startup diagnostics');
+      fallback.style.cssText='position:fixed;inset:0;z-index:2147483646;display:grid;place-items:center;background:#021024dd;padding:14px;font:14px/1.5 system-ui,sans-serif;color:#e4f6ff;';
+      const card=document.createElement('div');
+      card.style.cssText='width:min(480px,100%);border:1px solid #458bb8;border-radius:12px;padding:20px;background:#09233d;box-shadow:0 15px 45px #0009;';
+      const title=document.createElement('h2');
+      title.textContent='WarStaxx is loaded but could not open';
+      title.style.cssText='margin:0 0 12px;font-size:18px;color:#6cdfff;';
+      const message=document.createElement('p');
+      message.textContent='The lightweight launcher is active, but the full WarStaxx interface has not completed startup. Reload Torn; if this persists, share the status below (no API keys are included).';
+      const status=document.createElement('p');
+      status.textContent='Version '+version+' · App entered: '+(window.__warStaxxBooted?'yes':'no')+' · App ready: '+(window.__warStaxxReady?'yes':'no');
+      const copy=document.createElement('button');copy.type='button';copy.textContent='Copy startup status';
+      copy.style.cssText='padding:9px 12px;background:#19547a;color:#fff;border:1px solid #67c6ed;border-radius:8px;margin-right:8px;';
+      copy.addEventListener('click',()=>{
+        const t='WarStaxx '+version+' · main-entry='+!!window.__warStaxxBooted+' · ready='+!!window.__warStaxxReady+' · page='+location.pathname;
+        if(navigator.clipboard?.writeText)navigator.clipboard.writeText(t).catch(()=>{status.textContent=t;});
+        else status.textContent=t;
+      });
+      const close=document.createElement('button');close.type='button';close.textContent='Close';
+      close.style.cssText='padding:9px 12px;background:#17334c;color:#fff;border:1px solid #466e8c;border-radius:8px;';
+      close.addEventListener('click',closeFallback);
+      card.append(title,message,status,copy,close);fallback.appendChild(card);
+      (document.body||document.documentElement).appendChild(fallback);
+    }
+    emit('panel',{id,open:true});
+  }
+  document.addEventListener('staxx:ping',register);
+  document.addEventListener('staxx:open',e=>{
+    if(e.detail?.id===id&&!window.__warStaxxReady)openFallback();
+  });
+  document.addEventListener('staxx:closeall',closeFallback);
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',register,{once:true});
+  register();
+  setTimeout(register,1000);
+  setTimeout(register,3500);
+  setInterval(()=>{if(!document.hidden)register();},30000);
+})();
+
 
 (function () {
   'use strict';
-  if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
+  if (typeof document === 'undefined' || !/^(www\\.)?torn\\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='0.1.1', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='0.1.2', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','targets','matchups','strategy','activity','history','assignments','alerts','settings','diagnostics'];
   const labels={overview:'Command',targets:'Targets',matchups:'Matchups',strategy:'Strategy',activity:'Activity',history:'History',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -1993,6 +2060,7 @@
     // Show a low-profile, on-page fallback on faction routes; never create another floating FAB.
     mountFactionShortcut();
     publish();
+    window.__warStaxxReady=true;
     // Torn PDA can load userscripts in any order. Re-announce after the Hub has mounted.
     document.dispatchEvent(new CustomEvent('staxx:ping'));
     setTimeout(announce,2500);
