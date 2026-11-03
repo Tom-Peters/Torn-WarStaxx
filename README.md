@@ -10,6 +10,8 @@ https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js
 
 WarStaxx registers in the **existing StaxxHub** sidebar as WS. No second persistent FAB is installed. It shares top navigation, notices, summaries and the action queue with ProfitStaxx, Company Helper and Happy Jump.
 
+**Version 0.1.2 startup diagnostics:** an independent, minimal startup probe now advertises WarStaxx to StaxxHub before the full app boots. If the main script throws or aborts after injection, opening the WarStaxx entry displays a safe status panel rather than silently disappearing. No credentials or private data are included in the status. In Torn PDA, confirm that the WarStaxx script is **enabled**, is using **end-of-document injection**, and that any new permission requests have been accepted. Update to 0.1.2 from the same raw URL and reload Torn. If StaxxHub still shows only the original three tools, WarStaxx likely did not execute at all: inspect Torn PDA’s scripts-on-this-page view or the script’s enable toggle.
+
 **Version 0.1.1 visibility fix:** if Torn PDA loaded WarStaxx before the Hub, registration is re-announced after startup and periodically while the page is visible. On Torn faction/war pages an unobtrusive **Open WarStaxx** button appears inside the page as a fallback. On other Torn pages open **StaxxHub (S) → Tools → WarStaxx**. If you already installed v0.1.0, update the installed script using the same raw URL and reload the Torn page. This is not another floating launcher.
 
 ## Getting started
