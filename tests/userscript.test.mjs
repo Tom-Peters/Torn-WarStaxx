@@ -43,3 +43,10 @@ test('war travel samples are separate from routine checks',()=>{
   assert.match(code,/warSamples:/);
   assert.match(code,/warTravel:/);
 });
+
+test('installable userscript starts at byte zero with a complete metadata header',()=>{
+  assert.ok(code.startsWith('// ==UserScript==\n'),'Torn PDA needs metadata in the downloaded source, not a GitHub HTML page');
+  const ending=code.indexOf('// ==/UserScript==');
+  assert.ok(ending>0 && ending<2000,'Close metadata block before JavaScript body');
+  assert.match(code.slice(0,ending),/\/\/ @downloadURL\s+https:\/\/raw\.githubusercontent\.com\/Tom-Peters\/Torn-WarStaxx\/main\/WarStaxx\.user\.js/);
+});
