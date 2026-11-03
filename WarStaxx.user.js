@@ -11,6 +11,7 @@
 // @run-at       document-end
 // @grant        GM_xmlhttpRequest
 // @connect      api.torn.com
+// @connect      ffscouter.com
 // @updateURL    https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js
 // @downloadURL  https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js
 // ==/UserScript==
@@ -1236,17 +1237,18 @@
   const link=id=>'https://www.torn.com/profiles.php?XID='+positive(id);
   const attackLink=id=>'https://www.torn.com/loader.php?sid=attack&user2ID='+positive(id);
   const apiKeyPda=typeof window.PDA_APIKEY==='string'?window.PDA_APIKEY:'###PDA-APIKEY###';
-  const defaults={key:'',ourId:0,enemyId:0,refreshSeconds:120,historyLimit:8,enableAttacks:false,assignments:{},spies:{},notes:{},hidden:false};
+  const defaults={key:'',ourId:0,enemyId:0,refreshSeconds:120,historyLimit:8,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},spies:{},notes:{},hidden:false};
   const cfg=Object.assign({},defaults,safeRead(CONFIG,{}));
   cfg.assignments=cfg.assignments&&typeof cfg.assignments==='object'?cfg.assignments:{};
   cfg.spies=cfg.spies&&typeof cfg.spies==='object'?cfg.spies:{};
   cfg.notes=cfg.notes&&typeof cfg.notes==='object'?cfg.notes:{};
-  const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},sampleCount:0});
+  const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},sampleCount:0});
   const state={data:Object.assign(freshData(),safeRead(DATA,{})),open:false,tab:'overview',showMore:false,
     filter:'all',search:'',loading:false,spinner:'',error:'',scanning:false,alerts:[],chosen:0,
     lastRefresh:0,historicalRead:0,localKeyError:false,warExpected:false};
   state.data.reports=state.data.reports||{};
   state.data.activity=state.data.activity||{};
+  state.data.ffstats=state.data.ffstats||{};
   state.data.updated=state.data.updated||{};
   state.data.errors=state.data.errors||{};
   state.data.backoff=state.data.backoff||{};
@@ -1275,11 +1277,12 @@
     return parseArray(unpack(j,'rankedwars')).map(w=>{
       const factions=parseArray(w.factions||w.participants||{});
       const ids=factions.map(f=>positive(f.id||f.faction_id)).filter(Boolean);
-      const t=positive(w.start||w.started||w.start_time);
-      return {id:positive(w.id||w.war_id),start:t,end:positive(w.end||w.ended||w.end_time),
-        winner:positive(w.winner||w.winner_id),factions:ids,
+      const details=w.war&&typeof w.war==='object'?w.war:w;
+      const t=positive(details.start||details.started||details.start_time);
+      return {id:positive(w.id||w.war_id||details.id),start:t,end:positive(details.end||details.ended||details.end_time),
+        winner:positive(details.winner||details.winner_id),factions:ids,
         scores:factions.map(f=>({id:positive(f.id||f.faction_id),name:String(f.name||''),score:n(f.score||f.points)})),
-        target:n(w.target||w.target_score),rawStatus:String(w.status||'')};
+        target:n(details.target||details.target_score),rawStatus:String(details.status||'')};
     }).filter(w=>w.id).slice(0,80);
   }
   function detectWar(j){
@@ -1368,6 +1371,12 @@
         h.abroad+=Number(p.status.toLowerCase().includes('abroad'));
         h.hospital+=Number(stateName==='hospital');h.okay+=Number(stateName==='okay');
         item.count++;item.lastAt=Date.now();item.lastState=stateName;
+        if(state.data.war&&positive(state.data.war.id)){
+          const wars=item.wars||(item.wars={});const wid=String(state.data.war.id);
+          const rec=wars[wid]||(wars[wid]={n:0,travel:0,online:0});
+          rec.n++;rec.travel+=Number(stateName==='away');rec.online+=Number(isOnline(p));
+          for(const ancient of Object.keys(wars).slice(0,-20))delete wars[ancient];
+        }
         for(const old of Object.keys(item.hours))if(Number(old)<hour-24*14)delete item.hours[old];
       }
     }
@@ -1375,13 +1384,15 @@
   }
   function pattern(side,id){
     const item=state.data.activity[side+':'+id];
-    if(!item)return {count:0,travel:0,online:0,peak:null,reliability:'Not sampled'};
+    if(!item)return {count:0,travel:0,online:0,warSamples:0,warTravel:null,peak:null,reliability:'Not sampled'};
     const h=Object.entries(item.hours||{}).filter(([k])=>Number(k)>=Math.floor(Date.now()/HOUR)-24*14);
     const totals=h.reduce((z,[_,v])=>({n:z.n+n(v.count),online:z.online+n(v.online),travel:z.travel+n(v.travel)}),{n:0,online:0,travel:0});
     const buckets=Array.from({length:24},(_,i)=>({hour:i,samples:0,active:0}));
     for(const [k,v] of h){let b=buckets[(Number(k)%24+24)%24];b.samples+=n(v.count);b.active+=n(v.online);}
     const valid=buckets.filter(b=>b.samples>=3).sort((a,b)=>b.active/b.samples-a.active/a.samples);
-    return {count:totals.n,travel:totals.n?Math.round(totals.travel/totals.n*100):0,
+    const war=Object.values(item.wars||{}).reduce((acc,v)=>({n:acc.n+n(v.n),travel:acc.travel+n(v.travel)}),{n:0,travel:0});
+    return {count:totals.n,warSamples:war.n,warTravel:war.n?Math.round(war.travel/war.n*100):null,
+      travel:totals.n?Math.round(totals.travel/totals.n*100):0,
       online:totals.n?Math.round(totals.online/totals.n*100):0,peak:valid.length?valid[0].hour:null,
       reliability:totals.n>=60 && h.length>=12?'Moderate':totals.n>=12 && h.length>=3?'Early signal':'Insufficient samples',hours:h.length};
   }
@@ -1400,14 +1411,19 @@
     if(keys.some(k=>!Number.isFinite(Number(s[k]))||Number(s[k])<0))return null;
     return keys.reduce((sum,k)=>sum+Math.sqrt(Number(s[k])),0);
   }
+  function ffscouter(id){
+    const x=state.data.ffstats[String(id)];
+    return cfg.ffEnabled&&x&&Date.now()-n(x.at)<24*HOUR?x:null;
+  }
   function matchup(friend,enemy){
-    const a=spy(friend.id), b=spy(enemy.id),sa=bsScore(a),sb=bsScore(b);
+    const a=spy(friend.id), b=spy(enemy.id),sa=bsScore(a);
+    const manual=bsScore(b),third=ffscouter(enemy.id),sb=manual===null?positive(third?.bss):manual;
     if(sa===null||sb===null)return {known:false,ff:null,ratio:null,verdict:'Unverified stats',confidence:'Unknown'};
     const r=sb/Math.max(1,sa);
     const ff=Math.max(1,Math.min(3,1+(8/3)*(sb/Math.min(100000,sa))));
-    const old=Math.max(n(a.observedAt),n(b.observedAt));
+    const old=Math.max(n(a?.observedAt),n(b?.observedAt));
     return {known:true,ratio:r,ff,verdict:r>=1.15?'Likely tougher':r>=0.8?'Close fight':'Favourable on BS score',
-      confidence:old&&Date.now()-old<7*24*HOUR?'Recent manual spy':'Older manual spy'};
+      confidence:manual===null?'FFScouter public BSS estimate':old&&Date.now()-old<7*24*HOUR?'Recent manual spy':'Older manual spy'};
   }
   function ffObserved(enemyId,friendId){
     const all=(state.data.attacks||[]).filter(a=>a.defender===enemyId&&(!friendId||a.attacker===friendId)&&
@@ -1475,6 +1491,10 @@
     event('notice',{id:ID,count:a.filter(x=>x.status==='now'||x.status==='urgent').length,
       level:a.some(x=>x.status==='urgent')?'urgent':'warning',summary:a.length?a[0].title:'No verified war alerts',
       alerts:a.filter(x=>x.status==='now'||x.status==='urgent').map(x=>({id:x.id,title:x.title,detail:x.detail}))});
+    const completed=Object.values(state.data.reports).filter(r=>n(r.war?.end)>0)
+      .sort((a,b)=>n(b.war.end)-n(a.war.end)).slice(0,10);
+    if(completed.length)event('activity',{id:ID,events:completed.map(r=>({id:'war-'+r.id,
+      at:n(r.war.end)*1000,title:'Ranked war finished',detail:'Official report '+r.id+' available',section:'history',source:'api'}))});
     event('war-context',{id:ID,active:Boolean(state.data.war),ourFactionId:positive(cfg.ourId),
       opponentFactionId:positive(cfg.enemyId),observedAt:observed||0,hittable:hittable});
   }
@@ -1505,6 +1525,33 @@
     const keep=Object.keys(state.data.reports).map(Number).sort((a,b)=>b-a);
     for(const id of keep.slice(40))delete state.data.reports[id];
     state.historicalRead=Date.now();
+  }
+  async function refreshFF(){
+    if(!cfg.ffEnabled||!cfg.ffConsent||!cfg.ffKey||!state.data.enemies.length||!canCall('ffscouter',10*MIN))return;
+    // The separately entered user-owned FFScouter key is only ever sent to ffscouter.com.
+    const ids=state.data.enemies.map(p=>p.id).filter(Boolean).slice(0,205);
+    const url='https://ffscouter.com/api/v1/get-stats?key='+encodeURIComponent(cfg.ffKey)+'&targets='+ids.join(',');
+    try{
+      const results=await new Promise((resolve,reject)=>{
+        if(typeof GM_xmlhttpRequest!=='function'){reject(new Error('Torn PDA cross-origin request unavailable'));return;}
+        GM_xmlhttpRequest({method:'GET',url,timeout:16000,
+          onload:r=>{try{const j=JSON.parse(r.responseText);if(r.status>=400||!Array.isArray(j))throw Error('FFScouter returned no compatible player list');resolve(j);}catch(e){reject(e);}},
+          onerror:()=>reject(new Error('FFScouter connection failed')),ontimeout:()=>reject(new Error('FFScouter timed out'))});
+      });
+      const now=Date.now();
+      for(const p of results){
+        const id=positive(p.player_id);
+        if(!ids.includes(id))continue;
+        const raw=Number(p.fair_fight),bs=Number(p.bss_public);
+        state.data.ffstats[id]={ff:Number.isFinite(raw)&&raw>=1&&raw<=3?raw:null,bss:Number.isFinite(bs)&&bs>0?bs:null,at:now};
+      }
+      state.data.updated.ffscouter=now;delete state.data.errors.ffscouter;delete state.data.backoff.ffscouter;
+      for(const id of Object.keys(state.data.ffstats))if(now-n(state.data.ffstats[id].at)>7*24*HOUR)delete state.data.ffstats[id];
+    }catch(e){
+      const b=state.data.backoff.ffscouter||{count:0};const count=Math.min(6,n(b.count)+1);
+      state.data.backoff.ffscouter={count,until:Date.now()+Math.min(HOUR,2**count*MIN)};
+      state.data.errors.ffscouter=String(e.message||e).slice(0,140);
+    }
   }
   async function refreshAttacks(){
     if(!cfg.enableAttacks||!state.data.war||!positive(cfg.ourId))return;
@@ -1538,6 +1585,7 @@
       }
       await refreshHistory();
       await refreshAttacks();
+      await refreshFF();
       state.lastRefresh=Date.now();
     }catch(e){state.error=String(e.message||e);}
     finally{state.loading=false;state.spinner='';save();publish();render();}
@@ -1648,8 +1696,8 @@
           '<td>'+pill(p.status,ev.ready?'good':'')+'<br><small>'+esc(p.statusText)+'</small></td>'+
           '<td>'+pill(p.lastAction,isOnline(p)?'good':'')+'<br><small>'+esc(age(p.lastAt))+'</small></td>'+
           '<td>'+fmt(ev.hist.wars)+' wars'+(ev.hist.avg===null?'':' · avg '+fmt(ev.hist.avg)+' points')+
-          '<br><small>Observed FF '+(ff.avg===null?'unknown':ff.avg.toFixed(2)+'x ('+ff.count+')')+'</small></td>'+
-          '<td>'+esc(pat.count?pat.travel+'% of sampled checks':'Unknown')+'<br><small>'+esc(pat.reliability)+'</small></td>'+
+          '<br><small>Observed FF '+(ff.avg===null?'unknown':ff.avg.toFixed(2)+'x ('+ff.count+')')+'</small><br><small>FFScouter '+(ffscouter(p.id)?.ff!==null&&ffscouter(p.id)?.ff!==undefined?ffscouter(p.id).ff.toFixed(2)+'x estimated':'unavailable')+'</small></td>'+
+          '<td>'+esc(pat.warSamples?pat.warTravel+'% in observed wars ('+pat.warSamples+' checks)':'No in-war samples')+'<br><small>'+esc(pat.reliability)+'</small></td>'+
           '<td>'+a('Profile',link(p.id))+' '+a('Attack',attackLink(p.id))+' '+b('Intel','player:'+p.id)+'</td></tr>';
       }).join('')+'</tbody></table></div><p class="ws-small">Priority is an advisory shortlist, never a proven win chance. Attack buttons only navigate to Torn.</p>';
   }
@@ -1658,16 +1706,16 @@
     if(!p)return empty('Player not found in the latest roster.');
     const ours=state.data.ours.some(x=>x.id===id),side=ours?'ours':'enemies';
     const pat=pattern(side,id),hist=pastPerformance(id,side),s=spy(id);
-    const myFf=ffObserved(id);
+    const myFf=ffObserved(id),third=ffscouter(id);
     return card(p.name+' ['+id+']','<div class="ws-grid">'+
       '<div><h3>Live observation</h3><p>'+pill(p.status)+' · '+pill(p.lastAction)+'</p><p>'+esc(p.statusText)+'</p>'+
       '<small>Last action '+esc(age(p.lastAt))+'; snapshot '+esc(age(p.updated))+'</small></div>'+
       '<div><h3>Historical output</h3><p>'+hist.wars+' official war reports</p><p>'+fmt(hist.score)+' total score · '+fmt(hist.attacks)+' attacks</p>'+
       '<small>Same member ID, no assumption about changed faction membership</small></div>'+
       '<div><h3>Travel/activity sampling</h3><p>'+pat.count+' checks · '+pat.travel+'% away · '+pat.online+'% online</p>'+
-      '<small>Coverage '+esc(pat.reliability)+(pat.peak===null?'':'; peak sampled '+pat.peak+':00 TCT')+'</small></div>'+
+      '<small>Coverage '+esc(pat.reliability)+(pat.peak===null?'':'; peak sampled '+pat.peak+':00 TCT')+'</small><br><small>In-war: '+esc(pat.warSamples?pat.warTravel+'% travelling/abroad in '+pat.warSamples+' checks':'No in-war samples')+'</small></div>'+
       '<div><h3>Fair fight</h3><p>'+esc(myFf.avg===null?'No observed FF':myFf.avg.toFixed(2)+'x observed')+'</p>'+
-      '<small>'+myFf.count+' recorded encounters from faction attacks</small></div></div>'+
+      '<small>'+myFf.count+' recorded encounters from faction attacks</small><br><small>FFScouter (your key): '+esc(third&&third.ff!==null?third.ff.toFixed(2)+'x estimated':'Unavailable')+' · public BSS '+esc(third&&third.bss?fmt(third.bss):'unknown')+'</small></div></div>'+
       '<h3>Manual spy or verified battle stats</h3>'+
       '<p>Enter all four stats only if known. Predictions use the weighted battle-stat score, and remain estimates; they do not guarantee a hit.</p>'+
       ['strength','speed','defense','dexterity'].map(k=>'<label>'+esc(k)+'<input type="number" min="0" step="1" data-spy="'+esc(k)+'" value="'+esc(s&&s[k]!==undefined?s[k]:'')+'"></label>').join('')+
@@ -1723,7 +1771,7 @@
       '<p>Moderate confidence requires at least 60 observations across 12 distinct UTC hours. No past-war travel history can be reconstructed from official war reports alone.</p>'+
       '<div class="ws-table-wrap"><table><thead><tr><th>Enemy</th><th>Samples</th><th>Online checks</th><th>Travelling/abroad</th><th>Observed peak TCT</th><th>Confidence</th></tr></thead><tbody>'+
       summary.map(x=>'<tr><td>'+esc(x.p.name)+'</td><td>'+fmt(x.pat.count)+'</td><td>'+fmt(x.pat.online)+'%</td>'+
-        '<td>'+fmt(x.pat.travel)+'%</td><td>'+esc(x.pat.peak===null?'—':x.pat.peak+':00')+'</td><td>'+pill(x.pat.reliability)+'</td></tr>').join('')+
+        '<td>'+fmt(x.pat.travel)+'% overall / '+esc(x.pat.warTravel===null?'no war samples':x.pat.warTravel+'% during war')+'</td><td>'+esc(x.pat.peak===null?'—':x.pat.peak+':00')+'</td><td>'+pill(x.pat.reliability)+'</td></tr>').join('')+
       '</tbody></table></div>')+
       card('Next development of intelligence','<p>Coverage improves with foreground checks across multiple days and war windows. This version does not claim to identify an individual’s sleep schedule from a handful of polls.</p>');
   }
@@ -1762,7 +1810,11 @@
       '<label>Opponent faction ID (auto-updated if a ranked war is detected)<input type="number" id="ws-enemy" min="1" value="'+(positive(cfg.enemyId)||'')+'"></label>'+
       '<label>Automatic refresh<select id="ws-interval">'+[90,120,180,300].map(s=>'<option value="'+s+'" '+(cfg.refreshSeconds===s?'selected':'')+'>'+s+' seconds while visible</option>').join('')+'</select></label>'+
       '<label>Historical wars per side<select id="ws-limit">'+[3,5,8,12,20].map(s=>'<option value="'+s+'" '+(cfg.historyLimit===s?'selected':'')+'>'+s+' wars</option>').join('')+'</select></label>'+
-      '<label><input type="checkbox" id="ws-attacks" '+(cfg.enableAttacks?'checked':'')+'> Read my faction attacks for observed fair-fight data (extra API permission)</label>'+
+      '<label><input type="checkbox" id="ws-attacks" '+(cfg.enableAttacks?'checked':'')+'> Read my faction attacks for observed fair-fight data (extra API permission)</label>'+ 
+      '<h3>FFScouter · optional, independent service</h3><p>Use your own key already registered with FFScouter. This sends that key and selected opponent IDs to FFScouter; unlike Torn API requests, this is a third-party service. Read the <a href="https://ffscouter.com/#data-policy" target="_blank" rel="noopener noreferrer">FFScouter data policy</a> and consider their premium plans if useful.</p>'+ 
+      '<label>Registered FFScouter API key<input id="ws-ffkey" type="password" autocomplete="off" placeholder="'+(cfg.ffKey?'Key saved · leave blank to keep':'Separate registered FFScouter key')+'"></label>'+ 
+      '<label><input type="checkbox" id="ws-ff-consent" '+(cfg.ffConsent?'checked':'')+'> I have read the FFScouter data policy and knowingly enable this third-party lookup.</label>'+ 
+      '<label><input type="checkbox" id="ws-ff-enable" '+(cfg.ffEnabled?'checked':'')+'> Fetch FFScouter estimates using my registered key, no more than once per 10 minutes.</label>'+
       '<div class="ws-toolbar">'+b('Save settings','save-settings')+b('Refresh all now','refresh')+b('Clear stored API key','clear-key')+'</div>'+
       '<p class="ws-small">API access depends on your custom key scope. Opponent member lists and ranked-war history use public selections; your own detailed attacks require faction access.</p>')+
       card('Local intelligence controls','<p>War histories, observations, manual spy reports and assignments remain in this browser storage. No central database or cross-device sync is active.</p>'+
@@ -1792,7 +1844,10 @@
     const pages={overview,targets,matchups,strategy,activity,history,assignments:orders,alerts:alertView,settings,diagnostics};
     const content=$('.ws-content',root);
     const scroll=content.scrollTop;
+    const form=state.tab==='settings'?Array.from(content.querySelectorAll('input,select,textarea')).map(x=>({id:x.id,checked:x.checked,value:x.value,type:x.type})):null;
     try{content.innerHTML=(pages[state.tab]||overview)();}catch(e){content.innerHTML=empty('Render error: '+String(e.message||e));}
+    if(form)for(const prior of form){if(!prior.id)continue;const field=content.querySelector('#'+prior.id);
+      if(!field)continue;if(prior.type==='checkbox')field.checked=prior.checked;else field.value=prior.value;}
     content.scrollTop=scroll;
     $('.ws-sync',root).textContent=state.loading?'Checking Torn…':Math.max(n(state.data.updated.enemies),n(state.data.updated.ours))?'Last observation '+age(Math.max(n(state.data.updated.enemies),n(state.data.updated.ours))):'Not connected yet';
     $('.ws-head [data-action="refresh"]',root).disabled=state.loading;
@@ -1841,6 +1896,9 @@
     if(action==='reset-orders'){cfg.assignments={};saveCfg();render();return;}
     if(action==='save-settings'){
       const supplied=$('#ws-key',root)?.value?.trim();if(supplied)cfg.key=supplied;
+      const ffSupplied=$('#ws-ffkey',root)?.value?.trim();if(ffSupplied)cfg.ffKey=ffSupplied;
+      cfg.ffConsent=Boolean($('#ws-ff-consent',root)?.checked);
+      cfg.ffEnabled=Boolean($('#ws-ff-enable',root)?.checked)&&cfg.ffConsent&&Boolean(cfg.ffKey);
       cfg.ourId=positive($('#ws-our',root)?.value);
       cfg.enemyId=positive($('#ws-enemy',root)?.value);
       cfg.refreshSeconds=Math.max(90,Math.min(300,positive($('#ws-interval',root)?.value)||120));
@@ -1864,7 +1922,10 @@
   root.addEventListener('input',e=>{
     if(e.target.id==='ws-search'){
       state.search=e.target.value;
-      // Do not re-render the input itself; replace only rows after the player pauses to tap Filter.
+      const pos=e.target.selectionStart,scroll=$('.ws-content',root).scrollTop;
+      render();const input=$('#ws-search',root);
+      if(input){input.focus();try{input.setSelectionRange(pos,pos);}catch(_){}}
+      $('.ws-content',root).scrollTop=scroll;
     }
   });
   document.addEventListener('staxx:open',e=>{if(e.detail?.id===ID)open(e.detail);});
