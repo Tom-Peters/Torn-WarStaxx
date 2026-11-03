@@ -62,7 +62,7 @@ test('WarStaxx boots on a faction page without API key, registers with StaxxHub 
 });
 test('No extra floating button on normal Torn page; StaxxHub registration still works',()=>{
  const {body,host,events}=start('/index.php');
- assert.equal(host.child,null);
+ assert.equal(host.child ?? null,null);
  assert.ok(body.child && body.child.id==='warstaxx-root');
  assert.ok(events.some(e=>e.type==='staxx:register'&&e.detail.id==='war'));
 });
