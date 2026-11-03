@@ -10,7 +10,7 @@ test('Torn PDA metadata, author, stable URL',()=>{
   assert.match(code,/\/\/ @connect\s+api\.torn\.com/);
 });
 test('StaxxHub bundle and event interface',()=>{
-  assert.match(code,/\/\* StaxxHub v3\.4/);
+  assert.match(code,/\/\* StaxxHub v3\.5/);
   assert.match(code,/id=.?war/);
   for(const name of ['register','panel','summary','actions','notice','diagnostics','visit','ping','closeall'])assert.ok(code.includes('staxx:'+name)||code.includes("event('"+name+"'"),name);
   assert.match(code,/never create another floating FAB/);
