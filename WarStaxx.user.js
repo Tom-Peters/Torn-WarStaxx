@@ -1409,7 +1409,8 @@
     if(!s)return null;
     const keys=['strength','speed','defense','dexterity'];
     if(keys.some(k=>!Number.isFinite(Number(s[k]))||Number(s[k])<0))return null;
-    return keys.reduce((sum,k)=>sum+Math.sqrt(Number(s[k])),0);
+    const score=keys.reduce((sum,k)=>sum+Math.sqrt(Number(s[k])),0);
+    return score>0?score:null;
   }
   function ffscouter(id){
     const x=state.data.ffstats[String(id)];
@@ -1417,7 +1418,7 @@
   }
   function matchup(friend,enemy){
     const a=spy(friend.id), b=spy(enemy.id),sa=bsScore(a);
-    const manual=bsScore(b),third=ffscouter(enemy.id),sb=manual===null?positive(third?.bss):manual;
+    const manual=bsScore(b),third=ffscouter(enemy.id),sb=manual!==null?manual:(third&&positive(third.bss)?positive(third.bss):null);
     if(sa===null||sb===null)return {known:false,ff:null,ratio:null,verdict:'Unverified stats',confidence:'Unknown'};
     const r=sb/Math.max(1,sa);
     const ff=Math.max(1,Math.min(3,1+(8/3)*(sb/Math.min(100000,sa))));
