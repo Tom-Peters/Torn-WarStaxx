@@ -25,3 +25,21 @@ test('conservative war intelligence boundaries',()=>{
     assert.ok(code.toLowerCase().includes(t.toLowerCase()),t);
   }
 });
+
+test('missing opponent battle stats never become an auto-safe matchup',()=>{
+  assert.match(code,/sb=manual!==null\?manual:\(third&&positive\(third\.bss\)\?positive\(third\.bss\):null\)/);
+  assert.match(code,/if\(sa===null\|\|sb===null\)/);
+  assert.match(code,/return score>0\?score:null/);
+});
+test('optional FFScouter must be explicitly enabled and use a separate entered registered key',()=>{
+  assert.match(code,/\/\/ @connect\s+ffscouter\.com/);
+  assert.match(code,/if\(!cfg\.ffEnabled\|\|!cfg\.ffConsent\|\|!cfg\.ffKey/);
+  assert.match(code,/cfg\.ffEnabled=Boolean\(\$\('#ws-ff-enable'/);
+  assert.match(code,/get-stats\?key=/);
+  assert.match(code,/public BSS/);
+});
+test('war travel samples are separate from routine checks',()=>{
+  assert.match(code,/item\.wars\|\|\(item\.wars=\{\}\)/);
+  assert.match(code,/warSamples:/);
+  assert.match(code,/warTravel:/);
+});
