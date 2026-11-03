@@ -6,6 +6,8 @@
 
 https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js
 
+**Torn PDA: Add Script → Remote URL.** Paste the direct URL exactly as shown. The GitHub repository page (`github.com/Tom-Peters/Torn-WarStaxx`) and file page (`github.com/.../blob/main/...`) are HTML, not installable scripts. If Torn PDA displays **No header found**, check you used the **raw.githubusercontent.com** link (or its Raw button) rather than the repository webpage. The file starts immediately with `// ==UserScript==` and ends its metadata with `// ==/UserScript==`.
+
 WarStaxx registers in the **existing StaxxHub** sidebar as WS. No second persistent FAB is installed. It shares top navigation, notices, summaries and the action queue with ProfitStaxx, Company Helper and Happy Jump.
 
 ## Getting started
