@@ -61,6 +61,7 @@ test('risk-aware recommendations require verified comparable manual spies',()=>{
     "const memberState=p=>p.status.toLowerCase();",
     "const friend={id:7,status:'Okay'},state={data:{war:{id:5},enemies:[{id:88,status:'Okay',level:40}]}};",
     "const cfg={enableAttacks:false},warAttackRows=()=>[];",
+    'const enemyRoleBands=()=>({}),roleAllows=()=>true;',
     'let mode="safe",ratio=0.5,wins=0,verified=true;',
     'const hitterRisk=()=>({mode,maxRatio:mode==="safe"?.55:mode==="aggressive"?.78:.70,minWins:mode==="safe"?1:0});',
     'const matchEvidence=()=>({verified,rosterVerified:true,tier:ratio>=.7?1:0,conflict:false,'+
@@ -107,7 +108,7 @@ test('automatic sync has scoped path, revision conflicts, foreground-only pollin
     "data-skull-risk","if(!document.hidden&&sharedEndpoint()&&sharedScope())"])
     assert.ok(source.includes(token),'Missing sync wiring '+token);
   assert.ok(!source.includes('GM_xmlhttpRequest({method:"POST"'));
-  assert.match(source,/\/\/ @version\s+1\.1\.0/);
+  assert.match(source,/\/\/ @version\s+1\.2\.0/);
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
 });
