@@ -120,6 +120,27 @@ test('Shared orders include strength policy but no Torn keys or spy records',()=
  for(const word of ['SECRET-TORN','SECRET-FF','PRIVATE','speed'])
    assert.ok(!body.includes(word),'No secret fields in shared payload: '+word);
 });
+test('Black Skulls and regular-member reports have separate copyable, source-labelled exports',()=>{
+ const setup=[
+  'const squadWarSummary=(id,side)=>({',
+  '  squadSource:"Tags observed during war",source:"Official report",',
+  '  points:side==="black"?200:80,attacks:side==="black"?10:8,perHit:side==="black"?20:10,',
+  '  enemyPointsReceived:side==="black"?60:25,netProxy:side==="black"?140:55,',
+  '  rows:[{id:10,name:"Hitter",score:200,attacks:10,received:60,incomingHits:2}]}),',
+ ].join('\n');
+ const f=fixture(setup,'  function squadReportText(','  function squadReportCard(',
+   '({squadReportText})');
+ const skull=f.squadReportText(55,'black'),regular=f.squadReportText(55,'regular');
+ assert.ok(skull.includes('Skull Capo'));
+ assert.ok(skull.includes('Points earned: 200'));
+ assert.ok(skull.includes('Enemy points conceded')||
+   skull.includes('Enemy score gained by attacking this squad'));
+ assert.ok(regular.includes('Regular faction members'));
+ assert.ok(regular.includes('Points earned: 80'));
+ assert.ok(!regular.includes('Skull Capo'));
+ assert.ok(source.includes("action.startsWith('copy-squad:')"));
+ assert.ok(source.includes("id:'skulls-uncovered-heavy'"));
+});
 test('Skull Capo screen, custom controls and dual after-action reports are wired',()=>{
  for(const token of [
   "const ID='war', VER='1.3.0'",
