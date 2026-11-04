@@ -1,5 +1,50 @@
 > **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v1.0.0). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
 
+## v1.4.0 - Skull Capo operational intelligence (4 November 2026)
+
+All five Skull Capo requests implemented in \`WarStaxx.user.js\`, preserving the always-available Torn command strip, **01 Act Now / 02 Opponent / 03 Reports**, FFScouter BSS badges, manual matchup safety and v1.3 cutoff settings.
+
+### 1. Replacement Black Skulls when the assigned hitter is unavailable
+
+The **Black Skulls target coverage** table identifies heavy targets whose assigned squad member is hospitalised, travelling/away, has confirmed low energy or no longer passes the recent/manual-spy matchup gate. It proposes an *unassigned, observed Okay, role-matched, favourable-verified* Black Skull as a replacement. The table has a **Replace [name] with [name]** action; clicking it revalidates current rosters, target availability, both members, comparative spies, target conflicts and the new hitter's available energy information. It then changes **only the local/order-plan assignments** and optionally syncs them through the previously enabled Worker. It does **not** automatically issue orders, launch attacks or spend energy. If no evidenced substitute exists, it displays the gap.
+
+### 2. Prioritise uncovered heavy enemies by BSS and scored wars
+
+Heavy targets are now ranked using (i) current known BSS, (ii) that same enemy member's official score in the opponent's latest completed ranked war, and (iii) optional captured scoring attacks in the current war. The priority model weights the three signals 60 / 25 / 15; these are **relative planning weights**, *not* the probability of winning. When historical player-level scoring is absent, the UI says **Unknown** and uses the remaining known signals. This can prioritise a repeat high-output opponent over a higher-BSS enemy with little observed scoring. The Skull Capo board shows BSS, last-war points, priority and whether an evidenced squad substitute is free.
+
+### 3. Torn faction-chat briefing in one tap
+
+**Copy squad chat briefing** is available from the Skull Capo command and Black Skulls screens. It copies a concise 3,200-character-or-shorter plaintext briefing with war, official score, sampled chain, chosen strength cutoff, named Black Skulls/current orders and top uncovered targets with suggested manual backups. No automatic Torn chat posting occurs. The briefing excludes API keys, spy stat values and personal local notes; it is for pasting manually into faction chat.
+
+### 4. Heavy-opponent return alerts
+
+When fresh consecutive Torn roster observations show a **high-BSS** enemy changing from **hospital** or **travel/away** to **Okay**, WarStaxx creates a priority Skull Capo tactical alert. Its source is an actually observed status transition, not a guessed flight/medical expiry. The alert routes to the squad command board; the existing live war bar and alert stream also benefit. It is deduplicated by war/player and expires after five minutes. The script runs foreground-only and does not send notifications when Torn PDA is closed.
+
+### 5. Fairer comparisons against similarly strong opponents
+
+WarStaxx now captures a small *attack-time BSS observation* for each same-war own-faction attack when:
+
+- The Torn API confirms a ranked-war attack and its faction pairing,
+- the BSS estimate is available from a fresh manual spy or fresh explicitly enabled FFScouter,
+- both rosters are recently observed, and
+- that attack finished no more than **six hours** before its BSS observation.
+
+The **Black Skulls | matched opponent-strength comparison** analyses those samples at a **+/-25% target-BSS band** around each member's current median observed target BSS. It compares this war against up to three previous **completed** wars; it requires at least three current and three historical comparable captured attempts from at least **two** historical wars. It strips milestone/special bonuses and normalises ordinary chain respect where possible. The displayed measure is *captured, chain-normalised respect per recorded attempt*, **not** total official ranked-war points, true win probability or a fully comprehensive damage ledger. A decline of 30% or more creates a review flag only when the prerequisites are met.
+
+Current squad command, Black Skulls operations, completed-war analysis, and copied Black Skulls squad debriefs all include this comparison. The historical BSS of old targets is **never invented retroactively**. Old wars lacking captured observations show Unknown until future sampled wars create a valid baseline. Per-war squad membership snapshots and existing official per-player scorecards remain separate sources.
+
+### Installation and optional sync
+
+Stable Torn PDA installer (same URL, no need to change it):
+
+https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js
+
+The shared-orders Worker is optional, requires manual Cloudflare deployment and a legitimate officer writer token, and shares only explicitly selected planning fields. The strength cutoff and manual replacement orders use the existing revisioned sync protocol; **no Worker migration is required for v1.4**.
+
+### Quality gates
+
+The v1.4 regression file is \`tests/war-v14.test.mjs\` and covers priority scoring, free replacement selection, private copy-only briefing, measured return transitions, BSS snapshots, matched-strength comparisons and integration. Existing WarStaxx and optional Worker regression tests still pass in isolated JS checks. Torn PDA UI interaction, live API entitlements and an actual deployed Worker are **not yet verified on a physical device**.
+
 ## v1.3.0 - Skull Capo command, configurable heavy cutoff and squad performance (4 November 2026)
 
 The WarStaxx command view now reflects the correct leadership role: **Skull Capo, commander of the Black Skulls heavy hitters**, rather than overall faction leader. The full faction's regular attackers and defensive/reserve members remain visible for coordination but are clearly marked as context outside the Black Skulls squad.
