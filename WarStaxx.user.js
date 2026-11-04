@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.0.0
+// @version      1.1.0
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.0.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.1.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'War room',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -199,7 +199,7 @@
   const link=id=>'https://www.torn.com/profiles.php?XID='+positive(id);
   const attackLink=id=>'https://www.torn.com/loader.php?sid=attack&user2ID='+positive(id);
   const apiKeyPda=typeof window.PDA_APIKEY==='string'?window.PDA_APIKEY:'###PDA-APIKEY###';
-  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},controlAssignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,warStripCompact:false,priorityNotifications:true,hidden:false};
+  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},controlAssignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,warStripCompact:false,priorityNotifications:true,hitterRisk:{},shared:{enabled:false,endpoint:'',token:'',canWrite:false},hidden:false};
   const cfg=Object.assign({},defaults,safeRead(CONFIG,{}));
   cfg.assignments=cfg.assignments&&typeof cfg.assignments==='object'?cfg.assignments:{};
   cfg.ordersByEnemy=cfg.ordersByEnemy&&typeof cfg.ordersByEnemy==='object'?cfg.ordersByEnemy:{};
@@ -215,10 +215,13 @@
   cfg.planStatus=cfg.planStatus&&typeof cfg.planStatus==='object'?cfg.planStatus:{};
   cfg.leaderNotes=cfg.leaderNotes&&typeof cfg.leaderNotes==='object'?cfg.leaderNotes:{};
   cfg.manualReadiness=cfg.manualReadiness&&typeof cfg.manualReadiness==='object'?cfg.manualReadiness:{};
-  const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},factionBasic:{},publicIntel:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},scoreTimelines:{},warTimelines:{},afterActions:{},ownerReadiness:{},availabilityEvents:{},sampleCount:0});
+  cfg.hitterRisk=cfg.hitterRisk&&typeof cfg.hitterRisk==='object'?cfg.hitterRisk:{};
+  cfg.shared=Object.assign({enabled:false,endpoint:'',token:'',canWrite:false},
+    cfg.shared&&typeof cfg.shared==='object'?cfg.shared:{});
+  const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},factionBasic:{},publicIntel:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},scoreTimelines:{},warTimelines:{},afterActions:{},ownerReadiness:{},availabilityEvents:{},chain:{},sampleCount:0});
   const state={data:Object.assign(freshData(),safeRead(DATA,{})),open:false,tab:'overview',showMore:false,
     filter:'all',sort:'warScore',search:'',commanderFilter:'black',controlFocus:0,loading:false,ffLoading:false,spinner:'',error:'',scanning:false,alerts:[],chosen:0,
-    lastRefresh:0,historicalRead:0,localKeyError:false,warMore:false,quickHitPending:false,stripScrolled:false,stripExpanded:false,warExpected:false,selectedWar:0,selectedTimeline:0,selectedPace:0,selectedDebrief:0,detailFrom:'targets',leaderFilter:'all',hitterFilter:'all'};
+    lastRefresh:0,historicalRead:0,localKeyError:false,sharedBusy:false,sharedDirty:false,sharedRevision:0,sharedSyncAt:0,sharedError:'',warMore:false,quickHitPending:false,stripScrolled:false,stripExpanded:false,warExpected:false,selectedWar:0,selectedTimeline:0,selectedPace:0,selectedDebrief:0,detailFrom:'targets',leaderFilter:'all',hitterFilter:'all'};
   state.data.reports=state.data.reports||{};
   state.data.activity=state.data.activity||{};
   state.data.ffstats=state.data.ffstats||{};
@@ -231,7 +234,7 @@
   // Repair malformed legacy cached containers without wiping valid user data.
   for(const k of ['ours','enemies','ourWars','enemyWars','attacks'])
     if(!Array.isArray(state.data[k]))state.data[k]=[];
-  for(const k of ['reports','activity','factionBasic','publicIntel','ffstats','seenAttacks','updated','errors','backoff','meta','scoreTimelines','warTimelines','afterActions','ownerReadiness','availabilityEvents'])
+  for(const k of ['reports','activity','factionBasic','publicIntel','ffstats','seenAttacks','updated','errors','backoff','meta','scoreTimelines','warTimelines','afterActions','ownerReadiness','availabilityEvents','chain'])
     if(!state.data[k]||typeof state.data[k]!=='object'||Array.isArray(state.data[k]))state.data[k]={};
   if(state.data.war&&!Array.isArray(state.data.war.factions))state.data.war=null;
   for(const [key,value] of Object.entries(state.data.reports))
@@ -322,6 +325,12 @@
         defenderName:String(a.defender?.name||a.defender_name||'').slice(0,80),
         ff:validFF(rawFF),result:String(a.result||'').slice(0,50),
         respect:officialNumber(rawGain),chain:officialNumber(a.chain),
+        chainBonus:officialNumber(a.modifiers?.chain_bonus),
+        modifierWar:officialNumber(a.modifiers?.war),
+        modifierRetaliation:officialNumber(a.modifiers?.retaliation),
+        modifierOverseas:officialNumber(a.modifiers?.overseas),
+        modifierGroup:officialNumber(a.modifiers?.group_attack),
+        specialBonus:Boolean(a.modifiers?.warlord_bonus&&Number(a.modifiers.warlord_bonus)>0),
         code:'api'};
     }).filter(a=>a.id&&a.at&&a.attacker&&a.defender);
   }
@@ -350,6 +359,62 @@
        a.attackerFaction===w.enemyId&&a.defenderFaction===w.ourId))
       .map(a=>({...a,side:a.attackerFaction===w.ourId?'ours':'enemies'}))
       .sort((a,b)=>b.at-a.at);
+  }
+
+  // Torn's chain endpoint supplies an observed chain count, remaining timeout and modifier.
+  const chainMilestones=[10,25,50,100,250,500,1000,2500,5000,10000,25000,50000,100000];
+  function chainSnapshot(raw,at=Date.now()){
+    const c=raw?.chain&&typeof raw.chain==='object'?raw.chain:raw;
+    if(!c||typeof c!=='object'||officialNumber(c.current)===null)return null;
+    const count=Math.max(0,Math.floor(n(c.current))),next=chainMilestones.find(x=>x>count)||null;
+    return {count,timeout:Math.max(0,n(c.timeout)),modifier:officialNumber(c.modifier),
+      cooldown:n(c.cooldown),next,nextIn:next===null?null:next-count,
+      max:officialNumber(c.max),at};
+  }
+  function chainStatus(at=Date.now()){
+    const c=state.data.chain||{},fresh=at-n(c.at)<2*MIN&&n(c.at)>0;
+    return {count:fresh?c.count:null,
+      remaining:fresh?Math.max(0,n(c.timeout)-Math.floor((at-c.at)/1000)):null,
+      next:fresh?c.next:null,nextIn:fresh?c.nextIn:null,
+      modifier:fresh?c.modifier:null,at:n(c.at),fresh};
+  }
+  function hitterRisk(id){
+    const entry=cfg.hitterRisk[positive(id)]||{},
+      mode=['safe','balanced','aggressive'].includes(entry.mode)?entry.mode:'balanced';
+    return {mode,maxRatio:mode==='safe'?0.55:mode==='aggressive'?0.78:0.70,
+      minWins:mode==='safe'?1:0};
+  }
+  function learnedYield(friend,player,model,entries){
+    const clean=(entries||[]).filter(a=>a.attacker===positive(friend.id)&&
+      a.defender===positive(player.id)&&officialNumber(a.respect)!==null&&n(a.respect)>0&&
+      !chainMilestones.includes(n(a.chain))&&
+      !(a.chainBonus!==null&&a.chainBonus>1)&&!a.specialBonus&&
+      (!a.modifierWar||a.modifierWar===2)&&
+      (!a.modifierRetaliation||a.modifierRetaliation===1)&&
+      (!a.modifierOverseas||a.modifierOverseas===1)&&
+      (!a.modifierGroup||a.modifierGroup===1))
+      .sort((a,b)=>b.at-a.at).slice(0,8);
+    if(clean.length<2)return {pointsPer25:model,actual:null,samples:clean.length,confidence:'Model only'};
+    const count=clean.length,values=clean.map(x=>n(x.respect)),mean=values.reduce((a,b)=>a+b,0)/count;
+    const med=values.slice().sort((a,b)=>a-b)[Math.floor(values.length/2)],
+      capped=Math.min(Math.max(mean,model*0.25),model*3),
+      stable=Math.min(capped,med*1.6),weight=count>=5?0.7:count>=3?0.55:0.35;
+    return {pointsPer25:model*(1-weight)+stable*weight,actual:mean,samples:count,
+      confidence:count>=5?'Observed + model (higher sample)':'Observed + model (limited sample)'};
+  }
+  function warAttackInsights(id){
+    const rows=warAttackRows(id).filter(a=>a.side==='ours'),
+      scored=rows.filter(a=>officialNumber(a.respect)!==null&&n(a.respect)>0),
+      total=scored.reduce((z,a)=>z+n(a.respect),0);
+    const per=Object.values(rows.reduce((db,a)=>{
+      const p=db[a.attacker]||(db[a.attacker]={id:a.attacker,name:a.attackerName||('Player '+a.attacker),
+        attacks:0,positive:0,respect:0,estimatedEnergy:0});
+      p.attacks++;p.estimatedEnergy+=25;
+      if(n(a.respect)>0){p.positive++;p.respect+=n(a.respect);}
+      return db;
+    },{})).sort((a,b)=>b.respect-a.respect||a.id-b.id);
+    return {known:rows.length>0,partial:true,attempts:rows.length,scored:scored.length,total,
+      estimatedEnergy:rows.length*25,pointsPerEnergy:rows.length?total/(rows.length*25):null,per};
   }
   function warHitLedger(id=positive(state.data.war?.id)){
     const w=warAttackWindow(id),rows=warAttackRows(id),roster=state.data.ours;
@@ -1485,6 +1550,10 @@
       await refreshFactionBasics(force);
       await refreshHistory(force);
       await refreshAttacks();
+      try{
+        const chain=await call('/faction/'+cfg.ourId+'/chain','chain',30*1000);
+        if(chain){const snapshot=chainSnapshot(chain);if(snapshot)state.data.chain=snapshot;}
+      }catch(e){state.data.errors.chain=String(e.message||e).slice(0,150);}
       await refreshFF();
       await refreshOwnReadiness();
       state.lastRefresh=Date.now();
@@ -1871,28 +1940,33 @@
 
   // Relative ranked-war score yield: base respect * war factor * manual-spy FF.
   // Confidence is an eligibility gate, not an invented probability of winning.
+
   function efficiencyHits(friend,limit=8){
     if(!friend||!activeWarNow()||!rosterFresh('ours')||!rosterFresh('enemies')||
       memberState(friend)!=='okay')return [];
     const ownBss=bsScore(spy(friend.id)),observed=cfg.enableAttacks?
       warAttackRows(positive(state.data.war?.id)):[];
+    const risk=hitterRisk(friend.id);
     return state.data.enemies.filter(p=>memberState(p)==='okay').map(player=>{
-      const ev=matchEvidence(friend,player),otherBss=bsScore(spy(player.id));
-      if(!ownBss||!otherBss||ev.tier!==0||!ev.rosterVerified||
-        ev.encounters.losses>0||ev.conflict)return null;
+      const ev=matchEvidence(friend,player),otherBss=bsScore(spy(player.id)),
+        ratio=ev.match?.ratio;
+      if(!ownBss||!otherBss||!ev.verified||!ev.rosterVerified||
+        ev.encounters.losses>0||ev.conflict||
+        (ev.tier!==0&&!(risk.mode==='aggressive'&&ev.tier===1))||
+        !Number.isFinite(ratio)||ratio>risk.maxRatio||
+        ev.encounters.wins<risk.minWins)return null;
       const ff=ev.match?.ff;
       if(!Number.isFinite(ff)||ff<1||ff>3)return null;
-      const base=Math.max(.25,(Math.log(Math.max(1,n(player.level)))+1)/4);
-      const modeled=base*2*ff;
-      const hits=observed.filter(a=>a.attacker===positive(friend.id)&&
-        a.defender===positive(player.id)&&a.respect!==null&&a.respect>0).slice(-3);
-      const actual=hits.length>=2?hits.reduce((sum,a)=>sum+a.respect,0)/hits.length:null;
-      const yield25=actual??modeled;
-      return {player,evidence:ev,ff,modeled,actual,sampleCount:hits.length,
-        pointsPer25:yield25,pointsPerEnergy:yield25/25,
-        source:actual!==null?'Observed partial ranked-war respect':'Estimated base respect (modifiers excluded)'};
-    }).filter(Boolean).sort((a,b)=>b.pointsPerEnergy-a.pointsPerEnergy||
-      b.evidence.score-a.evidence.score||a.player.id-b.player.id).slice(0,limit);
+      // Current Torn base respect: 1.00 at level 1, 1.50 at level 100.
+      const lvl=Math.max(1,Math.min(100,n(player.level))),
+        base=Math.round((lvl/198+197/198)*100)/100,model=base*2*ff,
+        learned=learnedYield(friend,player,model,observed);
+      return {player,evidence:ev,ff,modeled:model,actual:learned.actual,
+        sampleCount:learned.samples,pointsPer25:learned.pointsPer25,
+        pointsPerEnergy:learned.pointsPer25/25,source:learned.confidence,
+        riskMode:risk.mode,ratio};
+    }).filter(Boolean).sort((x,y)=>y.pointsPerEnergy-x.pointsPerEnergy||
+      y.evidence.score-x.evidence.score||x.player.id-y.player.id).slice(0,limit);
   }
   function bestEfficiencyHit(){
     const self=ourWarReadiness();
