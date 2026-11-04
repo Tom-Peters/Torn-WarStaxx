@@ -353,7 +353,7 @@
     const desc=String(p.statusText||'')+' '+String(p.statusDetails||'');
     // Explicitly distinguish an inbound return from an outbound flight.
     // A generic status expiry is NOT proof of a return-to-Torn flight.
-    const inbound=/(returning from|returning to torn|flight back|flying back|back to torn)/i.test(desc);
+    const inbound=/(returning from|returning to torn|travell?ing to torn|flight back|flying back|back to torn)/i.test(desc);
     const outbound=!inbound&&/(travell?ing to|flying to|departing for|flight to)/i.test(desc);
     const kind=inbound?'returning':outbound?'outbound':'abroad-or-unclear';
     const eta=n(p.until);
@@ -2427,7 +2427,7 @@
     if(action==='refresh-readiness'){refreshOwnReadiness().then(()=>{save();render();});return;}
     if(action.startsWith('debrief:')){state.selectedDebrief=positive(action.slice(8));navigate('afteraction');return;}
     if(action.startsWith('debrief-timeline:')){state.selectedTimeline=positive(action.slice(17));navigate('timeline');return;}
-    if(action.startsWith('debrief-pace:')){state.selectedPace=positive(action.slice(14));navigate('pace');return;}
+    if(action.startsWith('debrief-pace:')){state.selectedPace=positive(action.slice(13));navigate('pace');return;}
     if(action.startsWith('review-debrief:')){const id=positive(action.slice(15));const record=state.data.afterActions[id];
       if(record){record.reviewed=!record.reviewed;save();publish();render();}return;}
     if(action.startsWith('copy-debrief:')){const id=positive(action.slice(13)),record=state.data.afterActions[id];
