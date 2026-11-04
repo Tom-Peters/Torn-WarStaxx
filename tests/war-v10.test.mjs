@@ -27,7 +27,9 @@ test('highest reliable points per 25 energy outranks level and excludes unavaila
       'rosterVerified:true,verified:true,conflict:false,encounters:{losses:0},'+
       'match:{ff:enemy.id===102?3:1.1,ratio:0.5},score:60});',
     "const ourWarReadiness=()=>({kind:'okay',player:self});",
-    'const warAttackRows=()=>[];'
+    'const warAttackRows=()=>[];',
+    'const hitterRisk=()=>({mode:"balanced",maxRatio:0.70,minWins:0});',
+    'const learnedYield=(f,p,model)=>({pointsPer25:model,actual:null,samples:0,confidence:"Model only"});'
   ].join('\n');
   const x=fixture(setup,'  function efficiencyHits(','  function turtleWindow(',
     '({bestEfficiencyHit,efficiencyHits,blocked,state})');
