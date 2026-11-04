@@ -1,4 +1,6 @@
-> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v0.2.0). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.\n\n# Torn-WarStaxx
+> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v0.2.1). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+
+# Torn-WarStaxx
 
 **WarStaxx** is the fourth Torn Staxx tool: ranked-war intelligence, public war records, live roster status, conservative per-player assignments and historical opponent observation. **Author: IamEEKY.**
 
@@ -8,11 +10,15 @@ https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js
 
 **Torn PDA: Add Script → Remote URL.** Paste the direct URL exactly as shown. The GitHub repository page (`github.com/Tom-Peters/Torn-WarStaxx`) and file page (`github.com/.../blob/main/...`) are HTML, not installable scripts. If Torn PDA displays **No header found**, check you used the **raw.githubusercontent.com** link (or its Raw button) rather than the repository webpage. The file starts immediately with `// ==UserScript==` and ends its metadata with `// ==/UserScript==`.
 
-WarStaxx registers in the **existing StaxxHub** sidebar as WS. No second persistent FAB is installed. It shares top navigation, notices, summaries and the action queue with ProfitStaxx, Company Helper and Happy Jump.
+War-TornStaxx registers with the **fifth, standalone TornStaxx hub** as module ID `war`. It no longer bundles the full StaxxHub code. It retains an emergency compact launcher only if the standalone hub is absent.
 
 **Version 0.1.2 startup diagnostics:** an independent, minimal startup probe now advertises WarStaxx to StaxxHub before the full app boots. If the main script throws or aborts after injection, opening the WarStaxx entry displays a safe status panel rather than silently disappearing. No credentials or private data are included in the status. In Torn PDA, confirm that the WarStaxx script is **enabled**, is using **end-of-document injection**, and that any new permission requests have been accepted. Update to 0.1.2 from the same raw URL and reload Torn. If StaxxHub still shows only the original three tools, WarStaxx likely did not execute at all: inspect Torn PDA’s scripts-on-this-page view or the script’s enable toggle.
 
 **Version 0.1.1 visibility fix:** if Torn PDA loaded WarStaxx before the Hub, registration is re-announced after startup and periodically while the page is visible. On Torn faction/war pages an unobtrusive **Open WarStaxx** button appears inside the page as a fallback. On other Torn pages open **StaxxHub (S) → Tools → WarStaxx**. If you already installed v0.1.0, update the installed script using the same raw URL and reload the Torn page. This is not another floating launcher.
+
+## 2026-11-04 v0.2.1 startup connection fix
+
+Install/update **TornStaxx v4.0.1** and **War-TornStaxx v0.2.1** using their existing raw URLs, then fully reload Torn PDA. The module emits identity-only registration over DOM events and a same-origin message bridge, and writes a short-lived local startup marker so the hub can distinguish an injection failure from an inter-script communication failure. It does not share keys, spy stats or private faction data. If the hub says **War-TornStaxx has not executed on this Torn page**, check Torn PDA's **DevTools → Scripts** tab for the current page and verify this exact module version is active. The legacy notes for versions 0.1.1 and 0.1.2 below describe the earlier embedded-hub architecture.
 
 ## Getting started
 
