@@ -1,4 +1,23 @@
-> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v0.2.6). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v0.3.0). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+
+## v0.3.0 - Opponent intelligence overhaul (4 November 2026)
+
+**Update War-TornStaxx using the existing raw installer URL above.** TornStaxx remains the separate shared UI (module ID `war`). All stored API settings, manual spies, orders, historical observations and previous local storage keys stay in place.
+
+### Interactive War Room and Enemy Intel
+- War Room now links directly into live opponent roster, last official ranked-war score, faction win/loss history, top recorded scorers, current online/last-day activity, travel and hospital states, tactical assignments, and the time-comparison screen.
+- The **Enemy intel** screen aggregates the opponent's latest result and previous official scorelines, win/decided total, mean recorded score, live roster and per-member known prior-war scores.
+- Selecting a historical war opens a **full official scorecard**: scores, attacks, winner, rank movement, prizes where returned, and every player in each faction with their recorded score, attacks and score contribution percentage. Missing reports can be requested individually without waiting for the next backfill.
+- Players in rosters, matchups, scorecards, activity summaries and orders link to a **player intelligence dossier**. It displays the history available for that player, status, recent action, level, observed online/travel rates (including explicitly sampled in-war travel), manual spy data and local notes. Optional public Torn profile/personal-stat lookup is performed only when the player presses the button; unavailable data stays labelled unknown.
+
+### Activity and decisions
+- A **24-hour TCT comparison** compares the proportion of sampled online observations for the two sides by hour; tap a cell to inspect its underlying sample counts. Difference is not true hours online, actual sleeping hours, or a guarantee of future activity. War reports cannot reconstruct past travel/status histories.
+- Enemy players can be filtered by status and known war participation, searched by ID/name/role, and sorted by live priority, last reported war contribution, last activity, level or sampled online rate. Unknown historical score is **not zero**.
+- War Strategy links to sampled favourable hours, opponent top scorers, fair-fight matchup review and local Black Skulls orders. All attacks remain **manual** and the hub never receives keys.
+- Official Torn war history, foreground-collected observations, verified manual spy information and FFScouter opt-in estimates are labelled separately. Existing 14-day activity sample limits, scope-based errors and permission checks remain.
+
+### Troubleshooting and verification
+The distributed `WarStaxx.user.js` is **ASCII only** (no smart apostrophes) and keeps `// ==UserScript==` at the start for Torn PDA. The new `tests/war-intelligence.test.mjs` validates war scores, individual player contributions, metadata and navigation. Run `npm test` to execute it alongside the existing quote-safety and installation tests.
 
 # Torn-WarStaxx
 
