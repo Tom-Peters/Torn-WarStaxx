@@ -298,14 +298,84 @@
         score:n(p.score),attacks:n(p.attacks),level:n(p.level)})).filter(p=>p.id)
     })),retrieved:Date.now()};
   }
+  const epochMs=value=>{
+    const v=Number(value);
+    return Number.isFinite(v)&&v>1e9?(v>1e12?v:v*1000):0;
+  };
   function attacks(j){
-    return parseArray(unpack(j,'attacks')).map(a=>({
-      id:positive(a.id||a.attack_id),at:positive(a.started||a.timestamp_started||a.timestamp||a.start)*1000,
-      attacker:positive(a.attacker?.id||a.attacker_id),defender:positive(a.defender?.id||a.defender_id),
-      ff:Number(a.modifiers?.fair_fight??a.modifiers?.fairfight??a.fair_fight),result:String(a.result||''),
-      respect:n(a.respect_gain||a.respect),code:'api'
-    })).filter(a=>a.id&&a.at);
+    return parseArray(unpack(j,'attacks')).map(a=>{
+      const rawFF=a.modifiers?.fair_fight??a.modifiers?.fairfight??a.fair_fight;
+      const rawGain=a.respect_gain??a.respect;
+      const attacker=positive(a.attacker?.id||a.attacker_id);
+      const defender=positive(a.defender?.id||a.defender_id);
+      const attackerFaction=positive(a.attacker_faction??a.attacker_faction_id??
+        a.attacker?.faction?.id??a.attacker?.faction_id);
+      const defenderFaction=positive(a.defender_faction??a.defender_faction_id??
+        a.defender?.faction?.id??a.defender?.faction_id);
+      const ranked=a.ranked_war===true||a.ranked_war===1||a.ranked_war==='1';
+      return {id:positive(a.id||a.attack_id),
+        at:epochMs(a.timestamp_ended||a.ended||a.timestamp_started||a.started||a.timestamp||a.start),
+        startedAt:epochMs(a.timestamp_started||a.started||a.start),
+        attacker,defender,attackerFaction,defenderFaction,ranked,
+        attackerName:String(a.attacker?.name||a.attacker_name||'').slice(0,80),
+        defenderName:String(a.defender?.name||a.defender_name||'').slice(0,80),
+        ff:validFF(rawFF),result:String(a.result||'').slice(0,50),
+        respect:officialNumber(rawGain),chain:officialNumber(a.chain),
+        code:'api'};
+    }).filter(a=>a.id&&a.at&&a.attacker&&a.defender);
   }
+  // Attack attribution is conservative: only explicitly ranked-war hits with
+  // faction IDs and a matching official war time window enter the ledger.
+  function warAttackWindow(id){
+    const wanted=positive(id);
+    if(!wanted)return null;
+    const active=state.data.war;
+    if(positive(active?.id)===wanted){
+      return {id:wanted,ourId:positive(cfg.ourId),enemyId:positive(active.opponentId),
+        start:epochMs(active.start),end:Date.now(),active:true};
+    }
+    const past=state.data.ourWars.find(w=>positive(w.id)===wanted&&positive(w.end));
+    if(!past)return null;
+    const ourId=positive(cfg.ourId),enemyId=positive(past.factions.find(x=>positive(x)!==ourId));
+    if(!enemyId)return null;
+    return {id:wanted,ourId,enemyId,start:epochMs(past.start),end:epochMs(past.end),active:false};
+  }
+  function warAttackRows(id){
+    const w=warAttackWindow(id);
+    if(!w||!w.start||!w.end||!w.ourId||!w.enemyId)return [];
+    return (state.data.attacks||[]).filter(a=>a.ranked===true&&
+      n(a.at)>=w.start&&n(a.at)<=w.end+60*1000&&
+      (a.attackerFaction===w.ourId&&a.defenderFaction===w.enemyId||
+       a.attackerFaction===w.enemyId&&a.defenderFaction===w.ourId))
+      .map(a=>({...a,side:a.attackerFaction===w.ourId?'ours':'enemies'}))
+      .sort((a,b)=>b.at-a.at);
+  }
+  function warHitLedger(id=positive(state.data.war?.id)){
+    const w=warAttackWindow(id),rows=warAttackRows(id),roster=state.data.ours;
+    const known=Boolean(state.data.updated.attacks&&state.data.attacks.length);
+    const summarise=(side)=>rows.filter(a=>a.side===side).reduce((acc,a)=>{
+      acc.hits++;acc.respect+=Math.max(0,officialNumber(a.respect)??0);
+      if(/hospitaliz|hospitalis/i.test(a.result))acc.hospitalised++;
+      if(/mugged/i.test(a.result))acc.mugged++;
+      acc.lastAt=Math.max(acc.lastAt,a.at);
+      const id=a.attacker,member=acc.players[id]||(acc.players[id]={id,name:a.attackerName||
+        [...state.data.ours,...state.data.enemies].find(p=>p.id===id)?.name||('Player '+id),
+        hits:0,respect:0,hospitalised:0,lastAt:0});
+      member.hits++;member.respect+=Math.max(0,officialNumber(a.respect)??0);
+      member.hospitalised+=Number(/hospitaliz|hospitalis/i.test(a.result));
+      member.lastAt=Math.max(member.lastAt,a.at);
+      return acc;
+    },{hits:0,respect:0,hospitalised:0,mugged:0,lastAt:0,players:{}});
+    const ours=summarise('ours'),theirs=summarise('enemies');
+    const lastFetch=n(state.data.updated.attacks);
+    return {id:positive(id),window:w,rows,ours,theirs,known,
+      lastFetch,stale:!lastFetch||Date.now()-lastFetch>5*MIN,
+      partial:true,
+      blackSkulls:roster.filter(p=>cfg.blackSkulls[p.id]).map(p=>({
+        player:p,stats:ours.players[p.id]||null})),
+      enemyPlayers:Object.values(theirs.players).sort((a,b)=>b.respect-a.respect||b.hits-a.hits)};
+  }
+
   function canCall(kind,minAge=0){
     const b=state.data.backoff[kind];
     if(b && Date.now()<n(b.until))return false;
