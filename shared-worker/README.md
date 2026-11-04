@@ -1,6 +1,6 @@
 # WarStaxx optional shared orders service
 
-This Cloudflare Worker and D1 database store only six per-war shared planning fields: faction war assignments, Black Skulls membership, individual hitter risk modes, hospital-control watchers, turtle posture/member duties, and leader duty statuses. No Torn API keys, manual spies, notes, medical readings or private player statistics are uploaded.
+This Cloudflare Worker and D1 database store only seven per-war shared planning fields: faction war assignments, Black Skulls membership, individual hitter risk modes, hospital-control watchers, turtle posture/member duties, leader duty statuses, and the Black Skulls strength cutoff policy. No Torn API keys, manual spies, notes, medical readings or private player statistics are uploaded.
 
 Deployment:
 1. Install Node.js and use npx wrangler login inside shared-worker.
@@ -25,3 +25,9 @@ Scope and safety:
 The client now pulls and publishes the additional `turtlePlan` and `leaderDuties` fields in the same compare-and-swap revision as targets and risk settings. A new database migration is **not required** for these additions: the document remains JSON in the existing D1 `data` column. Deploy the **updated Worker source** before enabling the new clients for the faction. Older Worker versions will reject the expanded payload.
 
 Access control remains token-based: readers see shared planning orders and only write-token officers may publish. Keep these secrets private and rotate them when membership changes. The Worker is not automatically hosted merely because it was committed to GitHub.
+
+## WarStaxx v1.3 strength cutoff sync
+
+The Skull Capo can select a top-percentage or absolute-minimum-BSS bracket for the Black Skulls. WarStaxx publishes this decision as a small `heavyPolicy` object with `mode` (`percent` or `min-bss`), `percent` (5-100) and `minBss` (0-1e15). The deployed Worker validates these fields and stores them in the same faction/war revision as squad assignments. There is no new D1 migration. A v1.3 client needs the updated Worker deployed; earlier Worker versions will reject `heavyPolicy`.
+
+The write-token holder can publish a whole war plan, not only Black Skulls controls. WarStaxx does not claim that this token proves full faction-leader authority; the token must be issued by those administering the deployment. Per-officer permissions and audit trails would require server-side identities and finer-grained policies.
