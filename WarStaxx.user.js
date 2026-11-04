@@ -253,6 +253,7 @@
       updated:Date.now()
     })).filter(p=>p.id);
   }
+  const officialNumber=value=>value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value))?Number(value):null;
   function warHistory(j){
     return parseArray(unpack(j,'rankedwars')).map(w=>{
       const details=w.war&&typeof w.war==='object'?w.war:w;
@@ -261,14 +262,14 @@
       const t=positive(details.start||details.started||details.start_time);
       return {id:positive(w.id||w.war_id||details.id),start:t,end:positive(details.end||details.ended||details.end_time),
         winner:positive(details.winner||details.winner_id),factions:ids,
-        scores:factions.map(f=>({id:positive(f.id||f.faction_id),name:String(f.name||''),score:n(f.score||f.points)})),
+        scores:factions.map(f=>({id:positive(f.id||f.faction_id),name:String(f.name||''),score:officialNumber(f.score??f.points)})),
         target:n(details.target||details.target_score),rawStatus:String(details.status||'')};
     }).filter(w=>w.id).slice(0,80);
   }
   function detectWar(j){
     const d=unpack(j,'wars');const w=d?.ranked||d?.ranked_war||d?.rankedwar||j?.ranked||null;
     if(!w || typeof w!=='object' || Array.isArray(w))return null;
-    const factions=parseArray(w.factions||w.participants||{}).map(p=>({id:positive(p.id||p.faction_id),name:String(p.name||''),score:n(p.score||p.points)}));
+    const factions=parseArray(w.factions||w.participants||{}).map(p=>({id:positive(p.id||p.faction_id),name:String(p.name||''),score:officialNumber(p.score??p.points)}));
     const own=positive(cfg.ourId);
     const other=factions.find(p=>p.id&&p.id!==own);
     const id=positive(w.id||w.war_id);
@@ -359,7 +360,7 @@
     if(!w||!positive(w.id))return false;
     const us=w.factions?.find(p=>positive(p.id)===positive(cfg.ourId));
     const them=w.factions?.find(p=>positive(p.id)===positive(w.opponentId));
-    if(!us||!them||!Number.isFinite(Number(us.score))||!Number.isFinite(Number(them.score)))return false;
+    if(!us||!them||officialNumber(us.score)===null||officialNumber(them.score)===null)return false;
     const id=String(w.id),r=state.data.scoreTimelines[id]||
       (state.data.scoreTimelines[id]={id:w.id,ourId:positive(cfg.ourId),enemyId:positive(w.opponentId),
         start:positive(w.start)*1000,points:[],lastAt:0});
@@ -818,7 +819,7 @@
   }
   function warScore(){
     const w=state.data.war,our=w?.factions?.find(f=>f.id===positive(cfg.ourId)),theirs=w?.factions?.find(f=>f.id!==positive(cfg.ourId));
-    if(!our||!theirs)return null;
+    if(!our||!theirs||officialNumber(our.score)===null||officialNumber(theirs.score)===null)return null;
     return {our:n(our.score),enemy:n(theirs.score),net:n(our.score)-n(theirs.score),target:n(w.target)};
   }
   function currentAlerts(){
