@@ -24,8 +24,8 @@ test('highest reliable points per 25 energy outranks level and excludes unavaila
     'const bsScore=x=>x?100:null,spy=id=>({id});',
     'let blocked=new Set();',
     'const matchEvidence=(friend,enemy)=>({tier:blocked.has(enemy.id)?4:0,'+
-      'rosterVerified:true,conflict:false,encounters:{losses:0},'+
-      'match:{ff:enemy.id===102?3:1.1},score:60});',
+      'rosterVerified:true,verified:true,conflict:false,encounters:{losses:0},'+
+      'match:{ff:enemy.id===102?3:1.1,ratio:0.5},score:60});',
     "const ourWarReadiness=()=>({kind:'okay',player:self});",
     'const warAttackRows=()=>[];'
   ].join('\n');
@@ -90,7 +90,7 @@ test('live strip supports automatic compact mode, alert links, skull orders and 
     "cfg.priorityNotifications=Boolean($('#ws-priority-notifications'"]){
     assert.ok(source.includes(term),'Missing integration '+term);
   }
-  assert.match(source,/\/\/ @version\s+1\.0\.0/);
+  assert.match(source,/\/\/ @version\s+1\.1\.0/);
   assert.ok(source.startsWith('// ==UserScript==\n'));
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
