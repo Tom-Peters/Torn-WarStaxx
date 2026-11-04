@@ -399,6 +399,19 @@
         attacks:member?n(member.attacks):null};
     });
   }
+  function setOpponent(id){
+    const next=positive(id);
+    if(next===positive(cfg.enemyId))return false;
+    cfg.enemyId=next;
+    state.data.enemies=[];
+    state.data.enemyWars=[];
+    state.data.updated.enemies=0;
+    state.data.updated.enemyWars=0;
+    // Preserve verified history, spies, local notes and saved user orders.
+    // Never present a previous enemy roster as belonging to a new opponent.
+    saveCfg();
+    return true;
+  }
   function latestFinished(side){
     return (side==='ours'?state.data.ourWars:state.data.enemyWars)
       .filter(w=>w.end).slice().sort((a,b)=>(b.end||b.start)-(a.end||a.start))[0]||null;
@@ -541,9 +554,11 @@
     announce();
     const observed=Math.max(n(state.data.updated.wars),n(state.data.updated.enemies),n(state.data.updated.ours));
     const hittable=state.data.enemies.filter(e=>evaluate(e).ready).length;
+    const enemyActivity=sideActivity('enemies'),enemyHistory=factionWarMetrics('enemies');
     if(observed)event('summary',{id:ID,headline:state.data.war?'Ranked war detected':'War scouting / standby',
-      updated:observed,metrics:[{label:'Hittable enemies',value:String(hittable)},{label:'Enemy roster',value:String(state.data.enemies.length)},
-        {label:'Historical reports',value:String(Object.keys(state.data.reports).length)}]});
+      updated:observed,metrics:[{label:'Enemy active 24h',value:enemyActivity.total?enemyActivity.active24+' / '+enemyActivity.total:'--'},
+        {label:'Last war points',value:enemyHistory.lastScore===null?'--':fmt(enemyHistory.lastScore)},
+        {label:'Hittable enemies',value:String(hittable)}]});
     event('actions',{id:ID,updated:observed||0,items:a.map(x=>({id:x.id,title:x.title,detail:x.detail,status:x.status,priority:x.priority,reviewMinutes:2}))});
     event('notice',{id:ID,count:a.filter(x=>x.status==='now'||x.status==='urgent').length,
       level:a.some(x=>x.status==='urgent')?'urgent':'warning',summary:a.length?a[0].title:'No verified war alerts',
@@ -704,7 +719,7 @@
       const wars=await call('/faction/'+cfg.ourId+'/wars','wars',force?0:90*1000);
       if(wars){
         const w=detectWar(wars);state.data.war=w;
-        if(w&&w.opponentId&&w.opponentId!==positive(cfg.enemyId)){cfg.enemyId=w.opponentId;saveCfg();}
+        if(w&&w.opponentId)setOpponent(w.opponentId);
       }
       const own=await call('/faction/'+cfg.ourId+'/members','ours',force?0:90*1000);
       if(own)state.data.ours=roster(own);
@@ -1435,7 +1450,7 @@
         cfg.factionSource=manualId?'Manual override':'Not set';
         cfg.factionVerifiedAt=0;
       }
-      cfg.enemyId=positive($('#ws-enemy',root)?.value);
+      setOpponent(positive($('#ws-enemy',root)?.value));
       cfg.refreshSeconds=Math.max(90,Math.min(300,positive($('#ws-interval',root)?.value)||120));
       cfg.historyLimit=Math.max(2,Math.min(20,positive($('#ws-limit',root)?.value)||8));
       cfg.enableAttacks=Boolean($('#ws-attacks',root)?.checked);
