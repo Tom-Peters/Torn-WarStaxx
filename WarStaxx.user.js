@@ -1528,6 +1528,22 @@
             'Unclassified enemies require scouting. Review saved manual orders.',
           status:'now',priority:93,tab:'leader'});
       }
+      if(activeWarNow()&&rosterFresh('ours')&&cfg.priorityNotifications!==false){
+        const heavy=enemyRoleBands().heavy,at=Date.now(),
+          highReturns=Object.values(state.data.availabilityEvents||{})
+            .filter(x=>x.warId===positive(w.id)&&
+              (x.previous==='hospital'||x.previous==='away')&&heavy.has(x.id)&&
+              at>=n(x.at)&&at-n(x.at)<=5*MIN&&
+              state.data.enemies.some(p=>p.id===x.id&&memberState(p)==='okay'))
+            .sort((a,b)=>b.at-a.at).slice(0,3);
+        for(const x of highReturns)out.push({
+          id:'skull-heavy-return-'+x.id,
+          title:'Black Skulls heavy target '+x.name+' returned to Okay',
+          detail:'Previously '+x.previous+'. Latest observed Torn roster shows Okay, '+
+            'sampled '+age(x.at)+'. Review the high-BSS matchup and Skull Capo assignments; '+
+            'availability or buffs may have changed.',
+          status:'now',priority:97,tab:'leader'});
+      }
       for(const x of priorityOpportunities().slice(0,3))out.push({
         id:'enemy-available-'+x.id,title:x.name+' now available',
         detail:'Changed from '+x.previous+' to Okay in the latest Torn roster. '+x.kind+
@@ -2323,14 +2339,15 @@
   function availabilityTransitions(before,after,warId,at=Date.now()){
     if(!warId||!before?.length||!after?.length)return [];
     const old=new Map(before.map(p=>[p.id,p])),watched=watchedTargetIds();
+    const heavy=enemyRoleBands().heavy;
     const high=new Set(enemyThreatRows(warId).slice(0,8).filter(x=>
       x.live?.scoringHits>0||x.previous?.score>0).map(x=>x.player.id));
     return after.filter(p=>{
       const prev=old.get(p.id),assigned=Object.values(cfg.assignments).some(id=>positive(id)===p.id);
       return prev&&memberState(prev)!=='okay'&&memberState(p)==='okay'&&
-        (watched.has(p.id)||assigned||high.has(p.id));
+        (watched.has(p.id)||assigned||high.has(p.id)||heavy.has(p.id));
     }).map(p=>({id:p.id,name:p.name,warId,at,previous:memberState(old.get(p.id)),
-      kind:watched.has(p.id)?'watched':'scorer'}));
+      kind:heavy.has(p.id)?'Black Skulls heavy target':watched.has(p.id)?'watched':'scorer'}));
   }
   function recordAvailability(before,after,warId,at=Date.now()){
     const db=state.data.availabilityEvents;
