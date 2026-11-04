@@ -1279,6 +1279,14 @@
           '. Partial attack feed; check hospital control and status.',
         status:'review',priority:83,tab:'threats'});
     }
+    if(w&&activeWarNow()){
+      const chain=chainStatus();
+      if(chain.fresh&&chain.count>=10&&chain.remaining!==null&&chain.remaining<=80)
+        out.push({id:'chain-critical',title:'Chain expires in '+chain.remaining+'s',
+          detail:'Official chain #'+chain.count+' | '+(chain.nextIn??'unknown')+
+            ' hits to next milestone. Coordinate manually; verify in Torn.',
+          status:'now',priority:96,tab:'skulls'});
+    }
     if(w&&rosterFresh('ours')){
       const defence=turtleAssessment();
       const exposedDuty=defence.rows.filter(x=>x.assigned==='turtle'&&x.danger);
@@ -2917,12 +2925,20 @@
     const w=state.data.war,score=warScore(),own=ourWarReadiness(),target=bestEfficiencyHit(),
       enemies=sideActivity('enemies'),pace=warPace(),alerts=currentAlerts().slice(0,3),
       fresh=rosterFresh('enemies');
+    const chain=chainStatus();
     let body=statusNote()+'<div class="ws-lead"><span class="ws-data-label">LIVE WAR | ACT NOW</span>'+
       '<h2>Vs '+esc(w.opponentName||('Faction #'+positive(cfg.enemyId)))+'</h2>'+
       '<div class="ws-score">Us '+(score?fmt(score.our):'?')+' / Them '+(score?fmt(score.enemy):'?')+
       ' | Net '+(score?(score.net>=0?'+':'')+fmt(score.net):'?')+'</div>'+
       '<p>Official points '+esc(age(state.data.updated.wars))+
       (score?.target?' | Target '+fmt(score.target):'')+'</p></div>'+
+      '<div class="ws-grid">'+
+      statAction('Chain',chain.fresh?'#'+fmt(chain.count):'Unknown','Official count','tab:skulls')+
+      statAction('Chain time',chain.fresh?chain.remaining+'s':'Unknown','Countdown from last observation','tab:skulls')+
+      statAction('Next milestone',chain.fresh&&chain.next!==null?'#'+fmt(chain.next):'Unknown',
+        chain.fresh?fmt(chain.nextIn)+' successful hits to go':'No data','tab:skulls')+
+      statAction('Chain modifier',chain.fresh&&chain.modifier!==null?fmt(chain.modifier)+'x':'Unknown',
+        'Official chain API','tab:skulls')+'</div>'+
       '<div class="ws-toolbar">'+b('TURTLE','fast-turtle')+b(own.kind==='hospital'?'HEAL TO HIT':'HIT','fast-hit')+
       b('HEAL','fast-heal')+b('Refresh','refresh')+b('Black Skulls','fast-skulls')+'</div>'+
       card('Your next action','<p><b>Official status:</b> '+esc(own.kind)+
