@@ -783,32 +783,69 @@
     for(const id of keep.slice(40))delete state.data.reports[id];
     state.historicalRead=Date.now();
   }
-  async function refreshFF(){
-    if(!cfg.ffEnabled||!cfg.ffConsent||!cfg.ffKey||!state.data.enemies.length||!canCall('ffscouter',10*MIN))return;
-    // The separately entered user-owned FFScouter key is only ever sent to ffscouter.com.
-    const ids=state.data.enemies.map(p=>p.id).filter(Boolean).slice(0,205);
-    const url='https://ffscouter.com/api/v1/get-stats?key='+encodeURIComponent(cfg.ffKey)+'&targets='+ids.join(',');
-    try{
-      const results=await new Promise((resolve,reject)=>{
-        if(typeof GM_xmlhttpRequest!=='function'){reject(new Error('Torn PDA cross-origin request unavailable'));return;}
-        GM_xmlhttpRequest({method:'GET',url,timeout:16000,
-          onload:r=>{try{const j=JSON.parse(r.responseText);if(r.status>=400||!Array.isArray(j))throw Error('FFScouter returned no compatible player list');resolve(j);}catch(e){reject(e);}},
-          onerror:()=>reject(new Error('FFScouter connection failed')),ontimeout:()=>reject(new Error('FFScouter timed out'))});
-      });
-      const now=Date.now();
-      for(const p of results){
-        const id=positive(p.player_id);
-        if(!ids.includes(id))continue;
-        const raw=Number(p.fair_fight),bs=Number(p.bss_public);
-        state.data.ffstats[id]={ff:Number.isFinite(raw)&&raw>=1&&raw<=3?raw:null,bss:Number.isFinite(bs)&&bs>0?bs:null,at:now};
-      }
-      state.data.updated.ffscouter=now;delete state.data.errors.ffscouter;delete state.data.backoff.ffscouter;
-      for(const id of Object.keys(state.data.ffstats))if(now-n(state.data.ffstats[id].at)>7*24*HOUR)delete state.data.ffstats[id];
-    }catch(e){
-      const b=state.data.backoff.ffscouter||{count:0};const count=Math.min(6,n(b.count)+1);
-      state.data.backoff.ffscouter={count,until:Date.now()+Math.min(HOUR,2**count*MIN)};
-      state.data.errors.ffscouter=String(e.message||e).slice(0,140);
+  async function ffRequest(url){
+    // Current Torn PDA uses its native one-argument HTTP bridge; GM requests can
+    // silently time out inside its WebView. Avoid browser fetch/CORS entirely.
+    const toJson=response=>{
+      if(response===undefined||response===null)throw new Error('FFScouter transport returned an empty response');
+      const status=Number(response?.status||0),raw=response?.responseText??response;
+      let json;
+      try{json=typeof raw==='string'?JSON.parse(raw):raw;}
+      catch(_){throw new Error('FFScouter returned invalid JSON');}
+      if(status>=400)throw new Error('FFScouter HTTP '+status+(json?.error?' - '+String(json.error).slice(0,90):''));
+      if(json?.code!==undefined||json?.error)throw new Error('FFScouter '+String(json.error||json.code).slice(0,100));
+      return json;
+    };
+    if(typeof PDA_httpGet==='function'){
+      return await Promise.race([
+        Promise.resolve().then(()=>PDA_httpGet(url)).then(toJson),
+        new Promise((_,reject)=>setTimeout(()=>reject(new Error('FFScouter Torn PDA bridge timed out')),18000))
+      ]);
     }
+    if(typeof GM_xmlhttpRequest==='function'){
+      return await new Promise((resolve,reject)=>GM_xmlhttpRequest({method:'GET',url,timeout:18000,
+        onload:r=>{try{resolve(toJson(r));}catch(e){reject(e);}},
+        onerror:()=>reject(new Error('FFScouter cross-origin connection failed')),
+        ontimeout:()=>reject(new Error('FFScouter request timed out'))}));
+    }
+    throw new Error('No FFScouter cross-origin transport available (PDA/GM)');
+  }
+  async function checkFFRegistration(force=false){
+    const old=state.data.meta.ffRegistration||{};
+    if(!force&&old.at&&Date.now()-n(old.at)<6*HOUR)return old;
+    const data=await ffRequest('https://ffscouter.com/api/v1/check-key?key='+encodeURIComponent(ffApiKey()));
+    const registered=data?.is_registered===true||data?.registered===true;
+    const result={registered,premium:Boolean(data?.is_premium),at:Date.now()};
+    state.data.meta.ffRegistration=result;
+    if(!registered)throw new Error('Your Torn key is not registered with FFScouter. Register it on ffscouter.com or use another registered key.');
+    return result;
+  }
+  async function refreshFF(force=false){
+    if(!cfg.ffEnabled||!cfg.ffConsent||!ffApiKey()||!state.data.enemies.length)return;
+    if(!canCall('ffscouter',10*MIN))return;
+    const ids=[...new Set(state.data.enemies.map(p=>p.id).filter(Boolean))].slice(0,205);
+    if(!ids.length)return;
+    const url='https://ffscouter.com/api/v1/get-stats?key='+encodeURIComponent(ffApiKey())+
+      '&targets='+ids.join(',');
+    try{
+      await checkFFRegistration();
+      const results=await ffRequest(url);
+      const now=Date.now();
+      const parsed=parseFFRows(results,ids,now);
+      for(const [id,data] of Object.entries(parsed))state.data.ffstats[id]=data;
+      state.data.updated.ffscouter=now;
+      state.data.meta.ffCount=Object.values(parsed).filter(p=>p.ff!==null).length;
+      delete state.data.errors.ffscouter;
+      delete state.data.backoff.ffscouter;
+      for(const id of Object.keys(state.data.ffstats))
+        if(now-n(state.data.ffstats[id].at)>7*24*HOUR)delete state.data.ffstats[id];
+    }catch(e){
+      const b=state.data.backoff.ffscouter||{count:0};
+      const count=Math.min(6,n(b.count)+1);
+      state.data.backoff.ffscouter={count,until:Date.now()+Math.min(HOUR,2**count*MIN)};
+      state.data.errors.ffscouter=String(e.message||e).slice(0,150);
+    }
+    save();
   }
   async function refreshAttacks(){
     if(!cfg.enableAttacks||!state.data.war||!positive(cfg.ourId))return;
@@ -1561,10 +1598,10 @@
     if(action==='reset-activity'){state.data.activity={};state.data.sampleCount=0;save();render();return;}
     if(action==='reset-orders'){cfg.assignments={};saveCfg();render();return;}
     if(action==='save-settings'){
-      const supplied=$('#ws-key',root)?.value?.trim();if(supplied)cfg.key=supplied;
-      const ffSupplied=$('#ws-ffkey',root)?.value?.trim();if(ffSupplied)cfg.ffKey=ffSupplied;
+      const supplied=$('#ws-key',root)?.value?.trim();if(supplied&&supplied!==cfg.key){cfg.key=supplied;delete state.data.meta.ffRegistration;state.data.updated.ffscouter=0;}
+      const ffSupplied=$('#ws-ffkey',root)?.value?.trim();if(ffSupplied&&ffSupplied!==cfg.ffKey){cfg.ffKey=ffSupplied;delete state.data.meta.ffRegistration;state.data.updated.ffscouter=0;}
       cfg.ffConsent=Boolean($('#ws-ff-consent',root)?.checked);
-      cfg.ffEnabled=Boolean($('#ws-ff-enable',root)?.checked)&&cfg.ffConsent&&Boolean(cfg.ffKey);
+      cfg.ffEnabled=Boolean($('#ws-ff-enable',root)?.checked)&&cfg.ffConsent&&Boolean(cfg.ffKey||effectiveKey());
       const manualId=positive($('#ws-our',root)?.value);
       cfg.factionAuto=Boolean($('#ws-auto-faction',root)?.checked);
       if(cfg.factionAuto){
