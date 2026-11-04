@@ -199,7 +199,7 @@
   const link=id=>'https://www.torn.com/profiles.php?XID='+positive(id);
   const attackLink=id=>'https://www.torn.com/loader.php?sid=attack&user2ID='+positive(id);
   const apiKeyPda=typeof window.PDA_APIKEY==='string'?window.PDA_APIKEY:'###PDA-APIKEY###';
-  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,hidden:false};
+  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},controlAssignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,hidden:false};
   const cfg=Object.assign({},defaults,safeRead(CONFIG,{}));
   cfg.assignments=cfg.assignments&&typeof cfg.assignments==='object'?cfg.assignments:{};
   cfg.ordersByEnemy=cfg.ordersByEnemy&&typeof cfg.ordersByEnemy==='object'?cfg.ordersByEnemy:{};
@@ -207,6 +207,7 @@
   if(positive(cfg.enemyId)&&!Object.prototype.hasOwnProperty.call(cfg.ordersByEnemy,String(cfg.enemyId))&&
      Object.keys(cfg.assignments).length)cfg.ordersByEnemy[String(cfg.enemyId)]={...cfg.assignments};
   cfg.turtlePlans=cfg.turtlePlans&&typeof cfg.turtlePlans==='object'?cfg.turtlePlans:{};
+  cfg.controlAssignments=cfg.controlAssignments&&typeof cfg.controlAssignments==='object'?cfg.controlAssignments:{};
   cfg.blackSkulls=cfg.blackSkulls&&typeof cfg.blackSkulls==='object'?cfg.blackSkulls:{};
   cfg.spies=cfg.spies&&typeof cfg.spies==='object'?cfg.spies:{};
   cfg.notes=cfg.notes&&typeof cfg.notes==='object'?cfg.notes:{};
@@ -865,6 +866,102 @@
       else unknown++;
     }
     return {wins,losses,unknown,total:recent.length,last:recent.length?Math.max(...recent.map(x=>x.at)):0};
+  }
+  function currentPlanKey(){
+    return String(positive(state.data.war?.id)||('scout-'+positive(cfg.enemyId)));
+  }
+  function turtlePlan(){
+    const key=currentPlanKey(),stored=cfg.turtlePlans[key]||{};
+    return {key,mode:['balanced','defensive','full'].includes(stored.mode)?stored.mode:'balanced',
+      members:stored.members&&typeof stored.members==='object'?stored.members:{},
+      updated:n(stored.updated)};
+  }
+  function turtleAssessment(at=Date.now()){
+    const plan=turtlePlan(),ownFresh=rosterFresh('ours',at),enemyFresh=rosterFresh('enemies',at),
+      all=state.data.ours,enemy=state.data.enemies;
+    let exposed=0,sheltered=0,unclear=0,dueSoon=0;
+    const rows=all.map(p=>{
+      const kind=memberState(p),readiness=hitterReadiness(p,at);
+      const expiry=kind==='hospital'||kind==='away'?n(p.until):0;
+      const approaching=expiry>at&&expiry-at<=15*MIN;
+      const assigned=String(plan.members[p.id]||'auto');
+      const observed=kind==='away'?'Travelling / abroad':kind==='hospital'?'Hospital timer':kind==='okay'?'Exposed (Okay)':kind==='jail'?'In jail':'Unknown';
+      const cover=ownFresh&&(kind==='away'||kind==='hospital'||kind==='jail');
+      const danger=ownFresh&&kind==='okay';
+      if(cover)sheltered++;else if(danger)exposed++;else unclear++;
+      if(approaching)dueSoon++;
+      return {p,observed,kind,assigned,cover,danger,expiry,approaching,readiness};
+    });
+    const online=all.filter(isOnline).length,enemyOnline=enemy.filter(isOnline).length;
+    const pace=warPace(),score=warScore();
+    const losing=pace?.measurable&&Date.now()-pace.last.at<10*MIN&&pace.netRate<-30;
+    const suggestion=!ownFresh||!enemyFresh?'Refresh both rosters before changing posture':
+      !state.data.war?'Scout opponent before selecting a war defence posture':
+      losing&&online<enemyOnline?'Consider defensive turtling for exposed non-hitters; keep proven hitters coordinated':
+      exposed>=Math.max(3,Math.ceil(all.length*0.6))&&enemyOnline>online?
+        'High exposure against a more online opposition; consider a controlled defensive phase':
+      score&&score.net>0?'Lead protection may help, but do not surrender all scoring capability':
+      'Balance safe, evidenced hits with protection for members who cannot contribute right now';
+    return {plan,rows,ownFresh,enemyFresh,exposed,sheltered,unclear,dueSoon,
+      online,enemyOnline,pace,score,suggestion};
+  }
+  function controlTargets(at=Date.now()){
+    const fresh=rosterFresh('enemies',at),key=currentPlanKey();
+    const stored=cfg.controlAssignments[key]||{};
+    const threats=enemyThreatRows(positive(state.data.war?.id));
+    const priority=new Map(threats.map((x,i)=>[x.player.id,Math.max(0,40-i*3)]));
+    return state.data.enemies.map(p=>{
+      const kind=memberState(p),expiry=kind==='hospital'&&n(p.until)>at?n(p.until):0,
+        due=expiry?Math.max(0,Math.ceil((expiry-at)/MIN)):null;
+      const leader=positive(stored[p.id]),watch=Boolean(cfg.watchlist[p.id]),
+        highThreat=priority.get(p.id)||0;
+      const score=highThreat+(watch?20:0)+(leader?18:0)+
+        (kind==='hospital'&&due!==null&&due<20?25:0);
+      return {p,kind,expiry,due,leader,watch,highThreat,score,active:fresh,
+        note:kind==='hospital'?'Observed in hospital':
+          kind==='okay'?'Currently Okay; monitor for a new hospital state':
+          kind==='away'?'Travelling/abroad; not an immediate hit':'Status unverified'};
+    }).filter(x=>x.leader||x.watch||x.highThreat||x.kind==='hospital')
+      .sort((a,b)=>b.score-a.score||((a.due??Infinity)-(b.due??Infinity))||a.p.id-b.p.id);
+  }
+  function enemyThreatRows(warId=positive(state.data.war?.id)){
+    const ledger=warHitLedger(warId),last=latestFinished('enemies');
+    const lastReport=last?state.data.reports[last.id]?.factions?.find(x=>x.id===positive(cfg.enemyId)):null;
+    const officialPrev=new Map((lastReport?.members||[]).map(p=>[p.id,p]));
+    return state.data.enemies.map(player=>{
+      const live=ledger.theirs.players[player.id]||null,previous=officialPrev.get(player.id)||null;
+      const threat=live?live.respect*1.8+live.hits*12:previous?Math.min(150,n(previous.score)/10):0;
+      const label=live?'Recorded ranked-war attacks in our faction access':
+        previous?'Previous official completed-war score':'No usable scoring evidence';
+      const status=memberState(player);
+      return {player,live,previous,score:threat,label,status,
+        source:live?'Recorded API hits':previous?'Prior war report':'Unknown',
+        confidence:live?'Observed partial ledger':previous?'Historical only':'Unknown'};
+    }).sort((a,b)=>b.score-a.score||a.player.id-b.player.id);
+  }
+  function blackSkullScorecards(warId){
+    const id=positive(warId),r=state.data.reports[id],side=r?.factions?.find(x=>x.id===positive(cfg.ourId));
+    const reportNames=new Map((side?.members||[]).map(x=>[x.id,x]));
+    const roster=new Map(state.data.ours.map(p=>[p.id,p]));
+    const names=new Map([...roster,...reportNames]);
+    const records=[];
+    for(const [sid,yes] of Object.entries(cfg.blackSkulls)){
+      if(!yes)continue;
+      const playerId=positive(sid),report=reportNames.get(playerId);
+      const historical=(state.data.ourWars||[]).filter(w=>w.end&&positive(w.id)!==id)
+        .sort((a,b)=>b.end-a.end).map(w=>state.data.reports[w.id]?.factions
+          ?.find(x=>x.id===positive(cfg.ourId))?.members?.find(x=>x.id===playerId))
+        .filter(Boolean).slice(0,3);
+      const prev=historical.length?historical.reduce((z,p)=>z+n(p.score),0)/historical.length:null;
+      const observed=warHitLedger(id).ours.players[playerId]||null;
+      records.push({id:playerId,name:String(report?.name||roster.get(playerId)?.name||('Player '+playerId)),
+        score:report?officialNumber(report.score):null,
+        hits:report?officialNumber(report.attacks):null,
+        share:side?.score&&report?100*n(report.score)/n(side.score):null,
+        previousAvg:prev,source:report?'Official report':'Not in report',
+        sampled:observed});
+    }
+    return records.sort((a,b)=>(b.score??-1)-(a.score??-1)||a.id-b.id);
   }
   function scoreAcceleration(id=positive(state.data.war?.id),now=Date.now()){
     const line=state.data.scoreTimelines[String(positive(id))];
