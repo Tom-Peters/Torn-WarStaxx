@@ -60,13 +60,14 @@ test('risk-aware recommendations require verified comparable manual spies',()=>{
     'const activeWarNow=()=>true,rosterFresh=()=>true;',
     "const memberState=p=>p.status.toLowerCase();",
     "const friend={id:7,status:'Okay'},state={data:{war:{id:5},enemies:[{id:88,status:'Okay',level:40}]}};",
-    "const cfg={enableAttacks:false},warAttackRows=()=>[];",
+    "const cfg={enableAttacks:false,blackSkulls:{}},warAttackRows=()=>[];",
     'const enemyRoleBands=()=>({}),roleAllows=()=>true;',
     'let mode="safe",ratio=0.5,wins=0,verified=true;',
     'const hitterRisk=()=>({mode,maxRatio:mode==="safe"?.55:mode==="aggressive"?.78:.70,minWins:mode==="safe"?1:0});',
     'const matchEvidence=()=>({verified,rosterVerified:true,tier:ratio>=.7?1:0,conflict:false,'+
       'encounters:{wins,losses:0},match:{ff:2,ratio},score:90});',
     'const learnedYield=(f,p,model)=>({pointsPer25:model,actual:null,samples:0,confidence:"Model only"});',
+    'const enemyRoleBands=()=>({}),roleAllows=()=>true;',
     "const ourWarReadiness=()=>({kind:'okay',player:friend});"
   ].join('\n');
   const f=fixture(setup,'  function efficiencyHits(','  function turtleWindow(',
@@ -86,7 +87,10 @@ test('shared payload explicitly excludes keys, spies, notes and private readines
     "const cfg={key:'TORN-SECRET',ffKey:'FF-SECRET',assignments:{5:100},blackSkulls:{5:true},",
     "hitterRisk:{5:{mode:'safe'}},controlAssignments:{'war:4':{100:5}},spies:{100:{strength:999}},",
     "notes:{100:'private'},shared:{enabled:true,endpoint:'https://unit.test',token:'READ-SECRET'}};",
-    'const currentPlanKey=()=>\"war:4\",hitterRisk=()=>({mode:\"safe\"});'
+    'const currentPlanKey=()=>"war:4",hitterRisk=()=>({mode:"safe"});',
+    'const state={data:{ours:[{id:5}]}};',
+    'const turtlePlan=()=>({mode:"balanced",members:{5:"strike"}});',
+    'const hitterPlanStatus=()=>("engaged");'
   ].join('\n');
   const f=fixture(setup,'  function sharedPayload(){','  function sharedHasLocalOrders(){',
     '({sharedPayload})');
