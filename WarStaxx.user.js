@@ -996,6 +996,9 @@
        throw new Error('War panel elements are missing');
     window.__warStaxxReady=true;
     window.__warStaxxStartError='';
+    // Update the real DOM beacon without relying on cross-script events or shared storage.
+    const beacon=document.getElementById('tornstaxx-war-execution-probe');
+    if(beacon){beacon.dataset.phase='ready';beacon.dataset.observed=String(Date.now());}
     publish();
     document.dispatchEvent(new CustomEvent('staxx:ping'));
     setTimeout(announce,2500);
@@ -1014,6 +1017,8 @@
   try{boot();}catch(err){
     window.__warStaxxReady=false;
     window.__warStaxxStartError='Startup failed ('+(err?.name||'Error')+')';
+    const beacon=document.getElementById('tornstaxx-war-execution-probe');
+    if(beacon){beacon.dataset.phase='error';beacon.dataset.observed=String(Date.now());}
     try{document.dispatchEvent(new CustomEvent('staxx:ping'));}catch(_){}
   }
 })();
