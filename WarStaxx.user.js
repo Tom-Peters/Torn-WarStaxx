@@ -515,9 +515,9 @@
     if(!force&&positive(cfg.ourId)&&positive(cfg.factionVerifiedAt)&&
        Date.now()-n(cfg.factionVerifiedAt)<6*HOUR)return positive(cfg.ourId);
     const sources=[
-      ['/user/profile','identity-profile','user-profile'],
+      ['/key/info','identity-key','key-info'],
       ['/user/faction','identity-faction','user-faction'],
-      ['/key/info','identity-key','key-info']
+      ['/user/profile','identity-profile','user-profile']
     ];
     let lastError='';
     for(const [path,kind,source] of sources){
@@ -548,7 +548,7 @@
       return result.id;
     }
     if(!positive(cfg.ourId))state.data.errors.identity=
-      'Unable to identify your faction automatically. '+(lastError||'Check your Torn PDA API key and its profile permission.');
+      'Faction auto-detection unavailable: '+(lastError||'check your Torn PDA API key and its profile permission.');
     return positive(cfg.ourId);
   }
   async function refreshHistory(){
