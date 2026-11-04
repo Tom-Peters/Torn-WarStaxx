@@ -17,12 +17,12 @@ function loadProbe(){
    textContent:'',id:''
   })
  };
- const win={};win.top=win;win.self=win;
+ const messages=[];const win={postMessage:(msg,origin)=>messages.push({msg,origin}),addEventListener:()=>{}};win.top=win;win.self=win;
  class E{constructor(type,{detail}={}){this.type=type;this.detail=detail;}}
  const ctx={document:doc,window:win,location:{hostname:'www.torn.com',pathname:'/gym.php'},
  CustomEvent:E,setTimeout:(cb,ms)=>timers.push({cb,ms}),setInterval:(cb,ms)=>timers.push({cb,ms}),navigator:{}};
  runInNewContext(src.slice(start,end),ctx,{timeout:1500});
- return {doc,win,events,timers};
+ return {doc,win,events,timers,messages};
 }
 test('independent lightweight probe registers WarStaxx before the app',()=>{
  const {doc,win,events,timers}=loadProbe();
@@ -40,4 +40,13 @@ test('probe register reflects subsequent app startup success',()=>{
  doc.dispatchEvent({type:'staxx:ping'});
  const last=events.filter(e=>e.type==='staxx:register').at(-1);
  assert.match(last.detail.desc,/command centre/);
+});
+
+
+test('startup probe posts only a safe identity message, not API keys or data',()=>{
+ const {messages}=loadProbe();
+ assert.ok(messages.some(x=>x.msg.__tornstaxxBridge==='tornstaxx-war-v1'&&x.msg.kind==='register'&&x.msg.id==='war'));
+ for(const x of messages){
+   assert.deepEqual(Object.keys(x.msg).sort(),['__tornstaxxBridge','id','kind'].sort());
+ }
 });
