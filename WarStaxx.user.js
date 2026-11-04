@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      0.2.2
+// @version      0.2.3
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -66,7 +66,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='0.2.2';
+  const id='war', version='0.2.3';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -158,7 +158,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='0.2.2', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='0.2.3', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','targets','matchups','strategy','activity','history','assignments','alerts','settings','diagnostics'];
   const labels={overview:'Command',targets:'Targets',matchups:'Matchups',strategy:'Strategy',activity:'Activity',history:'History',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -553,11 +553,24 @@
   }
   function el(tag,cls,text){const a=document.createElement(tag);if(cls)a.className=cls;if(text!==undefined)a.textContent=String(text);return a;}
   const root=el('div');root.id='warstaxx-root';
+  // A real DOM click crosses Torn PDA isolated userscript contexts reliably.
+  // This control only opens a visual panel and never performs gameplay actions.
+  const domBridge=el('button');
+  domBridge.id='warstaxx-dom-open';
+  domBridge.type='button';
+  domBridge.hidden=true;
+  domBridge.setAttribute('aria-hidden','true');
+  domBridge.style.display='none';
+  domBridge.addEventListener('click',()=>open({
+    section:domBridge.dataset.section||'overview',
+    alertId:domBridge.dataset.alertId||null
+  }));
   root.innerHTML='<div class="ws-veil" data-close></div><section class="ws-panel" role="dialog" aria-label="WarStaxx command centre" aria-modal="true">'+
     '<header class="ws-head"><div><strong>War<span>Staxx</span></strong><small>RANKED WAR INTELLIGENCE · v'+VER+'</small></div>'+
     '<div class="ws-head-buttons"><button type="button" data-action="refresh">↻ Refresh</button><button type="button" data-action="find">⌕</button><button type="button" data-close aria-label="Close">×</button></div></header>'+
     '<nav class="ws-tabs" aria-label="WarStaxx sections"></nav><main class="ws-content"></main>'+
     '<footer class="ws-footer"><span class="ws-sync"></span><span>Observations, not automated attacks</span></footer></section>';
+  root.appendChild(domBridge);
   const css=el('style');css.textContent=[
     '#warstaxx-root{position:fixed;inset:0;z-index:2147483646;display:none;font:13px/1.45 system-ui,Arial,sans-serif;color:#eaf4ff}',
     '#warstaxx-root *{box-sizing:border-box}#warstaxx-root button,#warstaxx-root input,#warstaxx-root select,#warstaxx-root textarea{font:inherit}',
