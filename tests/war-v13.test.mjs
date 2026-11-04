@@ -82,7 +82,9 @@ test('Black Skulls coverage reports uncovered enemy targets separately from veri
     "{enemy:{id:101,name:'Enemy1',status:'Okay'},value:900,source:'BSS'},"+
     "{enemy:{id:102,name:'Enemy2',status:'Okay'},value:700,source:'BSS'}],"+
     "known:2,unknown:0,rule:{mode:'percent',percent:100,minBss:0}});",
-  'const roleMatch=(friend,enemy)=>({match:{ratio:friend.id===10?.2:.3},score:99});'
+  'const roleMatch=(friend,enemy)=>({match:{ratio:friend.id===10?.2:.3},score:99});',
+  'const heavyTargetPriorities=()=>new Map([[101,{score:60}],[102,{score:50}]]);',
+  'const hitterReadiness=()=>({energyEnough:true});'
  ].join('\n');
  const x=fixture(setup,'  function blackSkullsCoverage(','  function personalShortlist(',
     '({blackSkullsCoverage,cfg})');
@@ -161,6 +163,7 @@ test('Shared orders include strength policy but no Torn keys or spy records',()=
 });
 test('Black Skulls and regular-member reports have separate copyable, source-labelled exports',()=>{
  const setup=[
+  'const similarStrengthPerformance=()=>({referenceBss:null,actual:null,currentSamples:0,historical:null,historicalSamples:0,priorWars:0,label:"Unknown"});',
   'const squadWarSummary=(id,side)=>({',
   '  squadSource:"Tags observed during war",source:"Official report",',
   '  points:side==="black"?200:80,attacks:side==="black"?10:8,perHit:side==="black"?20:10,',
