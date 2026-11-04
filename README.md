@@ -1,4 +1,4 @@
-> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v0.2.4). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v0.2.5). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
 
 # Torn-WarStaxx
 
@@ -15,6 +15,12 @@ War-TornStaxx registers with the **fifth, standalone TornStaxx hub** as module I
 **Version 0.1.2 startup diagnostics:** an independent, minimal startup probe now advertises WarStaxx to StaxxHub before the full app boots. If the main script throws or aborts after injection, opening the WarStaxx entry displays a safe status panel rather than silently disappearing. No credentials or private data are included in the status. In Torn PDA, confirm that the WarStaxx script is **enabled**, is using **end-of-document injection**, and that any new permission requests have been accepted. Update to 0.1.2 from the same raw URL and reload Torn. If StaxxHub still shows only the original three tools, WarStaxx likely did not execute at all: inspect Torn PDA’s scripts-on-this-page view or the script’s enable toggle.
 
 **Version 0.1.1 visibility fix:** if Torn PDA loaded WarStaxx before the Hub, registration is re-announced after startup and periodically while the page is visible. On Torn faction/war pages an unobtrusive **Open WarStaxx** button appears inside the page as a fallback. On other Torn pages open **StaxxHub (S) → Tools → WarStaxx**. If you already installed v0.1.0, update the installed script using the same raw URL and reload the Torn page. This is not another floating launcher.
+
+## 2026-11-04 v0.2.5 Torn PDA quote-conversion parse fix
+
+**Root cause reproduced:** v0.2.4 contained two curly apostrophes (U+2019) inside single-quoted JavaScript text. The downloaded JS parsed in normal Node, but simulating smart-quote conversion to ASCII apostrophes caused `SyntaxError: Unexpected identifier 'actual'`. This prevents *all* startup code, Hub registration and in-app diagnostics. Both sentences have been rewritten without apostrophes. The entire War module's source is now ASCII-only; existing UI symbols are retained using JavaScript Unicode escapes.
+
+All five TornStaxx repositories now have automated quote-normalisation parse checks, and the suite development standard mandates the check for future releases. Update War-TornStaxx from the permanent raw installer URL and confirm version **0.2.5** in Torn PDA before testing. No API keys, observations, faction orders or saved user data were intentionally reset.
 
 ## 2026-11-04 v0.2.4 cross-context injection diagnosis
 
