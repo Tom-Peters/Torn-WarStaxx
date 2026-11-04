@@ -2807,8 +2807,8 @@
       (plan.skulls&&!plan.skullReady?'<div class="ws-note ws-warn">No Black Skulls currently Okay in the observed roster.</div>':'')+
       (Date.now()-n(state.data.updated.enemies)>5*MIN?'<div class="ws-note ws-warn">Enemy roster is stale. Refresh before issuing orders.</div>':'')+
       '<p><b>Auto-draft:</b> '+draft.length+' available, unassigned Black Skulls have a strong candidate with manual battle-stat evidence. '+
-      'Drafting only writes local target assignments and never executes attacks.</p>'+
-      '<div class="ws-toolbar">'+b('Draft '+draft.length+' verified Black Skulls orders','draft-black',draft.length?'':'disabled')+
+      'Drafting makes role-separated local target assignments and never executes attacks.</p>'+
+      '<div class="ws-toolbar">'+b('Draft '+draft.length+' verified role-appropriate orders','draft-black',draft.length?'':'disabled')+
       b('View existing orders','tab:assignments')+b('Manage targets','tab:targets')+'</div>');
     if(!plan.members)return html+empty('No own-faction roster has loaded. WarStaxx will automatically detect your faction using your configured Torn API key.');
     html+=card('Assign and monitor every team member',
@@ -4143,7 +4143,7 @@
         '<td>'+(x.enemy?a('Profile',link(x.enemy.id))+' '+a('Attack',attackLink(x.enemy.id)):'')+
           ' '+b(cfg.blackSkulls[x.friend.id]?'Unmark Black Skull':'Mark Black Skull','black-skill:'+x.friend.id)+
           ' '+b('Clear order','clear-assign:'+x.friend.id)+'</td></tr>').join('')+'</tbody></table></div>'))+
-      '<p class="ws-small">Orders are local on this device; they are not sent to other members, posted to faction chat, or executed automatically.</p>';
+      '<p class="ws-small">Orders are local unless optional officer-authorised shared sync is enabled. Nothing is posted to faction chat and no attacks run automatically.</p>';
   }
   function alertView(){
     return statusNote()+(state.alerts.length?state.alerts.map(x=>card(x.title,'<p>'+esc(x.detail)+'</p>'+b('Review now','tab:'+x.tab))).join(''):empty('No active actionable war alerts.')) ;
@@ -4169,7 +4169,7 @@
       '<label><input type="checkbox" id="ws-ff-enable" '+(cfg.ffEnabled?'checked':'')+'> Show estimated FF next to players and fetch no more than once per 10 minutes.</label>'+
       '<div class="ws-toolbar">'+b('Save settings','save-settings')+b('Verify FF key','check-ff-key')+b('Refresh FF','refresh-ff')+b('Use PDA key for FF','clear-ff-key')+b('Detect my faction now','detect-faction')+b('Refresh all now','refresh')+b('Clear stored API key','clear-key')+'</div>'+
       '<p class="ws-small">API access depends on your custom key scope. Opponent member lists and ranked-war history use public selections; your own detailed attacks require faction access.</p>')+
-      card('Local intelligence controls','<p>War histories, observations, manual spy reports and assignments remain in this browser storage. No central database or cross-device sync is active.</p>'+
+      card('Local intelligence controls','<p>War histories, observations and spy reports stay in this device browser storage. Only selected role/order fields sync to an explicitly configured Worker.</p>'+
       b('Reset activity samples only','reset-activity')+' '+b('Clear this opponents orders','reset-orders'))+
       card('Shared faction war orders | opt-in synchronisation',
         '<p>Requires your own deployed WarStaxx Cloudflare Worker and D1 database. Share ONLY assignments, Black Skull tags, per-hitter risk profiles, hospital watchers, defensive duties and leadership statuses. Torn API keys and manual spies stay on this device.</p>'+
@@ -4353,7 +4353,7 @@
     if(action==='draft-black'){
       const drafts=suggestedDraft();
       for(const x of drafts)if(!positive(cfg.assignments[x.friend.id]))cfg.assignments[x.friend.id]=x.enemy.id;
-      saveCfg();markSharedDirty();state.error=drafts.length?'Drafted '+drafts.length+' Black Skulls targets locally. Review and confirm each manually.':'No verified unassigned Black Skulls targets; obtain comparable spies first.';render();return;
+      saveCfg();markSharedDirty();state.error=drafts.length?'Drafted '+drafts.length+' role-appropriate target orders locally. Verify each manually.':'No evidenced unassigned role-appropriate targets; improve BSS coverage and comparable spies first.';render();return;
     }
     if(action==='save-leader-note'){
       const key=positive(state.data.war?.id)||('scout-'+positive(cfg.enemyId));
