@@ -883,25 +883,130 @@
       (state.error?'<div class="ws-note ws-warn">'+esc(state.error)+'</div>':'');
   }
   function overview(){
-    const w=state.data.war,score=warScore();
-    const online=state.data.enemies.filter(isOnline).length;
-    const ready=state.data.enemies.filter(p=>evaluate(p).ready).length;
-    let html=statusNote()+'<div class="ws-grid">'+
-      stat('War status',w?'ACTIVE':'Scouting',w?'vs '+(w.opponentName||('Faction '+w.opponentId)):'No active ranked war confirmed')+
-      stat('Net war score',score?fmt(score.net):'\u2014',score&&score.target?'Target '+fmt(score.target):'Current score requires verified war data')+
-      stat('Enemy Okay',state.data.enemies.length?fmt(ready):'\u2014','Based on latest roster snapshot')+
-      stat('Enemy online',state.data.enemies.length?fmt(online):'\u2014','Current online flag, not a prediction')+
-      stat('War reports',fmt(Object.keys(state.data.reports).length),'Incremental official report backfill')+
-      stat('Activity snapshots',fmt(state.data.sampleCount),'Accumulated on this device')+'</div>';
+    const w=state.data.war,score=warScore(),our=sideActivity('ours'),them=sideActivity('enemies');
+    const historyStats=factionWarMetrics('enemies'),last=historyStats.last;
+    const now=Date.now(),recent=state.data.enemies.filter(p=>p.lastAt&&now-p.lastAt<24*HOUR);
+    let html=statusNote()+
+      '<div class="ws-lead"><span class="ws-data-label">WAR ROOM | OFFICIAL + OBSERVED</span>'+
+      '<h2>'+(w?'Ranked war: '+esc(w.opponentName||('Faction '+cfg.enemyId)):
+       positive(cfg.enemyId)?'Scouting faction #'+cfg.enemyId:'No opponent selected')+'</h2>'+
+      '<p>'+(score?'Official score: Our faction '+fmt(score.our)+' / Opponent '+fmt(score.enemy)+' | Net '+fmt(score.net):
+        'Live ranked-war score not available. Historical scouting remains available.')+'</p>'+
+      '<div class="ws-toolbar">'+b('Enemy intelligence','tab:intel')+b('Players and targets','tab:targets')+
+      b('Previous wars','tab:history')+b('Our war orders','tab:assignments')+'</div></div>'+
+      '<div class="ws-grid">'+
+      statAction('Enemy online now',them.total?fmt(them.online)+' / '+them.total:'\u2014',
+        'Latest observed roster | '+age(them.last),'tab:activity')+
+      statAction('Active in last 24h',them.total?fmt(them.active24)+' / '+them.total:'\u2014',
+        'Last action timestamps; not sustained online time','tab:targets')+
+      statAction('Enemy Okay now',them.total?fmt(them.okay)+' / '+them.total:'\u2014',
+        'Possible candidates | check again before hitting','tab:targets')+
+      statAction('Enemy last war',last&&historyStats.lastScore!==null?fmt(historyStats.lastScore)+' pts':'\u2014',
+        last?'Against '+scoreLabel(historyStats.lastAgainst)+' | #'+last.id:'History not yet loaded','tab:intel')+
+      statAction('Enemy war wins',historyStats.decided?fmt(historyStats.wins)+' / '+fmt(historyStats.decided):'\u2014',
+        'Last '+historyStats.wars+' completed wars loaded','tab:history')+
+      statAction('Enemy status',them.total?fmt(them.away)+' away / '+fmt(them.hospital)+' hosp.':'\u2014',
+        'Observed travel and hospital states','tab:activity')+'</div>';
     if(score&&score.target){
-      const percentage=Math.max(0,Math.min(100,(score.net+score.target)/(2*score.target)*100));
-      html+=card('Scoreline','<div class="ws-row"><b>Our score '+fmt(score.our)+'</b><b>Enemy '+fmt(score.enemy)+'</b></div><div class="ws-pct"><i style="width:'+percentage+'%"></i></div><small>Net difference is official data; this bar is illustrative, not win probability.</small>');
+      const pct=Math.max(0,Math.min(100,(score.net+score.target)/(2*score.target)*100));
+      html+=card('Current war scoreline | official','<div class="ws-row"><b>Us '+fmt(score.our)+'</b><b>Them '+fmt(score.enemy)+'</b></div>'+
+        '<div class="ws-pct"><i style="width:'+pct+'%"></i></div>'+
+        '<p class="ws-small">Target '+fmt(score.target)+'. Bar illustrates score difference, not win probability.</p>');
     }
-    html+=card('Next best decisions','<div class="ws-toolbar">'+b('Review hittable targets','tab:targets')+' '+b('Suggested assignments','tab:assignments')+
-      ' '+b('Compare past wars','tab:history')+'</div>'+
-      (currentAlerts().length?currentAlerts().map(x=>'<div class="ws-row"><span>'+esc(x.title)+'<br><small>'+esc(x.detail)+'</small></span>'+b('Review','alert:'+x.id)+'</div>').join(''):empty('No verified urgent war tasks.')))+
-      card('Other Staxx tools','<p>Use the same StaxxHub launcher and jump between tools without duplicating panels.</p>'+
-      '<div class="ws-toolbar">'+b('Happy Jump \u00b7 energy','tool:happy')+b('ProfitStaxx \u00b7 supplies','tool:profit')+b('Company Helper','tool:company')+'</div>');
+    const strong=strongHours();
+    if(strong.length){
+      const best=strong[0];
+      html+=card('Observed time advantage','<p>Most favourable sampled hour: <b>'+String(best.hour).padStart(2,'0')+
+        ':00 TCT</b> | Our online checks '+best.ours.pct+'% vs enemy '+best.theirs.pct+'%.</p>'+
+        '<p class="ws-small">Based on local foreground samples only ('+best.ours.samples+' ours / '+best.theirs.samples+
+        ' enemy observations for this hour). Not a guarantee or accurate live member count.</p>'+b('See 24h comparison','tab:activity'));
+    }
+    const leaders=perMemberRows('enemies',5).filter(x=>x.last!==null);
+    html+=card('Enemy last-war top scorers',leaders.length?
+      '<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Enemy</th><th>Latest known war score</th><th>Action</th></tr></thead><tbody>'+
+      leaders.map(x=>'<tr><td>'+infoButton(x.p.name,x.p.id)+'</td><td>'+scoreLabel(x.last)+'</td><td>'+a('Profile',link(x.p.id))+'</td></tr>').join('')+
+      '</tbody></table></div>'+b('Full opponent dossier','tab:intel'):
+      empty('Official per-player scores appear as historical reports load. Select the opponent in Settings if not currently at war.')+
+      '<div class="ws-toolbar">'+b('Load enemy history','tab:history')+b('See all players','tab:targets')+'</div>');
+    html+=card('What needs attention',currentAlerts().length?currentAlerts().map(x=>'<div class="ws-row"><span><b>'+
+      esc(x.title)+'</b><br><small>'+esc(x.detail)+'</small></span>'+b('Review','alert:'+x.id)+'</div>').join(''):
+      empty('No verified urgent war tasks.'))+
+      card('Related TornStaxx tools','<div class="ws-toolbar">'+b('Training and energy','tool:happy')+
+      b('Profit and supplies','tool:profit')+b('Company','tool:company')+'</div>');
+    return html;
+  }
+  function warReportView(id){
+    const r=state.data.reports[id],known=state.data.enemyWars.concat(state.data.ourWars).find(w=>w.id===id);
+    let html=statusNote()+'<div class="ws-toolbar">'+b('Back to war history','war-list')+
+      b('Opponent intelligence','tab:intel')+'</div>';
+    if(!r)return html+card('Official report #'+id,'<p>War #'+id+' is listed in the Torn API, but its detailed report is not stored on this device yet.</p>'+
+      b(state.loading?'Loading...':'Fetch this official report','load-report:'+id)+
+      (known?'<p>Recorded '+esc(stamp(known.end*1000))+'</p>':''));
+    const won=r.war?.winner;
+    html+='<div class="ws-lead"><span class="ws-data-label">OFFICIAL RANKED WAR REPORT</span><h2>War #'+id+
+      ' | '+(won?'Winner: faction #'+won:'Winner unknown')+'</h2><p>Started '+
+      esc(stamp(n(r.war?.start)*1000))+' | Ended '+esc(stamp(n(r.war?.end)*1000))+
+      (r.war?.forfeit?' | Forfeit recorded':'')+'</p></div>';
+    html+='<div class="ws-grid">'+r.factions.map(f=>card(f.name||('Faction #'+f.id),
+      '<div class="ws-score">'+fmt(f.score)+' pts</div>'+
+      '<p>'+fmt(f.attacks)+' attacks | '+(f.id===won?'Winner':'Did not win')+'</p>'+
+      '<p>Rank '+esc(f.rankBefore||'unknown')+' to '+esc(f.rankAfter||'unknown')+'</p>'+
+      '<p>Rewards: '+fmt(f.rewards?.points)+' points, '+fmt(f.rewards?.respect)+' respect</p>'+
+      '<p class="ws-small">'+(f.rewards?.items||[]).map(item=>esc(item.name)+' x'+fmt(item.quantity)).join(', ')+'</p>'+
+      a('Faction',factionLink(f.id)))).join('')+'</div>';
+    html+=r.factions.map(f=>card((f.name||('Faction '+f.id))+' - individual contributions',
+      '<p>Each score and attack count below comes from Torn official war report #'+id+'. Click a player to open their full dossier.</p>'+
+      '<div class="ws-table-wrap"><table><thead><tr><th>Member</th><th>Score</th><th>Attacks</th><th>Share of faction score</th><th>Torn</th></tr></thead><tbody>'+
+      f.members.slice().sort((a,b)=>b.score-a.score).map(p=>'<tr><td>'+infoButton(p.name||('Player '+p.id),p.id)+
+      '<br><small>#'+p.id+' | Lv '+fmt(p.level)+'</small></td><td>'+fmt(p.score)+'</td><td>'+fmt(p.attacks)+'</td><td>'+
+      (f.score>0?fmt(100*p.score/f.score)+'%':'\u2014')+'</td><td>'+a('Profile',link(p.id))+'</td></tr>').join('')+
+      '</tbody></table></div>')).join('');
+    return html;
+  }
+  function intel(){
+    if(state.selectedWar)return warReportView(state.selectedWar);
+    const fid=positive(cfg.enemyId),m=factionWarMetrics('enemies'),last=m.last,
+      ours=sideActivity('ours'),them=sideActivity('enemies');
+    let html=statusNote()+'<div class="ws-lead"><span class="ws-data-label">OPPONENT DOSSIER | CLICK TO INVESTIGATE</span>'+
+      '<h2>'+(state.data.war?.opponentName?esc(state.data.war.opponentName):fid?'Faction #'+fid:'No opponent selected')+'</h2>'+
+      '<p>Official history, current roster, player contributions, observed online behaviour and your own tactical notes in one place.</p>'+
+      '<div class="ws-toolbar">'+(fid?a('Open faction in Torn',factionLink(fid)):'')+
+      b('View all players','tab:targets')+b('Full war history','tab:history')+b('Activity hours','tab:activity')+'</div></div>'+
+      '<div class="ws-grid">'+
+      statAction('Last war score',scoreLabel(m.lastScore),m.last?'War #'+m.last.id+' | '+esc(stamp(m.last.end*1000)):'No completed war','tab:history')+
+      statAction('Enemy faced',scoreLabel(m.lastAgainst),m.last?'Opponent score in latest war':'No historical score','tab:history')+
+      statAction('Wins / decided',m.decided?m.wins+' / '+m.decided:'\u2014','Loaded ranked-war records','tab:history')+
+      statAction('Average war score',scoreLabel(m.scoreAvg),'Official completed-war scores in this sample','tab:history')+
+      statAction('Active last 24h',them.total?them.active24+' / '+them.total:'\u2014','From last-action timestamps only','tab:activity')+
+      statAction('Online now',them.total?them.online+' / '+them.total:'\u2014','Latest observed enemy roster','tab:activity')+'</div>';
+    if(last){
+      const reportStored=state.data.reports[last.id];
+      html+=card('Most recent completed ranked war | #'+last.id,
+        '<p><b>Enemy '+scoreLabel(m.lastScore)+' / Opponent '+scoreLabel(m.lastAgainst)+'</b> | '+
+        (last.winner===fid?'Victory':last.winner?'Defeat':'Outcome pending')+'</p>'+
+        '<p>'+esc(stamp(last.start*1000))+' to '+esc(stamp(last.end*1000))+'</p>'+
+        '<div class="ws-toolbar">'+b('Open scorecard and every player','war:'+last.id)+
+        (reportStored?'':b('Fetch detailed report','load-report:'+last.id))+'</div>');
+    }
+    const leaders=perMemberRows('enemies',80),covered=leaders.filter(x=>x.last!==null);
+    html+=card('Enemy roster | latest officially recorded individual scores',
+      '<p>'+covered.length+' of '+leaders.length+' current members have a score in a fetched historical report. These scores may refer to different wars where the latest report is missing.</p>'+
+      (leaders.length?'<div class="ws-table-wrap"><table><thead><tr><th>Player (open dossier)</th><th>War score</th><th>Historic avg</th><th>Last action</th><th>Status</th><th>Action</th></tr></thead><tbody>'+
+      leaders.map(x=>'<tr><td>'+infoButton(x.p.name,x.p.id)+'<br><small>#'+x.p.id+' Lv '+fmt(x.p.level)+'</small></td>'+
+      '<td><b>'+scoreLabel(x.last)+'</b></td><td>'+scoreLabel(x.lifetime.avg)+'</td>'+
+      '<td>'+esc(x.p.lastAction)+'<br><small>'+esc(age(x.p.lastAt))+'</small></td>'+
+      '<td>'+pill(x.p.status,memberState(x.p)==='okay'?'good':'')+'</td>'+
+      '<td>'+a('Profile',link(x.p.id))+' '+a('Attack',attackLink(x.p.id))+'</td></tr>').join('')+
+      '</tbody></table></div>':empty('No enemy roster yet. Set an opponent or open War during active matchmaking.')));
+    const matches=(state.data.enemyWars||[]).filter(w=>w.end).slice().sort((a,b)=>b.end-a.end).slice(0,6);
+    html+=card('Previous enemy wars | official scorelines',
+      matches.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>War</th><th>Result</th><th>Enemy / Opponent</th><th>Details</th></tr></thead><tbody>'+
+      matches.map(w=>{const one=w.scores.find(x=>x.id===fid),other=w.scores.find(x=>x.id!==fid);return '<tr><td>'+
+        b('#'+w.id,'war:'+w.id)+'<br><small>'+esc(stamp(w.end*1000))+'</small></td><td>'+
+        pill(w.winner===fid?'Won':w.winner?'Lost':'Unknown',w.winner===fid?'good':'')+'</td><td>'+
+        scoreLabel(one?.score)+' / '+scoreLabel(other?.score)+'</td><td>'+b('Scorecard','war:'+w.id)+'</td></tr>';}).join('')+
+      '</tbody></table></div>':empty('No completed ranked wars have loaded yet. Refresh or select an enemy faction in Settings.'))+
+      '<div class="ws-toolbar">'+b('See all past wars','tab:history')+'</div>');
     return html;
   }
   function targetRows(){
