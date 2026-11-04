@@ -1137,8 +1137,10 @@
   // the API-key owner's personal FF multiplier or a verified spy.
   function enemyBattleEstimate(enemy){
     if(!enemy)return {value:null,source:'Unknown',verified:false};
-    const known=bsScore(spy(enemy.id));
-    if(known!==null)return {value:known,source:'Manual battle-stat spy',verified:true};
+    const report=spy(enemy.id),known=bsScore(report),
+      freshManual=known!==null&&n(report?.observedAt)>0&&
+        Date.now()>=n(report.observedAt)&&Date.now()-n(report.observedAt)<=30*24*HOUR;
+    if(freshManual)return {value:known,source:'Recent manual battle-stat spy',verified:true};
     const third=ffscouter(enemy.id);
     if(third&&!ffIsStale(third)&&Number.isFinite(third.bss)&&third.bss>0)
       return {value:third.bss,source:'Fresh FFScouter public BSS estimate',verified:false};
@@ -1167,7 +1169,8 @@
     return enemyRole(enemy,band)===(cfg.blackSkulls[positive(friend?.id)]?'heavy':'regular');
   }
   function roleMatch(friend,enemy,band=enemyRoleBands()){
-    if(!roleAllows(friend,enemy,band))return null;
+    if(!friend||!enemy||memberState(friend)!=='okay'||memberState(enemy)!=='okay'||
+      !roleAllows(friend,enemy,band))return null;
     const ev=matchEvidence(friend,enemy),r=hitterRisk(friend.id),ratio=ev.match?.ratio;
     if(!ev.verified||!ev.rosterVerified||!Number.isFinite(ratio)||
        ratio>r.maxRatio||ev.encounters.losses>0||ev.conflict||
@@ -2361,7 +2364,7 @@
       else{cfg.warStripCompact=!cfg.warStripCompact;state.stripExpanded=false;saveCfg();}
       renderWarStrip(true);return;
     }
-    if(action==='war'){open({section:cfg.blackSkulls[self.id]?'skulls':'overview'});return;}
+    if(action==='war'){open({section:'overview'});return;}
     if(action==='skulls'){open({section:'skulls'});return;}
     if(action==='stats'){open({section:'reports'});return;}
     if(action==='enemy'){open({section:'enemy'});return;}
