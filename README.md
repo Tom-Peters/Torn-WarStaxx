@@ -1,4 +1,47 @@
-> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v0.5.0). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v0.6.0). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+
+## v0.6.0 - Reliability-first targeting, enemy acceleration, inbound flights, readiness and after-action (4 November 2026)
+
+**Same installed Torn PDA URL:** https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js
+
+### 1. Reliable Black Skulls targets (highest priority)
+
+- The War Room now prioritises **reliable evidenced matchups**, *not* the highest FFScouter fair-fight estimate.
+- Each personalised hitter card uses recent comparative *manual* battle-stat spy data, the selected member's **actual recorded attack outcomes** where enabled, and current Torn roster status. The fighter-specific model is distinct from the FFScouter estimate calculated for the API-key owner.
+- Recent confirmed losses are flagged as **Reassess losses**, rather than presented as guaranteed safe targets. Prior wins give extra ranking preference only with compatible fight data. Verified strong candidates require both manual spy records to be less than 30 days old and favourable comparison; stale/unknown third-party results remain explicitly unverified.
+- Leadership still approves any assignment locally, with no automatic attacks. Readiness unknowns are not assumed to be able to fight.
+
+### 2. Enemy scoring acceleration warnings
+
+- War Pace now compares two **timestamped, non-overlapping** observed scoring windows and shows historical vs recent points per hour.
+- A warning in War Pace, Leadership and TornStaxx alerts is raised when the opponent's sampled points/hour increases substantially, with enough observations and a fresh latest point. Observations older than 10 minutes cannot trigger acceleration.
+- Acceleration is an observed trend, not a live stream, a predicted future score or a guaranteed outcome. It cannot be reconstructed from old official war final scores.
+
+### 3. Incoming flights, exact source clarity
+
+- WarStaxx recognises explicitly labelled **returning-to-Torn** states in the official enemy roster and uses the roster's future status-expiry timestamp (when provided) as an **inbound ETA**, alongside a countdown and UTC/TCT timestamp.
+- Inbound flights appear in the watchlist, the Leadership tactical view and the enemy roster **Inbound flights** filter. An alert is raised when the inbound ETA is within 20 minutes **and the roster was sampled within 5 minutes**.
+- Outbound flights and players merely abroad are not treated as returning. When no valid inbound timestamp is available, the UI says **ETA unknown**. Always refresh before acting; travelling targets cannot be attacked mid-flight. The status expiry is not a guarantee of a landing.
+
+### 4. Black Skulls energy and medical readiness
+
+- **Leadership** includes a Black Skulls readiness board showing official **Okay** status, known energy (25 energy is the normal attack cost), medical cooldown remaining, data source and age.
+- For the **registered Torn API-key owner only**, WarStaxx can read `/user/bars` and `/user/cooldowns` when permitted. It optionally discovers the key owner's ID and marks those readings as official only while fresh (under 15 minutes). The key owner can disable own-bar polling in Settings.
+- For other hitters, input is **manual and local to the device**, time-stamped and considered stale after 45 minutes. There is no shared spy/readiness database, no teammate-private API access, and unknown energy remains unknown.
+- Medical cooldown indicates whether medical consumables can be used; it is **not** a blocker for normal attacks. Readiness labels distinguish energy sufficiency from hospital/travel status.
+
+### 5. Automatic read-only After Action
+
+- **After action** is a new War-TornStaxx section. Whenever the next refresh sees a completed ranked war in official history, WarStaxx builds a local debrief. It automatically improves the debrief once Torn's detailed report is available.
+- Debriefs include the official result and score, key individual scorers, participant counts, enemy top-three scoring concentration, any locally observed online/travel rates, data gaps and evidence-based leadership discussion prompts.
+- A new-war debrief routes into hub alerts; the leader may mark it Reviewed/Unreviewed, open the detailed scorecard or timeline, or copy the report **manually**. Older historical reports remain viewable without generating spurious new-war alerts.
+- Historical war online/travel behaviour is **not** reconstructed from scorecards; missing observations stay unavailable.
+
+### Safety and compatibility
+
+- The full TornStaxx suite still uses the standalone hub and the same `war` module ID, existing keys/configuration, original userscript URL and local cache names. Existing spies, notes, orders and war histories are preserved.
+- No game-state writes, auto-attack/medical use, shared intelligence service, faction-chat auto-posting, or cross-module key transmissions were added.
+- `tests/war-operations.test.mjs` extends the regression tests for travel certainty, acceleration, own-only readiness, old losses and complete war debriefs. Source remains ASCII-only for Torn PDA quote normalisation.
 
 ## v0.5.0 - Leadership, personalised hitter targets, live scoring pace and per-war behaviour (4 November 2026)
 
