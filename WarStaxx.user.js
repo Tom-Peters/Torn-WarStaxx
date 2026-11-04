@@ -1473,9 +1473,9 @@
       const own=await call('/faction/'+cfg.ourId+'/members','ours',force?0:90*1000);
       if(own)state.data.ours=roster(own);
       if(positive(cfg.enemyId)){
+        const old=state.data.enemies.slice(),oldAt=n(state.data.updated.enemies);
         const enemy=await call('/faction/'+cfg.enemyId+'/members','enemies',force?0:90*1000);
         if(enemy){
-          const old=state.data.enemies.slice(),oldAt=n(state.data.updated.enemies);
           const fresh=roster(enemy);state.data.enemies=fresh;
           if(previousWarId&&state.data.war&&previousWarId===positive(state.data.war.id)&&
             oldAt&&Date.now()-oldAt<5*MIN)recordAvailability(old,fresh,previousWarId);
@@ -2789,6 +2789,56 @@
     return h;
   }
 
+
+  function blackSkullsRoom(){
+    const self=ourWarReadiness(),skulls=state.data.ours.filter(p=>cfg.blackSkulls[p.id]),
+      personal=bestEfficiencyHit(),myId=positive(self.id),
+      chosen=state.data.enemies.find(p=>p.id===positive(cfg.assignments[myId])),
+      duty=turtlePlan().members[myId]||'not assigned',
+      control=cfg.controlAssignments[currentPlanKey()]||{},
+      watched=Object.entries(control).filter(([,owner])=>positive(owner)===myId)
+        .map(([id])=>state.data.enemies.find(p=>p.id===positive(id))).filter(Boolean);
+    return statusNote()+'<div class="ws-lead"><span class="ws-data-label">BLACK SKULLS | HEAVY HITTER CONTROL</span>'+
+      '<h2>Strike, hold and hospital control</h2>'+
+      '<p>Personal efficient target, saved orders, hospital watches and team readiness. All actions are manual.</p></div>'+
+      '<div class="ws-grid">'+
+      stat('Black Skulls',fmt(skulls.length),'Locally marked members')+
+      stat('Observed Okay',fmt(skulls.filter(p=>memberState(p)==='okay').length),
+        'Not proof of 25+ energy')+
+      stat('My energy',self.energy===null?'Unknown':fmt(self.energy)+' E','Own bars / manual')+
+      stat('My duty',duty,'Per-war defensive role')+'</div>'+
+      card('My next move',cfg.blackSkulls[myId]?
+        '<p><b>Status:</b> '+esc(self.kind)+'</p>'+
+        '<p><b>Assigned enemy:</b> '+(chosen?infoButton(chosen.name,chosen.id)+
+          ' '+ffBadge(chosen.id)+' | '+esc(chosen.status):'None saved')+'</p>'+
+        '<p><b>Best verified score / 25 E:</b> '+(personal?
+          infoButton(personal.player.name,personal.player.id)+' | '+fmt(personal.pointsPer25)+
+          ' | '+esc(personal.source):'No verified safe current hit')+'</p>'+
+        '<div class="ws-toolbar">'+b(self.kind==='hospital'?'HEAL TO HIT':'HIT','fast-hit')+
+          b('My matchups','hitter:'+myId)+b('Defend','tab:turtle')+'</div>':
+        '<p>You are not marked as a Black Skull on this device. Use Leadership to set membership.</p>'+
+        b('Leadership','tab:command'))+
+      card('My hospital-control assignments',watched.length?watched.map(p=>{
+        const expiry=memberState(p)==='hospital'&&p.until>Date.now()?
+          ' | approximate hospital expiry '+flightCountdown(p.until):'';
+        return '<div class="ws-row"><span>'+infoButton(p.name,p.id)+' '+ffBadge(p.id)+
+          '<br><small>'+esc(p.status)+esc(expiry)+'</small></span>'+
+          b('Control','control-target:'+p.id)+'</div>';
+      }).join(''):empty('No enemy hospital watches currently assigned to your account.'))+
+      card('Heavy hitters duty board',skulls.length?skulls.map(p=>{
+        const read=hitterReadiness(p),assigned=state.data.enemies.find(x=>
+          x.id===positive(cfg.assignments[p.id])),
+          watches=Object.values(control).filter(id=>positive(id)===p.id).length;
+        return '<div class="ws-commander-member"><div><b>'+esc(p.name)+'</b> '+
+          pill(p.status,memberState(p)==='okay'?'good':'')+
+          '<small>Energy '+(read.energy===null?'unknown':fmt(read.energy)+' E')+
+          ' | watches '+watches+' | assigned '+(assigned?esc(assigned.name):'none')+
+          '</small></div><div class="ws-toolbar">'+b('Matchups','hitter:'+p.id)+
+          b('Hospital control','tab:control')+'</div></div>';
+      }).join(''):empty('Mark Black Skulls in Leadership to populate the board.'))+
+      '<div class="ws-toolbar">'+b('Leadership','tab:command')+
+      b('War room','tab:overview')+b('All targets','tab:targets')+'</div>';
+  }
   function liveWarRoom(){
     const w=state.data.war,score=warScore(),own=ourWarReadiness(),target=bestEfficiencyHit(),
       enemies=sideActivity('enemies'),pace=warPace(),alerts=currentAlerts().slice(0,3),
@@ -2800,14 +2850,14 @@
       '<p>Official points '+esc(age(state.data.updated.wars))+
       (score?.target?' | Target '+fmt(score.target):'')+'</p></div>'+
       '<div class="ws-toolbar">'+b('TURTLE','fast-turtle')+b(own.kind==='hospital'?'HEAL TO HIT':'HIT','fast-hit')+
-      b('HEAL','fast-heal')+b('Refresh','refresh')+'</div>'+
+      b('HEAL','fast-heal')+b('Refresh','refresh')+b('Black Skulls','fast-skulls')+'</div>'+
       card('Your next action','<p><b>Official status:</b> '+esc(own.kind)+
         ' | <b>Energy:</b> '+(own.energy===null?'Unknown':fmt(own.energy)+' E')+'</p>'+
         (own.kind==='hospital'?'<p>Heal manually on Torn items, then tap HIT again.</p>':
-        target?'<p><b>Highest verified favourable opponent:</b> '+infoButton(target.player.name,target.player.id)+
+        target?'<p><b>Best verified points / energy:</b> '+infoButton(target.player.name,target.player.id)+
           ' '+ffBadge(target.player.id)+' | Lv '+fmt(target.player.level)+
-          ' | known spy strength '+fmt(target.strength)+'</p><small>'+
-          esc(target.evidence.reliability)+'. Confirm buffs and opponent status before starting the battle.</small>':
+          ' | '+fmt(target.pointsPer25)+' modelled/observed pts per 25 E</p><small>'+
+          esc(target.source)+' | '+esc(target.evidence.reliability)+'. Check status and buffs before attacking.</small>':
           '<p>No recent verified favourable matchup. Review your manual spies rather than guessing a winning fight.</p>'+
           b('Open matchups','tab:matchups')))+
       '<div class="ws-grid">'+
@@ -2821,7 +2871,7 @@
       '<div class="ws-toolbar">'+b(state.warMore?'Hide other stats':'Show other stats','war-more')+
       b('Full commander','tab:commander')+'</div>';
     if(state.warMore)body+=card('More war intelligence','<div class="ws-toolbar">'+[
-      ['Enemy intelligence','intel'],['Player FF','targets'],['Matchups','matchups'],
+      ['Enemy intelligence','intel'],['Black Skulls','skulls'],['Player FF','targets'],['Matchups','matchups'],
       ['Pace','pace'],['Hit ledger','ledger'],['Threats','threats'],
       ['Turtling strategy','turtle'],['Hospital control','control'],['Black Skulls','command'],
       ['Operations','operations'],['Activity','activity'],['Previous wars','history'],
@@ -3353,7 +3403,9 @@
       '<label>Automatic refresh<select id="ws-interval">'+[90,120,180,300].map(s=>'<option value="'+s+'" '+(cfg.refreshSeconds===s?'selected':'')+'>'+s+' seconds while visible</option>').join('')+'</select></label>'+
       '<label>Historical wars per side<select id="ws-limit">'+[3,5,8,12,20].map(s=>'<option value="'+s+'" '+(cfg.historyLimit===s?'selected':'')+'>'+s+' wars</option>').join('')+'</select></label>'+
       '<label><input type="checkbox" id="ws-attacks" '+(cfg.enableAttacks?'checked':'')+'> Read faction attacks (optional faction API permission): FF observations, sampled ranked-war hit ledger and live opponent scoring where available</label>'+ 
-      '<label><input type="checkbox" id="ws-owner-ready" '+(cfg.autoOwnerReadiness!==false?'checked':'')+'> Read my own energy and medical cooldown (only the Torn API-key owner; requires user bars/cooldowns permissions)</label>'+ 
+      '<label><input type="checkbox" id="ws-owner-ready" '+(cfg.autoOwnerReadiness!==false?'checked':'')+'> Read my own energy and medical cooldown (only the Torn API-key owner; requires user bars/cooldowns permissions)</label>'+
+      '<label><input type="checkbox" id="ws-priority-notifications" '+(cfg.priorityNotifications!==false?'checked':'')+
+      '> Show enemy newly available alerts when a verified important opponent changes to Okay (foreground observation only)</label>'+ 
       '<h3>FFScouter \u00b7 optional, independent service</h3><p>When enabled with explicit consent, WarStaxx uses your registered FFScouter key or your existing Torn PDA key if the separate field is empty. It sends that key and target player IDs to FFScouter, not to TornStaxx hub. You must first register the key with FFScouter. Read the <a href="https://ffscouter.com/#data-policy" target="_blank" rel="noopener noreferrer">FFScouter data policy</a>; free and premium plans may offer different data.</p>'+ 
       '<label>Optional FFScouter-specific API key<input id="ws-ffkey" type="password" autocomplete="off" placeholder="'+(cfg.ffKey?'Separate key saved; blank keeps it':effectiveKey()?'Uses your Torn PDA key when opted in':'Enter a registered key or connect Torn PDA key')+'"></label>'+ 
       '<label><input type="checkbox" id="ws-ff-consent" '+(cfg.ffConsent?'checked':'')+'> I have read the FFScouter data policy and knowingly enable this third-party lookup.</label>'+ 
@@ -3392,12 +3444,12 @@
     renderWarStrip();
     if(!state.open)return;
     const simple=(()=>{try{return JSON.parse(localStorage.getItem('staxx-hub-mode-v1'))!=='advanced';}catch(_){return true;}})();
-    const basics=['overview','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts'];
-    const focus=activeWarNow()?['overview','commander','operations','threats','targets']:basics;
+    const basics=['overview','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts'];
+    const focus=activeWarNow()?['overview','skulls','commander','operations','threats','targets']:basics;
     const displayed=simple&&!state.showMore?sections.filter(s=>focus.includes(s)||s===state.tab):sections;
     $('.ws-tabs',root).innerHTML=displayed.map(s=>'<button type="button" class="'+(s===state.tab?'on':'')+'" data-tab="'+s+'">'+esc(activeWarNow()&&s==='overview'?'LIVE WAR':labels[s])+'</button>').join('')+
       (simple?'<button type="button" data-action="more">'+(state.showMore?'Less':'More')+'</button>':'');
-    const pages={overview,commander,operations,ledger,threats,control,turtle,command,pace,afteraction,intel,targets,matchups,timeline,strategy,activity,history,assignments:orders,alerts:alertView,settings,diagnostics};
+    const pages={overview,skulls:blackSkullsRoom,commander,operations,ledger,threats,control,turtle,command,pace,afteraction,intel,targets,matchups,timeline,strategy,activity,history,assignments:orders,alerts:alertView,settings,diagnostics};
     const content=$('.ws-content',root);
     const scroll=content.scrollTop;
     const form=state.tab==='settings'?Array.from(content.querySelectorAll('input,select,textarea')).map(x=>({id:x.id,checked:x.checked,value:x.value,type:x.type})):null;
@@ -3443,6 +3495,7 @@
     if(action==='refresh'){refresh(true);return;}
     if(action==='war-more'){state.warMore=!state.warMore;render();return;}
     if(action==='fast-turtle'){warQuick('turtle');return;}
+    if(action==='fast-skulls'){warQuick('skulls');return;}
     if(action==='fast-skulls'){warQuick('skulls');return;}
     if(action==='fast-hit'){warQuick('hit');return;}
     if(action==='fast-heal'){warQuick('heal');return;}
@@ -3605,6 +3658,7 @@
       cfg.historyLimit=Math.max(2,Math.min(20,positive($('#ws-limit',root)?.value)||8));
       cfg.enableAttacks=Boolean($('#ws-attacks',root)?.checked);
       cfg.autoOwnerReadiness=Boolean($('#ws-owner-ready',root)?.checked);
+      cfg.priorityNotifications=Boolean($('#ws-priority-notifications',root)?.checked);
       if(previousOwnerKey!==effectiveKey()){
         state.data.ownerReadiness={};delete state.data.meta.ownerId;
         for(const name of ['own-bars','own-cooldowns','owner-id-readiness']){
