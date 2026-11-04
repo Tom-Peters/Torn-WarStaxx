@@ -29,6 +29,7 @@ function matchingFixture(){
     'const lastKnownMemberScore=()=>null;',
     'const attackHistoryFor=()=>({wins:0,losses:0,unknown:0,total:0,last:0});',
     'const hitterReadiness=()=>({energyEnough:null});',
+    'const hitterRisk=()=>({mode:"balanced",maxRatio:.70,minWins:0});',
     'const ffscouter=id=>({bss:({103:80,104:60})[id]||null});',
     'const ffIsStale=()=>false;',
     'const matchup=(friend,enemy)=>{const ratios={1:{101:0.35,102:0.45},2:{101:0.38,102:1.35}};'+
