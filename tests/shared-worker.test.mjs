@@ -71,6 +71,26 @@ test('sensitive or malformed maps are rejected and not stored',async()=>{
   const invalid=await worker.fetch(request('PUT',WRITE,1234,0,badRisk),e);
   assert.equal(invalid.status,400);
 });
+test('optional defensive plans and leader duties are validated, stored and readable',async()=>{
+  const e=env();
+  const extended={...data,
+    turtlePlan:{mode:'full',members:{'4':'strike','5':'turtle'}},
+    leaderDuties:{'4':'engaged','5':'support'}};
+  const create=await worker.fetch(request('PUT',WRITE,1234,0,extended),e);
+  assert.equal(create.status,200);
+  const pulled=await worker.fetch(request('GET',READ),e);
+  const saved=(await pulled.json()).data;
+  assert.equal(saved.turtlePlan.mode,'full');
+  assert.equal(saved.turtlePlan.members[5],'turtle');
+  assert.equal(saved.leaderDuties[4],'engaged');
+});
+test('invalid turtle roles and leadership statuses are rejected',async()=>{
+  const e=env();
+  const wrongRole={...data,turtlePlan:{mode:'full',members:{'4':'auto-combat'}}};
+  assert.equal((await worker.fetch(request('PUT',WRITE,1234,0,wrongRole),e)).status,400);
+  const wrongStatus={...data,leaderDuties:{'4':'secret-admin'}};
+  assert.equal((await worker.fetch(request('PUT',WRITE,1234,0,wrongStatus),e)).status,400);
+});
 test('normal browser CORS preflight is accepted only for Torn origins',async()=>{
   const e=env();
   const ok=await worker.fetch(new Request('https://shared.example/v1/factions/1234/wars/123/orders',{
