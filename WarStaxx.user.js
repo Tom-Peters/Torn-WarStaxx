@@ -346,10 +346,91 @@
     return 'unknown';
   }
   function isOnline(p){return p.lastAction.toLowerCase()==='online';}
+  // Historical war scoring can only be sampled while this device is active.
+  // Never manufacture a continuous score or reconstruct earlier timestamps.
+  function trimWarLogs(){
+    for(const key of ['scoreTimelines','warTimelines']){
+      const data=state.data[key],ids=Object.keys(data).sort((a,b)=>
+        n(data[b]?.lastAt||data[b]?.updated)-n(data[a]?.lastAt||data[a]?.updated));
+      for(const id of ids.slice(0,20))delete data[id];
+    }
+  }
+  function recordWarScore(w,at=Date.now()){
+    if(!w||!positive(w.id))return false;
+    const us=w.factions?.find(p=>positive(p.id)===positive(cfg.ourId));
+    const them=w.factions?.find(p=>positive(p.id)===positive(w.opponentId));
+    if(!us||!them||!Number.isFinite(Number(us.score))||!Number.isFinite(Number(them.score)))return false;
+    const id=String(w.id),r=state.data.scoreTimelines[id]||
+      (state.data.scoreTimelines[id]={id:w.id,ourId:positive(cfg.ourId),enemyId:positive(w.opponentId),
+        start:positive(w.start)*1000,points:[],lastAt:0});
+    if(r.ourId!==positive(cfg.ourId)||r.enemyId!==positive(w.opponentId))return false;
+    const p={at,our:n(us.score),enemy:n(them.score)},last=r.points[r.points.length-1];
+    if(last&&(at-last.at<20000||last.our===p.our&&last.enemy===p.enemy&&at-last.at<5*MIN))return false;
+    r.points.push(p);
+    if(r.points.length>360)r.points=r.points.slice(-360);
+    r.lastAt=at;trimWarLogs();return true;
+  }
+  function warPace(id=positive(state.data.war?.id)){
+    const r=state.data.scoreTimelines[String(positive(id))];
+    if(!r||!Array.isArray(r.points)||!r.points.length)return null;
+    const points=r.points.filter(x=>x&&Number.isFinite(n(x.at))).slice().sort((a,b)=>a.at-b.at);
+    const last=points[points.length-1],cutoff=last.at-60*MIN;
+    const recent=points.filter(x=>x.at>=cutoff);
+    const start=recent[0]||points[0],span=(last.at-start.at)/MIN;
+    const measurable=recent.length>=2&&span>=5;
+    const deltaOur=n(last.our)-n(start.our),deltaEnemy=n(last.enemy)-n(start.enemy);
+    const rateOur=measurable?deltaOur*60/span:null,rateEnemy=measurable?deltaEnemy*60/span:null;
+    const fullSpan=(last.at-points[0].at)/MIN;
+    return {id:r.id,ourId:r.ourId,enemyId:r.enemyId,points,
+      last,first:points[0],samples:points.length,span,fullSpan,
+      deltaOur:measurable?deltaOur:null,deltaEnemy:measurable?deltaEnemy:null,
+      rateOur,rateEnemy,netRate:measurable?rateOur-rateEnemy:null,
+      gap:n(last.our)-n(last.enemy),measurable,
+      confidence:!measurable?'Insufficient':span>=40&&recent.length>=4?'Moderate':'Early'};
+  }
+  function recordWarObservation(side,players,at=Date.now()){
+    const war=state.data.war;
+    if(!war||!positive(war.id)||!Array.isArray(players)||!players.length)return false;
+    const id=String(war.id),hour=Math.floor(at/HOUR);
+    const rec=state.data.warTimelines[id]||
+      (state.data.warTimelines[id]={id:war.id,ourId:positive(cfg.ourId),enemyId:positive(war.opponentId),
+        name:String(war.opponentName||''),start:positive(war.start)*1000,updated:0,
+        sides:{ours:{hours:{},players:{}},enemies:{hours:{},players:{}}}});
+    if(rec.ourId!==positive(cfg.ourId)||rec.enemyId!==positive(war.opponentId))return false;
+    const target=rec.sides[side];if(!target)return false;
+    const bucket=target.hours[hour]||(target.hours[hour]={checks:0,samples:0,online:0,away:0,hospital:0,okay:0});
+    bucket.checks++;
+    for(const p of players){
+      const status=memberState(p),online=isOnline(p);
+      bucket.samples++;bucket.online+=Number(online);bucket.away+=Number(status==='away');
+      bucket.hospital+=Number(status==='hospital');bucket.okay+=Number(status==='okay');
+      const h=target.players[p.id]||(target.players[p.id]={id:p.id,name:p.name,
+        samples:0,online:0,away:0,hospital:0,okay:0,firstAt:at,lastAt:at});
+      h.name=p.name;h.samples++;h.online+=Number(online);h.away+=Number(status==='away');
+      h.hospital+=Number(status==='hospital');h.okay+=Number(status==='okay');h.lastAt=at;
+    }
+    rec.updated=at;trimWarLogs();return true;
+  }
+  function warSamples(id,side){
+    const rec=state.data.warTimelines[String(positive(id))];
+    const dat=rec?.sides?.[side],hours=Object.entries(dat?.hours||{}).sort((a,b)=>Number(a[0])-Number(b[0]));
+    const aggregate=hours.reduce((z,[_,x])=>{
+      z.checks+=n(x.checks);z.samples+=n(x.samples);z.online+=n(x.online);
+      z.away+=n(x.away);z.hospital+=n(x.hospital);z.okay+=n(x.okay);return z;
+    },{checks:0,samples:0,online:0,away:0,hospital:0,okay:0});
+    const pct=k=>aggregate.samples?Math.round(100*aggregate[k]/aggregate.samples):null;
+    return {id:positive(id),side,hours,players:Object.values(dat?.players||{}),
+      ...aggregate,onlinePct:pct('online'),awayPct:pct('away'),hospitalPct:pct('hospital'),
+      first:hours.length?Number(hours[0][0])*HOUR:0,
+      last:hours.length?Number(hours[hours.length-1][0])*HOUR:0,
+      coverage:aggregate.checks>=12&&hours.length>=4?'Moderate':
+        aggregate.checks>=3&&hours.length>=2?'Early':'Insufficient'};
+  }
   function snapshot(sides=['ours','enemies']){
     const hour=Math.floor(Date.now()/HOUR);
     for(const side of sides){
       const players=state.data[side]||[];
+      if(state.data.war)recordWarObservation(side,players);
       for(const p of players){
         const id=side+':'+p.id;
         const item=state.data.activity[id]||(state.data.activity[id]={hours:{},count:0});
@@ -875,6 +956,7 @@
       const wars=await call('/faction/'+cfg.ourId+'/wars','wars',force?0:90*1000);
       if(wars){
         const w=detectWar(wars);state.data.war=w;
+        if(w)recordWarScore(w);
         if(w&&w.opponentId)setOpponent(w.opponentId);
       }
       const own=await call('/faction/'+cfg.ourId+'/members','ours',force?0:90*1000);
