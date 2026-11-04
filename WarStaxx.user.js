@@ -211,7 +211,7 @@
   const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},factionBasic:{},publicIntel:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},scoreTimelines:{},warTimelines:{},sampleCount:0});
   const state={data:Object.assign(freshData(),safeRead(DATA,{})),open:false,tab:'overview',showMore:false,
     filter:'all',sort:'warScore',search:'',loading:false,ffLoading:false,spinner:'',error:'',scanning:false,alerts:[],chosen:0,
-    lastRefresh:0,historicalRead:0,localKeyError:false,warExpected:false,selectedWar:0,selectedTimeline:0,detailFrom:'targets',leaderFilter:'black',hitterFilter:'all'};
+    lastRefresh:0,historicalRead:0,localKeyError:false,warExpected:false,selectedWar:0,selectedTimeline:0,detailFrom:'targets',leaderFilter:'all',hitterFilter:'all'};
   state.data.reports=state.data.reports||{};
   state.data.activity=state.data.activity||{};
   state.data.ffstats=state.data.ffstats||{};
@@ -1418,6 +1418,78 @@
       '</tbody></table></div>':empty('Enemy member samples are missing in this war.'));
     return html;
   }
+  function command(){
+    const plan=leadershipSummary(),p=warPace(),score=warScore(),
+      noteKey=positive(state.data.war?.id)||('scout-'+positive(cfg.enemyId)),
+      notes=String(cfg.leaderNotes[noteKey]||'');
+    const filtered=state.data.ours.slice().sort((a,b)=>
+      Number(Boolean(cfg.blackSkulls[b.id]))-Number(Boolean(cfg.blackSkulls[a.id]))||
+      Number(isOnline(b))-Number(isOnline(a))||a.name.localeCompare(b.name))
+      .filter(x=>state.leaderFilter==='all'||state.leaderFilter==='black'&&cfg.blackSkulls[x.id]||
+        state.leaderFilter==='ready'&&memberState(x)==='okay');
+    const draft=suggestedDraft(),busy=['engaged','monitor'];
+    let html=statusNote()+'<div class="ws-lead"><span class="ws-data-label">LEADERSHIP COMMAND | LOCAL TACTICAL BOARD</span>'+
+      '<h2>Ranked war command centre</h2>'+
+      '<p>Manage Black Skulls, set individual targets and monitor live Torn roster statuses alongside locally assigned duties. Nothing is automatically posted to faction chat or executed.</p>'+
+      '<div class="ws-toolbar">'+b('Refresh war intelligence','refresh')+b('Copy leadership briefing','copy-leader-brief')+
+      b('View war pace','tab:pace')+b('Player shortlists','tab:matchups')+b('War timelines','tab:timeline')+'</div></div>'+
+      '<div class="ws-grid">'+
+      stat('Black Skulls ready',plan.skullReady+' / '+plan.skulls,'Current Okay status / tagged Black Skulls')+
+      stat('Manual target coverage',plan.manual+' / '+plan.members,'Members with locally saved manual assignments')+
+      stat('Leadership duties active',fmt(plan.inProgress),'Engaged or monitoring, manually marked')+
+      stat('Enemy Okay',state.data.enemies.filter(x=>memberState(x)==='okay').length+' / '+plan.enemy,'Last official roster snapshot')+
+      stat('Scoring momentum',p?.netRate===null||!p?'\u2014':(p.netRate>=0?'+':'')+fmt(p.netRate)+'/h','Recent observed net score pace')+
+      stat('Current score',score?fmt(score.our)+' / '+fmt(score.enemy):'\u2014','Our faction / enemy official snapshot')+'</div>';
+    html+=card('Operational checks',
+      (plan.duplicateTargets.length?'<div class="ws-note ws-warn"><b>Overlapping manual targets:</b> '+
+      plan.duplicateTargets.map(x=>'#'+x.id+' assigned '+x.count+' times').join(', ')+
+      '. Coordinate to avoid unintentional duplication.</div>':'')+
+      (plan.skulls&&!plan.skullReady?'<div class="ws-note ws-warn">No Black Skulls currently Okay in the observed roster.</div>':'')+
+      (Date.now()-n(state.data.updated.enemies)>5*MIN?'<div class="ws-note ws-warn">Enemy roster is stale. Refresh before issuing orders.</div>':'')+
+      '<p><b>Auto-draft:</b> '+draft.length+' available, unassigned Black Skulls have a strong candidate with manual battle-stat evidence. '+
+      'Drafting only writes local target assignments and never executes attacks.</p>'+
+      '<div class="ws-toolbar">'+b('Draft '+draft.length+' verified Black Skulls orders','draft-black',draft.length?'':'disabled')+
+      b('View existing orders','tab:assignments')+b('Manage targets','tab:targets')+'</div>');
+    if(!plan.members)return html+empty('No own-faction roster has loaded. WarStaxx will automatically detect your faction using your configured Torn API key.');
+    html+=card('Assign and monitor every team member',
+      '<p>Choose a target explicitly. The <b>Target</b> selector saves locally; the <b>Duty</b> selector is a manually recorded leadership status, not an automated Torn action.</p>'+
+      '<div class="ws-toolbar"><label>Roster view<select id="ws-leader-filter">'+
+      [['all','All members'],['black','Black Skulls'],['ready','Currently Okay']].map(([val,name])=>
+        '<option value="'+val+'" '+(state.leaderFilter===val?'selected':'')+'>'+name+'</option>').join('')+
+      '</select></label></div>'+
+      (filtered.length?'<div class="ws-table-wrap"><table><thead><tr><th>Our hitter</th><th>Observed status</th><th>Assigned target</th><th>Manual duty</th><th>Personal best option</th><th>Actions</th></tr></thead><tbody>'+
+      filtered.map(member=>{
+        const assigned=positive(cfg.assignments[member.id]),target=state.data.enemies.find(x=>x.id===assigned);
+        const best=personalShortlist(member,1)[0];
+        const options=['<option value="0">No manual target</option>'].concat(
+          state.data.enemies.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(enemy=>
+            '<option value="'+enemy.id+'" '+(assigned===enemy.id?'selected':'')+'>'+
+            esc(enemy.name)+' ['+enemy.id+'] - '+esc(enemy.status)+'</option>'));
+        const status=memberState(member),working=hitterPlanStatus(member.id);
+        return '<tr><td>'+infoButton(member.name,member.id)+
+          '<br>'+(cfg.blackSkulls[member.id]?pill('Black Skull','good'):'<span class="ws-muted">Regular member</span>')+
+          '<br>'+b(cfg.blackSkulls[member.id]?'Remove from Black Skulls':'Add to Black Skulls','black-skill:'+member.id)+'</td>'+
+          '<td>'+pill(member.status,status==='okay'?'good':status==='hospital'?'bad':'')+
+          '<br><small>'+esc(member.lastAction)+' | '+esc(age(member.lastAt))+'</small></td>'+
+          '<td><select data-leader-target="'+member.id+'" aria-label="Manual target for '+esc(member.name)+'">'+options.join('')+'</select>'+
+          '<br><small>'+(target?esc(matchEvidence(member,target).category)+' | '+esc(matchEvidence(member,target).reason):
+            assigned?'Target #'+assigned+' not in current roster':'No manual target')+'</small></td>'+
+          '<td><select data-leader-duty="'+member.id+'" aria-label="Manual duty for '+esc(member.name)+'">'+
+          hitterPlanStatuses().map(([value,label])=>'<option value="'+value+'" '+(working===value?'selected':'')+'>'+label+'</option>').join('')+
+          '</select><br><small>Leadership entry only</small></td>'+
+          '<td>'+(best?infoButton(best.enemy.name,best.enemy.id)+' '+ffBadge(best.enemy.id)+
+            '<br>'+pill(best.category)+
+            '<br><small>'+esc(best.reason)+'</small>':'No opponents loaded')+'</td>'+
+          '<td>'+b('Personal shortlist','hitter:'+member.id)+
+          (target?' '+a('Attack (manual)',attackLink(target.id)):'')+'</td></tr>';
+      }).join('')+'</tbody></table></div>':empty('No members match the selected roster filter.'))+
+      '<p class="ws-small">A manually marked duty can remain set even after the roster status changes. Verify the current official status; an engaged status here is not confirmation of an attack.</p>');
+    html+=card('Leadership notes and briefing',
+      '<label>Local war notes<textarea id="ws-leader-note" maxlength="1800" placeholder="Coordination notes, coverage gaps, hospital exits, target priorities...">'+esc(notes)+'</textarea></label>'+
+      '<div class="ws-toolbar">'+b('Save leadership notes','save-leader-note')+b('Copy war orders','copy-orders')+
+      b('Copy command briefing','copy-leader-brief')+'</div>');
+    return html+watchlistPanel();
+  }
   function overview(){
     const w=state.data.war,score=warScore(),our=sideActivity('ours'),them=sideActivity('enemies');
     const ff=ffCoverage();
@@ -1430,7 +1502,8 @@
       '<p>'+(score?'Official score: Our faction '+fmt(score.our)+' / Opponent '+fmt(score.enemy)+' | Net '+fmt(score.net):
         'Live ranked-war score not available. Historical scouting remains available.')+'</p>'+
       '<div class="ws-toolbar">'+b('Enemy intelligence','tab:intel')+b('Players and targets','tab:targets')+
-      b('Previous wars','tab:history')+b('Our war orders','tab:assignments')+'</div></div>'+
+      b('Previous wars','tab:history')+b('Our war orders','tab:assignments')+
+      b('Leadership board','tab:command')+b('Live points/hour','tab:pace')+b('War timelines','tab:timeline')+'</div></div>'+
       '<div class="ws-grid">'+
       statAction('Enemy online now',them.total?fmt(them.online)+' / '+them.total:'\u2014',
         'Latest observed roster | '+age(them.last),'tab:activity')+
@@ -1699,6 +1772,7 @@
       pill(x.war.winner===positive(side==='ours'?cfg.ourId:cfg.enemyId)?'Won':x.war.winner?'Lost':'Unknown')+
       '</td><td>'+b('Scorecard','war:'+x.war.id)+'</td></tr>').join('')+'</tbody></table></div>':
       empty('No previous wars for this player are loaded on this device.'));
+    if(side==='enemies')html+=memberWarTimeline(id);
     html+=encountersPanel(id);
     html+=card('Online and travel evidence',
       '<p>Observed '+pat.count+' foreground checks. Online '+(pat.count?pat.online+'%':'unknown')+
@@ -1751,8 +1825,8 @@
     let html=statusNote()+
       '<div class="ws-lead"><span class="ws-data-label">TACTICAL ANALYSIS | EVIDENCE FIRST</span><h2>How to approach this opponent</h2>'+
       '<p>Each recommendation leads to the actual supporting intelligence. A score, level or observed FF is not proof of an easy fight.</p>'+
-      '<div class="ws-toolbar">'+b('Assign our hitters','tab:assignments')+b('Compare matchups','tab:matchups')+
-      b('Review their wars','tab:history')+'</div></div>'+
+      '<div class="ws-toolbar">'+b('Leadership command','tab:command')+b('Assign our hitters','tab:assignments')+b('Compare matchups','tab:matchups')+
+      b('Review their wars','tab:history')+b('Compare war timelines','tab:timeline')+'</div></div>'+
       '<div class="ws-grid">'+
       statAction('Our online / their online',ours.total&&enemy.total?ours.online+' / '+enemy.online:'\u2014',
         'At last roster checks; our '+age(ours.last)+' | enemy '+age(enemy.last),'tab:activity')+
