@@ -28,7 +28,8 @@ function clean(input){
   if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>
     !['assignments','blackSkulls','hitterRisk','controlAssignments'].includes(k)))return null;
   const data={assignments:input.assignments||{},blackSkulls:input.blackSkulls||{},
-    hitterRisk:input.hitterRisk||{},controlAssignments:input.controlAssignments||{}};
+    hitterRisk:Object.fromEntries(Object.entries(input.hitterRisk||{}).map(([id,x])=>
+      [id,{mode:x?.mode}])),controlAssignments:input.controlAssignments||{}};
   return validMap(data.assignments,'assign')&&validMap(data.blackSkulls,'black')&&
     validMap(data.hitterRisk,'risk')&&validMap(data.controlAssignments,'control')?data:null;
 }
@@ -49,6 +50,11 @@ export default {async fetch(request,env){
   if(request.method==='PUT'&&!writer)return reply({error:'write permission required'},403,origin);
   if(!env.DB)return reply({error:'D1 database unavailable'},503,origin);
   const faction=Number(match[1]),war=Number(match[2]);
+  // A deployed Worker belongs to exactly one faction. Tokens must not
+  // grant access to another faction's records on the same Worker.
+  if(!Number.isSafeInteger(Number(env.FACTION_ID))||
+     Number(env.FACTION_ID)!==faction)
+    return reply({error:'faction not permitted on this Worker'},403,origin);
   const read=()=>env.DB.prepare(
     'SELECT revision,data,updated_at FROM faction_orders WHERE faction_id=? AND war_id=?'
   ).bind(faction,war).first();
