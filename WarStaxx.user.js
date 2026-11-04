@@ -1048,6 +1048,40 @@
     }catch(e){state.error='Cannot load official report: '+String(e.message||e);}
     finally{state.loading=false;save();render();}
   }
+  function warContributionIntel(){
+    const last=latestFinished('enemies');
+    const side=last?reportSide(state.data.reports[last.id],cfg.enemyId):null;
+    if(!side)return {known:false};
+    const players=side.members.filter(p=>p.score>0).sort((a,b)=>b.score-a.score);
+    const top3=players.slice(0,3),sum=players.reduce((total,p)=>total+p.score,0);
+    return {known:true,id:last.id,total:side.score,attacks:side.attacks,
+      contributors:players.length,players:side.members.length,
+      top3Score:top3.reduce((total,p)=>total+p.score,0),
+      top3Share:sum?Math.round(100*top3.reduce((total,p)=>total+p.score,0)/sum):null,
+      avgPerAttack:side.attacks?side.score/side.attacks:null,leaders:top3};
+  }
+  function watchlistPanel(){
+    const watched=state.data.enemies.filter(p=>Boolean(cfg.watchlist[p.id]));
+    return card('Priority watchlist | '+watched.length+' opponents',
+      watched.length?watched.sort((a,b)=>threatRating(b).score-threatRating(a).score).slice(0,12)
+        .map(p=>'<div class="ws-row"><span>'+infoButton(p.name,p.id)+' '+ffBadge(p.id)+
+          '<br><small>'+esc(p.status)+' | '+esc(p.lastAction)+' | Last score '+scoreLabel(lastKnownMemberScore('enemies',p.id))+
+          ' | Threat '+threatRating(p).score+'</small></span>'+
+          '<span>'+b('Unwatch','watch:'+p.id)+' '+a('Attack',attackLink(p.id))+'</span></div>').join('')+
+          '<div class="ws-toolbar">'+b('See all watched','watched-list')+'</div>':
+        empty('Tap Watch beside any enemy to pin them here across refreshes and return to their dossier quickly.'));
+  }
+  function ffReviewShortlist(){
+    const rows=state.data.enemies.map(p=>({p,intel:ffLabel(p.id)}))
+      .filter(x=>x.intel.source==='estimate'&&memberState(x.p)==='okay')
+      .sort((a,b)=>b.intel.ff-a.intel.ff).slice(0,8);
+    return card('High-FF opponents to review | FFScouter',
+      rows.length?'<p>Highest *fair-fight multipliers for the API-key owner* among currently Okay players. This is not a list of easy wins: verify battle strength and check target status before acting.</p>'+
+        rows.map(x=>'<div class="ws-row"><span>'+infoButton(x.p.name,x.p.id)+' '+ffBadge(x.p.id)+
+        '<br><small>Previous reported score '+scoreLabel(lastKnownMemberScore('enemies',x.p.id))+
+        ' | '+esc(x.p.lastAction)+'</small></span>'+b('Compare','tab:matchups')+'</div>').join(''):
+        empty('No current FFScouter estimates for Okay opponents. Enable lookup or wait for the next scheduled refresh.'));
+  }
   function ffStatusPanel(){
     const d=ffCoverage(),reg=state.data.meta.ffRegistration||{},
       enabled=d.enabled&&d.keyAvailable;
@@ -1128,7 +1162,18 @@
         '<p class="ws-small">Based on local foreground samples only ('+best.ours.samples+' ours / '+best.theirs.samples+
         ' enemy observations for this hour). Not a guarantee or accurate live member count.</p>'+b('See 24h comparison','tab:activity'));
     }
-    html+=ffStatusPanel();
+    const contribution=warContributionIntel();
+    if(contribution.known){
+      html+=card('Enemy latest war - participation intelligence | official',
+        '<div class="ws-inline-metrics"><span>Scored '+fmt(contribution.total)+' points</span>'+ 
+        '<span>'+fmt(contribution.attacks)+' attacks</span>'+ 
+        '<span>'+fmt(contribution.contributors)+' / '+fmt(contribution.players)+' scored</span>'+ 
+        '<span>Top 3 contributed '+scoreLabel(contribution.top3Share)+'% of summed member score</span>'+ 
+        '<span>'+scoreLabel(contribution.avgPerAttack)+' points / attack (faction total)</span></div>'+ 
+        '<p class="ws-small">Concentration is based only on the latest stored official report, not a prediction.</p>'+ 
+        b('Full player contribution breakdown','war:'+contribution.id));
+    }
+    html+=watchlistPanel()+ffReviewShortlist()+ffStatusPanel();
     const leaders=perMemberRows('enemies',5).filter(x=>x.last!==null);
     html+=card('Enemy last-war top scorers',leaders.length?
       '<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Enemy</th><th>Latest known war score</th><th>Action</th></tr></thead><tbody>'+
@@ -1287,6 +1332,19 @@
       }).join('')+'</tbody></table></div>'+
       '<p class="ws-small">Scores shown only where official detailed reports exist. Attack links open Torn for manual action; no attack is submitted.</p>';
   }
+  function encountersPanel(id){
+    const rows=(state.data.attacks||[]).filter(a=>a.defender===positive(id)||a.attacker===positive(id))
+      .sort((a,b)=>b.at-a.at).slice(0,20);
+    if(!rows.length)return card('Recorded faction encounters',
+      empty('No faction attack records for this player. If you have permission, enable Read faction attacks in Settings.'));
+    return card('Recorded faction encounters | Torn attacks',
+      '<p>Only attacks returned by your authorised faction API. FF values here are actual logged outcomes for the listed attacker, not predictions for other hitters.</p>'+
+      '<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Date</th><th>Attacker</th><th>Result</th><th>Actual FF</th><th>Respect</th></tr></thead><tbody>'+
+      rows.map(a=>'<tr><td>'+esc(stamp(a.at))+'</td><td>'+
+        (a.attacker?infoButton('Player #'+a.attacker,a.attacker):'Unknown')+'</td><td>'+esc(a.result)+
+        '</td><td>'+(validFF(a.ff)===null?'--':a.ff.toFixed(2)+'x')+'</td><td>'+fmt(a.respect)+'</td></tr>').join('')+
+      '</tbody></table></div>');
+  }
   function playerIntel(id){
     let p=[...state.data.enemies,...state.data.ours].find(x=>x.id===id),side=state.data.ours.some(x=>x.id===id)?'ours':'enemies';
     if(!p){
@@ -1343,6 +1401,7 @@
       pill(x.war.winner===positive(side==='ours'?cfg.ourId:cfg.enemyId)?'Won':x.war.winner?'Lost':'Unknown')+
       '</td><td>'+b('Scorecard','war:'+x.war.id)+'</td></tr>').join('')+'</tbody></table></div>':
       empty('No previous wars for this player are loaded on this device.'));
+    html+=encountersPanel(id);
     html+=card('Online and travel evidence',
       '<p>Observed '+pat.count+' foreground checks. Online '+(pat.count?pat.online+'%':'unknown')+
       ', away '+(pat.count?pat.travel+'%':'unknown')+
@@ -1610,6 +1669,7 @@
   function handle(action){
     if(action==='refresh'){refresh(true);return;}
     if(action==='refresh-ff'){manualFFCheck(false);return;}
+    if(action==='watched-list'){state.filter='watched';navigate('targets');return;}
     if(action==='check-ff-key'){manualFFCheck(true);return;}
     if(action.startsWith('watch:')){const id=positive(action.slice(6));if(id){if(cfg.watchlist[id])delete cfg.watchlist[id];else cfg.watchlist[id]=true;saveCfg();render();}return;}
     if(action==='war-list'){state.selectedWar=0;navigate('history');return;}
