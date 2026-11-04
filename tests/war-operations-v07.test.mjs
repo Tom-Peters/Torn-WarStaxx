@@ -84,7 +84,7 @@ test('Operations tab, manual controls and safe user-script installer remain wire
   for(const fragment of ['function operationalQueue(','function operations(){',
     'function operationalBrief(',"action==='copy-ops'","id:'hospital-exit-watch'",
     "b('Operations queue','tab:operations')","b('What to do now','tab:operations')",
-    "'operations','command'"]){
+    "'operations','ledger'"]){
     assert.ok(source.includes(fragment),'Missing integration: '+fragment);
   }
   assert.match(source,/\/\/ @version\s+0\.8\.0/);
