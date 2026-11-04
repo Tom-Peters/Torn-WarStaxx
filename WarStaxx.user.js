@@ -1148,50 +1148,115 @@
       '</tbody></table></div>';
   }
   function strategy(){
-    const e=state.data.enemies,o=state.data.ours;
-    const onlineO=o.filter(isOnline).length,onlineE=e.filter(isOnline).length;
-    const histO=state.data.ourWars.filter(w=>w.end),histE=state.data.enemyWars.filter(w=>w.end);
-    const win=(arr,id)=>{const won=arr.filter(w=>w.winner===id).length;return arr.length?won+'/'+arr.length:'unknown';};
-    const observed=state.data.war;
-    return statusNote()+'<div class="ws-grid">'+stat('Online coverage',onlineO+' vs '+onlineE,'Our faction / enemy faction now')+
-      stat('Our previous wins',win(histO,positive(cfg.ourId)),'Completed wars loaded '+histO.length)+
-      stat('Enemy previous wins',win(histE,positive(cfg.enemyId)),'Completed wars loaded '+histE.length)+'</div>'+
-      card('Per-player battle plan','<p>1. Members with a confirmed favourable matchup get provisional attack assignments.'+
-        ' 2. Members without reliable matchup data scout, support, maintain readiness or monitor hospital exits.'+
-        ' 3. Update orders as roster statuses change; every attack remains a deliberate Torn action.</p>'+
-        '<div class="ws-toolbar">'+b('View personalised orders','tab:assignments')+b('Review opponent activity','tab:activity')+'</div>')+
-      card('Tactical recommendations',[
-        'Compare observed online coverage for both factions before committing energy. Current online counts are snapshots, not guaranteed future availability.',
-        'Focus on opponents your members can actually beat; a high fair-fight multiplier is useful only when the battle is winnable.',
-        'Monitor enemy hospital expiry and travel returns, then manually coordinate strikes using confirmed live statuses.',
-        'Use past war reports to identify consistently high scorers; score alone is not proof of battle-stat strength.',
-        'Keep reserve hitters and energy available for counterattacks. Open Happy Jump to review energy and training preparation.'
-      ].map(s=>'<p>\u2022 '+esc(s)+'</p>').join('')+
-      '<div class="ws-toolbar">'+b('Happy Jump','tool:happy')+b('War targets','tab:targets')+'</div>');
+    const ours=sideActivity('ours'),enemy=sideActivity('enemies'),wins=factionWarMetrics('enemies'),
+      best=strongHours(),top=perMemberRows('enemies',10).filter(x=>x.last!==null).slice(0,5);
+    let html=statusNote()+
+      '<div class="ws-lead"><span class="ws-data-label">TACTICAL ANALYSIS | EVIDENCE FIRST</span><h2>How to approach this opponent</h2>'+
+      '<p>Each recommendation leads to the actual supporting intelligence. A score, level or observed FF is not proof of an easy fight.</p>'+
+      '<div class="ws-toolbar">'+b('Assign our hitters','tab:assignments')+b('Compare matchups','tab:matchups')+
+      b('Review their wars','tab:history')+'</div></div>'+
+      '<div class="ws-grid">'+
+      statAction('Our online / their online',ours.total&&enemy.total?ours.online+' / '+enemy.online:'\u2014',
+        'At last roster checks; our '+age(ours.last)+' | enemy '+age(enemy.last),'tab:activity')+
+      statAction('Active in past 24h',enemy.total?enemy.active24+' / '+enemy.total:'\u2014',
+        'Based on last-action timestamps','tab:targets')+
+      statAction('Their historical wins',wins.decided?wins.wins+' / '+wins.decided:'\u2014',
+        'Completed wars in this local sample','tab:history')+
+      statAction('Known targets',top.length?String(top.length):'\u2014',
+        'Top scorers with official reports','tab:intel')+'</div>';
+    if(best.length){
+      html+=card('Potential sampled strike windows',
+        '<p>These are hourly sample comparisons from a limited set of checks; not predicted sleeping hours. Hours are TCT (UTC).</p>'+
+        '<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Hour</th><th>Our online checks</th><th>Their online checks</th><th>Difference</th><th>Sample coverage</th></tr></thead><tbody>'+
+        best.slice(0,6).map(x=>'<tr><td>'+String(x.hour).padStart(2,'0')+':00</td><td>'+x.ours.pct+'%</td><td>'+x.theirs.pct+'%</td>'+
+          '<td>'+fmt(x.advantage)+' percentage points</td><td>'+x.ours.samples+' / '+x.theirs.samples+'</td></tr>').join('')+
+        '</tbody></table></div>'+b('Full 24h chart','tab:activity'));
+    }
+    html+=card('Highest scoring enemy players | official war reports',
+      top.length?top.map(x=>'<div class="ws-row"><span>'+infoButton(x.p.name,x.p.id)+
+      '<small> Last reported: '+fmt(x.last)+' pts | '+x.lifetime.wars+' reports | '+esc(x.p.lastAction)+'</small></span>'+
+      a('Profile',link(x.p.id))+'</div>').join(''):
+      empty('No individual scorecards stored yet. Open previous wars and fetch available reports.'));
+    html+=card('Practical decisions',
+      '<div class="ws-row"><span><b>1. Match capable hitters first</b><br><small>Do not turn an estimated FF into an assumed win.</small></span>'+b('Matchups','tab:matchups')+'</div>'+
+      '<div class="ws-row"><span><b>2. Monitor their previous top contributors</b><br><small>Use official player scorecards and observed states.</small></span>'+b('Enemy intel','tab:intel')+'</div>'+
+      '<div class="ws-row"><span><b>3. Choose coverage windows from evidence</b><br><small>Use the comparative 24-hour grid; gaps are unknown.</small></span>'+b('Activity','tab:activity')+'</div>'+
+      '<div class="ws-row"><span><b>4. Coordinate Black Skulls assignments</b><br><small>Local manual instructions, ready for faction chat.</small></span>'+b('Orders','tab:assignments')+'</div>'+
+      '<div class="ws-row"><span><b>5. Maintain energy and reserves</b><br><small>Review training and energy in the separate module.</small></span>'+b('Training','tool:happy')+'</div>');
+    return html;
   }
   function activity(){
-    const enemies=state.data.enemies;
-    const summary=enemies.map(p=>({p,pat:pattern('enemies',p.id)})).sort((a,b)=>b.pat.count-a.pat.count);
-    return statusNote()+card('Activity evidence','<p>Sampled online, travelling and abroad states are collected only while Torn PDA is open with WarStaxx installed. Percentages are percentages of sampled checks, not real time spent.</p>'+
-      '<p>Moderate confidence requires at least 60 observations across 12 distinct UTC hours. No past-war travel history can be reconstructed from official war reports alone.</p>'+
-      '<div class="ws-table-wrap"><table><thead><tr><th>Enemy</th><th>Samples</th><th>Online checks</th><th>Travelling/abroad</th><th>Observed peak TCT</th><th>Confidence</th></tr></thead><tbody>'+
-      summary.map(x=>'<tr><td>'+esc(x.p.name)+'</td><td>'+fmt(x.pat.count)+'</td><td>'+fmt(x.pat.online)+'%</td>'+
-        '<td>'+fmt(x.pat.travel)+'% overall / '+esc(x.pat.warTravel===null?'no war samples':x.pat.warTravel+'% during war')+'</td><td>'+esc(x.pat.peak===null?'\u2014':x.pat.peak+':00')+'</td><td>'+pill(x.pat.reliability)+'</td></tr>').join('')+
-      '</tbody></table></div>')+
-      card('Next development of intelligence','<p>Coverage improves with foreground checks across multiple days and war windows. This version does not claim to identify individual player sleep schedules from a handful of polls.</p>');
+    const ours=sideActivity('ours'),them=sideActivity('enemies'),o=hourlyEvidence('ours'),e=hourlyEvidence('enemies');
+    const both=o.map((x,i)=>({hour:i,o:x,e:e[i],difference:x.pct===null||e[i].pct===null?null:x.pct-e[i].pct,
+      enough:x.samples>=3&&e[i].samples>=3}));
+    const summary=(state.data.enemies||[]).map(p=>({p,pat:pattern('enemies',p.id)}))
+      .sort((a,b)=>b.pat.online-a.pat.online||b.pat.count-a.pat.count);
+    let html=statusNote()+
+      '<div class="ws-lead"><span class="ws-data-label">ACTIVITY INTELLIGENCE | 14-DAY OBSERVATIONS</span>'+
+      '<h2>When are they actually active?</h2>'+
+      '<p>Current online flags and last-action timestamps come from Torn. The hour-by-hour grid uses only samples collected while this script is running in the foreground.</p>'+
+      '<div class="ws-toolbar">'+b('Enemy player intel','tab:targets')+b('Plan around activity','tab:strategy')+'</div></div>'+
+      '<div class="ws-grid">'+
+      stat('Our active in 24h',ours.total?ours.active24+' / '+ours.total:'\u2014','Official last-action timestamps')+
+      stat('Enemy active in 24h',them.total?them.active24+' / '+them.total:'\u2014','Official last-action timestamps')+
+      stat('Our online now',ours.total?ours.online+' / '+ours.total:'\u2014','Snapshot '+age(ours.last))+
+      stat('Enemy online now',them.total?them.online+' / '+them.total:'\u2014','Snapshot '+age(them.last))+
+      stat('Enemies away',them.total?fmt(them.away):'\u2014','Travelling / abroad in last snapshot')+
+      stat('Enemies hospitalised',them.total?fmt(them.hospital):'\u2014','Last observed state')+'</div>';
+    html+=card('24-hour online coverage | our faction vs enemy',
+      '<p>Tap individual hourly cells to see the comparative evidence below. Green means more of our checks were online; red means more of theirs. Faded cells lack sufficient samples.</p>'+
+      '<div class="ws-hour-grid">'+both.map(x=>'<div class="ws-hour '+(!x.enough?'unknown':x.difference>0?'positive':x.difference<0?'negative':'')+
+      '" title="TCT '+x.hour+':00 | Us '+scoreLabel(x.o.pct)+'% ('+x.o.samples+' samples) | Them '+scoreLabel(x.e.pct)+'% ('+x.e.samples+' samples)">'+
+      '<b>'+String(x.hour).padStart(2,'0')+'</b><small>'+(!x.enough?'?':(x.difference>0?'+':'')+x.difference+'%')+'</small></div>').join('')+'</div>'+
+      '<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Hour TCT</th><th>Us: online / samples</th><th>Them: online / samples</th><th>Advantage</th></tr></thead><tbody>'+
+      both.map(x=>'<tr><td>'+String(x.hour).padStart(2,'0')+':00</td><td>'+
+        (x.o.pct===null?'Not observed':x.o.pct+'% | '+x.o.samples+' checks')+'</td><td>'+
+        (x.e.pct===null?'Not observed':x.e.pct+'% | '+x.e.samples+' checks')+'</td><td>'+
+        (x.enough?((x.difference>0?'+':'')+x.difference+' points'):'Not enough data')+'</td></tr>').join('')+
+      '</tbody></table></div>'+
+      '<p class="ws-small">Each check contributes once per member; this is not a continuous online record or a verified prediction of sleep. Both rosters need samples in the same hour for comparison.</p>');
+    html+=card('Player-by-player activity and travel',
+      summary.length?'<div class="ws-table-wrap"><table><thead><tr><th>Opponent</th><th>Online checks</th><th>General travel</th><th>War travel</th><th>Peak observed hour</th><th>Coverage</th><th>Intel</th></tr></thead><tbody>'+
+      summary.map(x=>'<tr><td>'+infoButton(x.p.name,x.p.id)+'</td><td>'+
+      (x.pat.count?x.pat.online+'%':'\u2014')+'</td><td>'+
+      (x.pat.count?x.pat.travel+'%':'\u2014')+'</td><td>'+
+      (x.pat.warTravel===null?'No war samples':x.pat.warTravel+'% / '+x.pat.warSamples+' checks')+'</td>'+
+      '<td>'+(x.pat.peak===null?'Unknown':String(x.pat.peak).padStart(2,'0')+':00 TCT')+'</td>'+
+      '<td>'+pill(x.pat.reliability)+'<br><small>'+x.pat.count+' checks</small></td><td>'+
+      infoButton('Full intel',x.p.id)+'</td></tr>').join('')+'</tbody></table></div>':
+      empty('No opponent observations yet. Open WarStaxx in the foreground during different hours to build reliable evidence.'))+
+      '<p class="ws-small">An official war report cannot reconstruct how often someone travelled or was online during previous wars. In-war travel is shown only where this device actually sampled them during a war.</p>');
+    return html;
   }
   function history(){
-    const ours=state.data.ourWars,enemies=state.data.enemyWars,all=[['Our faction',ours,cfg.ourId],['Opponent faction',enemies,cfg.enemyId]];
-    return statusNote()+'<div class="ws-grid">'+all.map(([label,wars,faction])=>card(label,'<p>'+fmt(wars.length)+' ranked wars loaded \u00b7 '+fmt(wars.filter(w=>w.winner===positive(faction)).length)+' wins recorded</p>'+
-      (wars.length?'<div class="ws-table-wrap"><table><thead><tr><th>War ID / Start</th><th>Outcome</th><th>Scores</th><th>Details</th></tr></thead><tbody>'+
-        wars.slice(0,20).map(w=>'<tr><td>#'+w.id+'<br><small>'+esc(stamp(w.start*1000))+'</small></td>'+
-          '<td>'+pill(w.end?(w.winner===positive(faction)?'Won':'Lost'):'Ongoing')+'</td>'+
-          '<td>'+esc(w.scores.map(s=>s.id+': '+fmt(s.score)).join(' / ')||'Not reported')+'</td>'+
-          '<td>'+pill(state.data.reports[w.id]?'Report stored':'Awaiting backfill')+'</td></tr>').join('')+'</tbody></table></div>':empty('No reports loaded yet.')))).join('')+'</div>'+
-      card('Player score leaders','<div class="ws-grid">'+
-        [['Our highest recorded',state.data.ours,'ours'],['Enemy highest recorded',state.data.enemies,'enemies']].map(([title,roster,side])=>
-          '<div><h3>'+esc(title)+'</h3>'+roster.map(p=>({p,h:pastPerformance(p.id,side)})).filter(x=>x.h.wars).sort((a,b)=>b.h.score-a.h.score).slice(0,8)
-          .map(x=>'<p>'+esc(x.p.name)+' \u00b7 '+fmt(x.h.score)+' total points / '+x.h.wars+' report(s)</p>').join('')+'</div>').join('')+'</div>');
+    const groups=[['Our faction','ours',cfg.ourId,state.data.ourWars],['Enemy faction','enemies',cfg.enemyId,state.data.enemyWars]];
+    let html=statusNote()+'<div class="ws-lead"><span class="ws-data-label">OFFICIAL TORN RANKED-WAR RECORDS</span>'+
+      '<h2>Previous war results, scores and detailed contributions</h2>'+
+      '<p>Open any war to see total points, attacks, rank movement, rewards and individual score tables. Missing detailed reports can be fetched individually.</p>'+
+      '<div class="ws-toolbar">'+b('Opponent summary','tab:intel')+b('Refresh war history','refresh')+'</div></div>';
+    for(const [title,side,fid,history] of groups){
+      const stats=factionWarMetrics(side);
+      const wars=history.slice().sort((a,b)=>(b.end||b.start)-(a.end||a.start)).slice(0,20);
+      html+=card(title+' | '+stats.wins+' wins in '+stats.decided+' decided wars',
+        '<p>'+wars.length+' war records | average official score '+scoreLabel(stats.scoreAvg)+
+        ' | latest '+(stats.last?'#'+stats.last.id:'unknown')+'</p>'+
+        (wars.length?'<div class="ws-table-wrap"><table><thead><tr><th>War ID / Date</th><th>Result</th><th>Our side</th><th>Other side</th><th>Report</th><th>Action</th></tr></thead><tbody>'+
+        wars.map(w=>{const thisSide=w.scores.find(x=>x.id===positive(fid)),
+          other=w.scores.find(x=>x.id!==positive(fid));
+          return '<tr><td>'+b('#'+w.id,'war:'+w.id)+'<br><small>'+esc(stamp(w.end*1000||w.start*1000))+'</small></td>'+
+          '<td>'+pill(!w.end?'Ongoing':w.winner===positive(fid)?'Won':w.winner?'Lost':'Unknown',w.winner===positive(fid)?'good':'')+'</td>'+
+          '<td>'+scoreLabel(thisSide?.score)+'<br><small>'+esc(thisSide?.name||'')+'</small></td>'+
+          '<td>'+scoreLabel(other?.score)+'<br><small>'+esc(other?.name||'')+'</small></td>'+
+          '<td>'+pill(state.data.reports[w.id]?'Stored official report':'Summary only')+'</td>'+
+          '<td>'+b('War breakdown','war:'+w.id)+'</td></tr>';}).join('')+
+        '</tbody></table></div>':empty('No previous wars loaded. Confirm the faction ID in Settings and refresh.')));
+    }
+    html+=card('Top recorded performers',
+      '<div class="ws-grid">'+[['Our side','ours'],['Opponent','enemies']].map(([label,side])=>
+      '<div><h3>'+label+'</h3>'+perMemberRows(side,10).filter(x=>x.last!==null)
+      .map(x=>'<div class="ws-row">'+infoButton(x.p.name,x.p.id)+
+      '<span>'+fmt(x.last)+' recent score</span></div>').join('')+'</div>').join('')+'</div>');
+    return html;
   }
   function orders(){
     const rows=assignments();
