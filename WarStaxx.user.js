@@ -943,7 +943,6 @@
     const id=positive(warId),r=state.data.reports[id],side=r?.factions?.find(x=>x.id===positive(cfg.ourId));
     const reportNames=new Map((side?.members||[]).map(x=>[x.id,x]));
     const roster=new Map(state.data.ours.map(p=>[p.id,p]));
-    const names=new Map([...roster,...reportNames]);
     const records=[];
     for(const [sid,yes] of Object.entries(cfg.blackSkulls)){
       if(!yes)continue;
@@ -1188,6 +1187,15 @@
         x.player.name+' '+flightCountdown(x.eta)).join(', ')+
         '. Estimated roster expiry, not proof they are Okay; refresh before any action.',
         status:exits.some(x=>x.minutes<=10)?'now':'review',priority:87,tab:'operations'});
+    }
+    if(w&&cfg.enableAttacks&&Date.now()-n(state.data.updated.attacks)<5*MIN){
+      const ledger=warHitLedger(w.id),leaders=ledger.enemyPlayers.filter(p=>
+        p.hits>=2&&Date.now()-n(p.lastAt)<10*MIN);
+      if(leaders.length)out.push({id:'enemy-hitters-active',
+        title:leaders.length+' enemy scorer(s) with recent recorded attacks',
+        detail:leaders.slice(0,3).map(p=>p.name+' ('+p.hits+' captured hits)').join(', ')+
+          '. Partial attack feed; check hospital control and status.',
+        status:'review',priority:83,tab:'threats'});
     }
     const newDebrief=Object.values(state.data.afterActions).find(x=>x.newFromObservedWar&&!x.reviewed);
     if(newDebrief)out.push({id:'after-action-'+newDebrief.id,title:'Ranked war after-action ready',detail:'War #'+newDebrief.id+' '+newDebrief.outcome+'; review the scoreline, known contributors and tactical lessons.',status:'review',priority:81,tab:'afteraction'});
@@ -1527,6 +1535,11 @@
     '#warstaxx-root .ws-legend-own{color:#61d9ff;font-weight:750}#warstaxx-root .ws-legend-enemy{color:#ff809e;font-weight:750}',
     '#warstaxx-root .ws-leader-table select{min-width:170px;max-width:260px;width:100%;padding:7px}#warstaxx-root .ws-leader-table .ws-btn{margin:3px 0}',
     '@media(max-width:680px){#warstaxx-root .ws-leader-table,#warstaxx-root .ws-leader-table tbody,#warstaxx-root .ws-leader-table tr,#warstaxx-root .ws-leader-table td{display:block;width:100%;min-width:0}#warstaxx-root .ws-leader-table thead{display:none}#warstaxx-root .ws-leader-table tr{border:1px solid #3d627e;border-radius:9px;padding:8px;margin-bottom:10px;background:#0b2742}#warstaxx-root .ws-leader-table td{border:0;padding:6px 4px}#warstaxx-root .ws-leader-table td::before{content:attr(data-label);display:block;font-size:10px;color:#82bedc;text-transform:uppercase;font-weight:750;letter-spacing:.5px;margin-bottom:3px}#warstaxx-root .ws-leader-table select{max-width:none;width:100%}}',
+    '#warstaxx-root .ws-commander-member{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 8px;border-bottom:1px solid #305672;flex-wrap:wrap}',
+    '#warstaxx-root .ws-commander-member>div:first-child{min-width:170px;flex:1}',
+    '#warstaxx-root .ws-commander-member small{display:block;margin-top:4px}',
+    '#warstaxx-root .ws-commander-member .ws-toolbar{margin:0}',
+    '@media(max-width:600px){#warstaxx-root .ws-commander-member{display:block}#warstaxx-root .ws-commander-member .ws-toolbar{margin:9px 0 0}#warstaxx-root .ws-commander-member .ws-toolbar .ws-btn{flex:1}#warstaxx-root .ws-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#warstaxx-root .ws-stat-action{min-width:0}}',
     '@media(max-width:640px){#warstaxx-root .ws-panel{height:100dvh;bottom:auto}#warstaxx-root .ws-hour-grid{grid-template-columns:repeat(8,minmax(0,1fr))}#warstaxx-root .ws-stat-action{min-height:112px}#warstaxx-root .ws-lead{padding:10px}#warstaxx-root .ws-score{font-size:19px}}',
     '@media(max-width:640px){#warstaxx-root .ws-panel{top:0;bottom:0;width:100%;border-radius:0}#warstaxx-root .ws-head{padding:8px}#warstaxx-root .ws-head strong{font-size:18px}#warstaxx-root .ws-head small{font-size:8px}#warstaxx-root .ws-content{padding:8px}#warstaxx-root .ws-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}#warstaxx-root .ws-card{padding:9px}#warstaxx-root .ws-number{font-size:21px}}'
   ].join('');
@@ -2103,6 +2116,15 @@
       'Enemy pace rose from '+fmt(accel.previousEnemy)+' to '+fmt(accel.recentEnemy)+
       ' points/hour over independently observed windows. Review available hitters.',
       'tab:pace','Observed official scores',accel.observedAt);
+    if(active&&ownFresh&&enemyFresh){
+      const defence=turtleAssessment(at);
+      const pressure=defence.pace?.measurable&&at-defence.pace.last.at<10*MIN&&defence.pace.netRate<-35;
+      if(pressure&&defence.exposed>=Math.max(3,Math.ceil(defence.rows.length/3)))
+        add('now','review-turtle',82,'Consider coordinated defensive turtling',
+          defence.exposed+' members currently Okay while the opponent is gaining ground. '+
+          'Balance denying enemy targets with preserving a proven scoring team.',
+          'tab:turtle','Observed net pace + fresh faction rosters');
+    }
     const plan=leadershipSummary();
     if(plan.duplicateTargets.length)add('now','double-booked',88,
       'Resolve '+plan.duplicateTargets.length+' duplicate target assignments',
@@ -2286,8 +2308,7 @@
     return h+card('Opponent scoring priority | evidence labelled',body);
   }
   function control(){
-    const targets=controlTargets(),fresh=rosterFresh('enemies'),key=currentPlanKey(),
-      stored=cfg.controlAssignments[key]||{};
+    const targets=controlTargets(),fresh=rosterFresh('enemies'),threatMap=new Map(enemyThreatRows().map(z=>[z.player.id,z]));
     let h=statusNote()+'<div class="ws-lead"><span class="ws-data-label">BLACK SKULLS | HOSPITAL-CONTROL COORDINATION</span>'+
       '<h2>Keep their high scorers off the board</h2>'+
       '<p>Assign a human watcher to enemy hospital exits, prioritise verified scorers and review hospital timers. A hospital exit is an estimated state change, never a guaranteed attack opportunity.</p>'+
@@ -2304,7 +2325,7 @@
       rows.map(x=>{
         const options=['<option value="0">No watcher</option>'].concat(leaders.map(p=>
           '<option value="'+p.id+'" '+(x.leader===p.id?'selected':'')+'>'+esc(p.name)+'</option>'));
-        const threat=enemyThreatRows().find(z=>z.player.id===x.p.id);
+        const threat=threatMap.get(x.p.id);
         return '<tr><td data-label="Opponent">'+infoButton(x.p.name,x.p.id)+' '+ffBadge(x.p.id)+
           '</td><td data-label="Official state">'+pill(x.p.status,x.kind==='hospital'?'bad':'')+
           '<br><small>'+(x.expiry?'Hospital expiry '+esc(stamp(x.expiry))+' | '+flightCountdown(x.expiry):
