@@ -24,15 +24,16 @@ function loadProbe(){
  runInNewContext(src.slice(start,end),ctx,{timeout:1500});
  return {doc,win,events,timers,messages};
 }
-test('independent lightweight probe registers WarStaxx before the app',()=>{
+test('probe does not falsely mark War running until the full UI is ready',()=>{
  const {doc,win,events,timers}=loadProbe();
  assert.equal(win.__warStaxxProbe,true);
- assert.ok(events.some(x=>x.type==='staxx:register'&&x.detail.id==='war'));
+ assert.ok(!events.some(x=>x.type==='staxx:register'),'loader-only must NOT claim War is running');
+ assert.ok(events.some(x=>x.type==='staxx:diagnostics'&&x.detail.ui==='missing'));
  assert.equal(win.__warStaxxReady,undefined,'app has not loaded yet');
  assert.ok(timers.some(x=>x.ms===3500),'startup retry scheduled');
  const before=events.length;
  doc.dispatchEvent({type:'staxx:ping'});
- assert.ok(events.slice(before).some(x=>x.type==='staxx:register'&&x.detail.id==='war'));
+ assert.ok(!events.slice(before).some(x=>x.type==='staxx:register'),'reload ping must not create false ready status');
 });
 test('probe register reflects subsequent app startup success',()=>{
  const {doc,win,events}=loadProbe();
@@ -43,8 +44,11 @@ test('probe register reflects subsequent app startup success',()=>{
 });
 
 
-test('startup probe posts only a safe identity message, not API keys or data',()=>{
- const {messages}=loadProbe();
+test('ready probe posts only a safe identity message, not API keys or data',()=>{
+ const {messages,doc,win}=loadProbe();
+ assert.equal(messages.length,0,'no registration message until UI ready');
+ win.__warStaxxReady=true;
+ doc.dispatchEvent({type:'staxx:ping'});
  assert.ok(messages.some(x=>x.msg.__tornstaxxBridge==='tornstaxx-war-v1'&&x.msg.kind==='register'&&x.msg.id==='war'));
  for(const x of messages){
    assert.deepEqual(Object.keys(x.msg).sort(),['__tornstaxxBridge','id','kind'].sort());
