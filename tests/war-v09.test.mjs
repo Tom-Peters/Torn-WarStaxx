@@ -79,7 +79,7 @@ test('hospital hit opens manual medical page; ready hit opens attack link only',
 });
 test('pressing HIT after manual heal rechecks Torn before attacking',async()=>{
   const setup=[
-    "let current='Hospital',route='',calls=0,opened='';",
+    "let current='Hospital',cached='hospital',route='',calls=0,opened='';",
     'const MIN=60000;',
     'const n=v=>Number(v)||0,positive=v=>Number(v)||0;',
     "const cfg={ourId:10,enemyId:20,warStripCompact:false};",
@@ -90,12 +90,12 @@ test('pressing HIT after manual heal rechecks Torn before attacking',async()=>{
     "const memberState=p=>p.status.toLowerCase();",
     "const location={pathname:'/item.php',assign(v){route=v}};",
     "const sessionStorage={getItem:()=>JSON.stringify({mode:'heal',at:Date.now()}),removeItem(){},setItem(){}};",
-    "const ourWarReadiness=()=>({kind:current.toLowerCase(),fresh:true,energy:75});",
+    "const ourWarReadiness=()=>({kind:cached,fresh:true,energy:75});",
     "const strongestVerifiedHit=()=>({player:{id:77}});",
     'const rosterFresh=()=>true;',
     "const attackLink=id=>'https://www.torn.com/loader.php?sid=attack&user2ID='+id;",
     "const effectiveKey=()=> 'test-key';",
-    "const call=async()=>{calls++;return {members:[{id:1,status:current}]}};"
+    "const call=async()=>{calls++;cached=current.toLowerCase();return {members:[{id:1,status:current}]}};"
   ].join('\n');
   const x=runInNewContext(setup+part('  function itemIntent(){','  function renderWarStrip(force=false){')+
     '; ({warQuick,verifyHealedThenHit,state,get route(){return route},get calls(){return calls},set current(x){current=x},get opened(){return opened}})');
