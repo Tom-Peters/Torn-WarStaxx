@@ -93,3 +93,33 @@ test('Operations tab, manual controls and safe user-script installer remain wire
   assert.doesNotThrow(()=>new Script(source));
   assert.doesNotThrow(()=>new Script(source.replace(/[\u2018\u2019]/g,"'").replace(/[\u201c\u201d]/g,'"')));
 });
+
+test('switching opponent isolates manual orders and restores previous faction on return',()=>{
+  const setup=[
+    'const positive=v=>Number.isSafeInteger(Number(v))&&Number(v)>0?Number(v):0;',
+    'const cfg={enemyId:20,assignments:{1:101},ordersByEnemy:{}};',
+    'const state={data:{enemies:[{id:101}],enemyWars:[],updated:{enemies:Date.now(),enemyWars:Date.now()}}};',
+    'let writes=0;const saveCfg=()=>writes++;'
+  ].join('\n');
+  const x=runInNewContext(setup+part('  function setOpponent(','  function latestFinished(')+
+    '; ({cfg,state,setOpponent,get writes(){return writes}})');
+  assert.equal(x.setOpponent(30),true);
+  assert.equal(x.cfg.enemyId,30);
+  assert.equal(Object.keys(x.cfg.assignments).length,0);
+  assert.equal(x.cfg.ordersByEnemy['20'][1],101);
+  x.cfg.assignments[1]=201;
+  assert.equal(x.setOpponent(20),true);
+  assert.equal(x.cfg.assignments[1],101);
+  assert.equal(x.cfg.ordersByEnemy['30'][1],201);
+  assert.equal(x.setOpponent(20),false);
+  assert.equal(x.state.data.enemies.length,0,'Old live roster must not survive the switch');
+  assert.equal(x.writes,2);
+});
+test('ops data and copy controls never send API keys through the hub or automate attacks',()=>{
+  assert.match(source,/const cfg=Object\.assign/);
+  assert.match(source,/cfg\.ordersByEnemy/);
+  assert.match(source,/function operationalBrief/);
+  assert.match(source,/copy-ops/);
+  assert.doesNotMatch(part('  function operationalBrief(','  function overview('),/PDA_httpGet\(|GM_xmlhttpRequest\(|POST|GM_setValue\(/);
+  assert.match(source,/If you separately opt in to FFScouter/);
+});
