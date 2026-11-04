@@ -7,3 +7,6 @@ binding = "DB"
 database_name = "warstaxx-shared"
 database_id = "YOUR_D1_DATABASE_ID"
 migrations_dir = "migrations"
+
+[vars]
+FACTION_ID = "REPLACE_WITH_YOUR_FACTION_ID"
