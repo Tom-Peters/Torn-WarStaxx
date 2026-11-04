@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      0.2.3
+// @version      0.2.4
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -66,11 +66,31 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='0.2.3';
+  const id='war', version='0.2.4';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
   const bridge='tornstaxx-war-v1';
+  // DOM elements are visible to all userscript worlds even when globals, events,
+  // session storage or GM storage are isolated by the Torn PDA WebView.
+  function domEvidence(){
+    try{
+      if(!document.documentElement)return;
+      let probe=document.getElementById('tornstaxx-war-execution-probe');
+      if(!probe){
+        probe=document.createElement('span');
+        probe.id='tornstaxx-war-execution-probe';
+        probe.hidden=true;
+        probe.style.display='none';
+        document.documentElement.appendChild(probe);
+      }
+      probe.dataset.id=id;
+      probe.dataset.version=version;
+      probe.dataset.phase=window.__warStaxxReady?'ready':window.__warStaxxStartError?'error':'loader';
+      probe.dataset.observed=String(Date.now());
+    }catch(_){/* Never block normal userscript execution for diagnostics. */}
+  }
+  domEvidence();
   function runtimeMarker(){
     try {
       localStorage.setItem('tornstaxx-war-runtime-v1',JSON.stringify({
@@ -80,6 +100,7 @@
     }catch(_){} // Storage can be blocked in Torn PDA; DOM bridge still works.
   }
   function register() {
+    domEvidence();
     runtimeMarker();
     // A running loader is not proof that the full War UI has started.
     if(!window.__warStaxxReady){
@@ -158,7 +179,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='0.2.3', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='0.2.4', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','targets','matchups','strategy','activity','history','assignments','alerts','settings','diagnostics'];
   const labels={overview:'Command',targets:'Targets',matchups:'Matchups',strategy:'Strategy',activity:'Activity',history:'History',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -982,7 +1003,10 @@
     if(effectiveKey())setTimeout(()=>{if(!document.hidden)refresh(false);},2000);
   }
   // Registration maintenance is local-only; it does not query the Torn API.
-  const registrationTimer=setInterval(()=>{if(!document.hidden){announce();mountFactionShortcut();}},45000);
+  const registrationTimer=setInterval(()=>{if(!document.hidden){
+    announce();mountFactionShortcut();
+    document.dispatchEvent(new CustomEvent('staxx:ping'));
+  }},45000);
   const refreshTimer=setInterval(()=>{
     if(!document.hidden&&effectiveKey()&&!state.loading&&Date.now()-state.lastRefresh>cfg.refreshSeconds*1000)refresh(false);
   },30000);
