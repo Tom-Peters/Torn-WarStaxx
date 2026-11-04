@@ -1,14 +1,13 @@
-# AGENTS.md — WarStaxx
+# AGENTS.md — War-TornStaxx
 
-Before editing, always read the latest canonical suite standard and integration contract:
-https://raw.githubusercontent.com/Tom-Peters/Torn-ProfitStaxx/main/docs/TORN-SUITE-STANDARD.md
-https://raw.githubusercontent.com/Tom-Peters/Torn-ProfitStaxx/main/docs/STAXX-HUB-INTEGRATION.md
+Read the current standalone hub architecture and module contract first:
+https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/AGENTS.md
+https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/docs/INTEGRATION.md
 
-- Author is IamEEKY only. No API keys, real spy or player samples, private employee data, or imports in GitHub.
-- Keep active installer WarStaxx.user.js and bundle byte-identical shared StaxxHub from Torn-ProfitStaxx/shared/staxx-hub.js. No new independent floating launcher.
-- No automated gameplay mutations; links to attack pages require the player to act.
-- Keep official facts, locally sampled observations, user-entered spy stats, and modelled forecasts distinct.
-- No invented past-war travel patterns, win probabilities, or exact hidden battle stats.
-- Stay in foreground, respect API errors and backoff, bound local storage, preserve records on render errors.
-- Keep section routing, actionable alerts and notifications compatible with StaxxHub; test with npm test and shared suite sync.
-- Do not claim on-device TornPDA verification based on a Node test.
+- The fifth dedicated TornStaxx script owns the full shared command-centre UI. **Do not** embed the legacy StaxxHub into the War module.
+- War module entrypoint: `WarStaxx.user.js`; displayed as **War-TornStaxx**, stable tool ID `war`. Preserve the existing GitHub/raw URL until the user renames the repository and installer migration is verified.
+- Preserve independent early boot probe, war-page shortcut, observed enemy activity, ranking reports, member-by-member conservative strategy, Black Skulls assignments and FFScouter explicit opt-in.
+- Separate official war results, foreground-observed statuses, manual spies, verified FF records and external/modelled estimates. Never make up historical travel/online data or exact hidden battle stats.
+- API access is read-only and rate-limited; no automatic attack, consumables, transfers, faction orders or state-changing Torn requests.
+- Public author **IamEEKY** only; do not commit keys, spy values, personally identifying player data or private imported history.
+- Include the small fallback launcher and hub event adapters; check `npm test`, CI, script injection timing and Torn PDA device behaviour separately.
