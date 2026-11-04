@@ -1299,6 +1299,125 @@
       'Travel, online and hospital data are observed snapshots\u2014not a continuous historical log. '+'<span class="ws-small">Times shown in TCT (UTC).</span></div>'+
       (state.error?'<div class="ws-note ws-warn">'+esc(state.error)+'</div>':'');
   }
+  function scoreSpark(p){
+    const pts=p?.points||[];
+    if(!pts.length)return empty('No locally sampled score points yet.');
+    const subset=pts.slice(-90),first=subset[0].at,last=subset[subset.length-1].at;
+    const max=Math.max(1,...subset.map(x=>Math.max(n(x.our),n(x.enemy))));
+    const xy=(v,i)=>{const x=10+320*(last===first?(i/(Math.max(1,subset.length-1))):(v.at-first)/(last-first));
+      return x.toFixed(1);};
+    const line=key=>subset.map((x,i)=>xy(x,i)+','+(94-85*Math.max(0,n(x[key]))/max).toFixed(1)).join(' ');
+    return '<svg class="ws-score-chart" viewBox="0 0 340 110" role="img" aria-label="Locally sampled war scoring trend. Blue our faction; pink opponent.">'+
+      '<line x1="10" y1="94" x2="330" y2="94" stroke="#52738e"/>'+
+      '<polyline points="'+line('our')+'" fill="none" stroke="#61d9ff" stroke-width="2.8"/>'+
+      '<polyline points="'+line('enemy')+'" fill="none" stroke="#ff809e" stroke-width="2.8"/>'+
+      '<text x="10" y="106" fill="#a5bed0" font-size="9">'+
+      esc(stamp(first))+'</text><text x="245" y="106" fill="#a5bed0" font-size="9">Latest sample</text></svg>'+
+      '<p class="ws-small"><span class="ws-legend-own">Our score</span> | <span class="ws-legend-enemy">Enemy score</span>. '+
+      subset.length+' official score samples observed in Torn PDA, not reconstructed game history.</p>';
+  }
+  function pace(){
+    const active=positive(state.data.war?.id);
+    const tracked=Object.values(state.data.scoreTimelines).filter(x=>Array.isArray(x?.points)&&x.points.length)
+      .sort((a,b)=>n(b.lastAt)-n(a.lastAt)).slice(0,20);
+    const selected=positive(state.selectedTimeline)||active||positive(tracked[0]?.id);
+    const w=warPace(selected),current=state.data.war&&active===selected,score=current?warScore():null;
+    let html=statusNote()+'<div class="ws-lead"><span class="ws-data-label">RANKED WAR | OFFICIAL SCORE SAMPLES</span>'+
+      '<h2>Score pace and momentum</h2>'+
+      '<p>Watch the scoreline and how quickly each faction is gaining points. Pace requires multiple score observations collected while Torn PDA is running; it is not continuous tracking.</p>'+
+      '<div class="ws-toolbar">'+b('Refresh live score','refresh')+b('Leadership command','tab:command')+
+      b('Opponent war records','tab:history')+'</div></div>';
+    if(tracked.length>1)html+=card('Select a war', '<div class="ws-toolbar">'+
+      tracked.map(x=>b('#'+x.id+(active===x.id?' active':''),'pace-war:'+x.id)).join('')+'</div>');
+    if(!w)return html+empty('No scored war snapshots collected yet. Open WarStaxx while a ranked war is active and refresh; past war scores are available in Past wars, but their minute-by-minute pace cannot be reconstructed.');
+    const stale=Date.now()-w.last.at>10*MIN;
+    html+='<div class="ws-grid">'+
+      stat('Our last recorded score',fmt(w.last.our),stale?'Snapshot stale: '+age(w.last.at):'Sampled '+age(w.last.at))+
+      stat('Enemy last recorded score',fmt(w.last.enemy),'Net '+fmt(w.gap))+
+      stat('Our scoring pace',w.rateOur===null?'\u2014':fmt(w.rateOur)+' /h',w.confidence+' | observed in '+fmt(w.span)+' mins')+
+      stat('Enemy scoring pace',w.rateEnemy===null?'\u2014':fmt(w.rateEnemy)+' /h','Same sample window')+
+      stat('Net scoring pace',w.netRate===null?'\u2014':(w.netRate>=0?'+':'')+fmt(w.netRate)+' /h',
+        'Score difference change, not a win prediction')+
+      stat('Observation coverage',fmt(w.samples)+' checks',fmt(w.fullSpan)+' min between first and latest samples')+'</div>';
+    html+=card('War #'+selected+' | sampled score trend',scoreSpark(w)+
+      '<p>Current sample: Our faction <b>'+fmt(w.last.our)+'</b>, enemy <b>'+fmt(w.last.enemy)+'</b>'+
+      (score&&score.target?' | Ranked-war target '+fmt(score.target):'')+
+      '. The chart uses only observed official score values, without filling unknown gaps.</p>'+
+      (w.measurable?'<p>Observed score change during sampled window: us '+(w.deltaOur>=0?'+':'')+fmt(w.deltaOur)+
+        ' / them '+(w.deltaEnemy>=0?'+':'')+fmt(w.deltaEnemy)+' points. '+'<b>'+
+        (w.netRate>0?'Our side has gained ground in this window':w.netRate<0?'Opponent has gained ground in this window':'Score difference was unchanged')+
+        '</b>.</p>':'<p class="ws-note ws-warn">Not enough timed samples for a meaningful points-per-hour figure. A second sample at least five minutes apart is needed.</p>')+
+      '<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Observed TCT</th><th>Our score</th><th>Enemy score</th><th>Net lead</th></tr></thead><tbody>'+
+      w.points.slice(-25).reverse().map(x=>'<tr><td>'+esc(stamp(x.at))+'</td><td>'+fmt(x.our)+'</td><td>'+
+        fmt(x.enemy)+'</td><td>'+fmt(n(x.our)-n(x.enemy))+'</td></tr>').join('')+'</tbody></table></div>');
+    return html+card('How to read this','<p>Official scores are genuine Torn values; sampling intervals vary. Rates are arithmetic changes between the first and last snapshot within the observed last-hour window. Missing time is not treated as zero scoring. No automatic gameplay occurs.</p>');
+  }
+  function observedPlayerWars(playerId){
+    return Object.values(state.data.warTimelines).map(r=>({
+      id:r.id,name:r.name,start:n(r.start),enemyId:r.enemyId,
+      player:r.sides?.enemies?.players?.[positive(playerId)]||null}))
+      .filter(x=>x.player&&n(x.player.samples)).sort((a,b)=>b.start-a.start);
+  }
+  function memberWarTimeline(playerId){
+    const wars=observedPlayerWars(playerId);
+    return card('Observed opponent behaviour across ranked wars',
+      wars.length?'<p>Only times observed while Torn PDA was open. Each war has separate samples, so older unobserved wars remain unknown.</p>'+
+        '<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>War</th><th>Checks</th><th>Online</th><th>Travelling</th><th>Hospital</th><th>View</th></tr></thead><tbody>'+
+        wars.slice(0,16).map(w=>{const p=w.player;return '<tr><td>#'+w.id+'</td><td>'+p.samples+'</td><td>'+
+          fmt(100*p.online/p.samples)+'%</td><td>'+fmt(100*p.away/p.samples)+'%</td><td>'+
+          fmt(100*p.hospital/p.samples)+'%</td><td>'+b('Timeline','timeline-war:'+w.id)+'</td></tr>';}).join('')+
+        '</tbody></table></div>':empty('No war-specific observations for this opponent yet. Earlier wars cannot be reconstructed from official result reports.'));
+  }
+  function timeline(){
+    const records=Object.values(state.data.warTimelines).filter(r=>r&&r.sides)
+      .sort((a,b)=>n(b.updated)-n(a.updated)).slice(0,20);
+    const active=positive(state.data.war?.id),selected=positive(state.selectedTimeline)||active||positive(records[0]?.id);
+    const rec=state.data.warTimelines[String(selected)];
+    let html=statusNote()+'<div class="ws-lead"><span class="ws-data-label">PER-WAR ACTIVITY AND TRAVEL | ON-DEVICE OBSERVATIONS</span>'+
+      '<h2>Opponent behaviour across wars</h2>'+
+      '<p>Online, travelling, hospital and available states are sampled separately for each ranked war. Compare real observed patterns without inventing historic travel or sleep schedules.</p>'+
+      '<div class="ws-toolbar">'+b('General 24-hour activity','tab:activity')+b('Review enemy players','tab:targets')+
+      b('Live scoring pace','tab:pace')+'</div></div>';
+    if(!records.length)return html+empty('No ranked-war-specific snapshots exist on this device yet. Keep WarStaxx open during upcoming wars; each completed war with recorded observations will appear separately.');
+    html+=card('Wars with local observations',
+      '<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>War</th><th>Opponent</th><th>Our checks</th><th>Enemy checks</th><th>Enemy online</th><th>Enemy travel</th><th>Data quality</th><th>Open</th></tr></thead><tbody>'+
+      records.map(r=>{const o=warSamples(r.id,'ours'),e=warSamples(r.id,'enemies');
+        return '<tr><td>#'+r.id+'</td><td>'+esc(r.name||('#'+r.enemyId))+'</td><td>'+fmt(o.checks)+
+          '</td><td>'+fmt(e.checks)+'</td><td>'+scoreLabel(e.onlinePct)+(e.onlinePct===null?'':'%')+
+          '</td><td>'+scoreLabel(e.awayPct)+(e.awayPct===null?'':'%')+
+          '</td><td>'+pill(e.coverage)+'</td><td>'+b('Compare','timeline-war:'+r.id)+'</td></tr>';}).join('')+
+      '</tbody></table></div>');
+    if(!rec)return html;
+    const ours=warSamples(rec.id,'ours'),enemy=warSamples(rec.id,'enemies');
+    html+=card('War #'+rec.id+' | '+(rec.name||('Faction #'+rec.enemyId)),
+      '<p>Our samples: '+ours.samples+' member-status checks in '+ours.checks+
+      ' roster polls. Opponent: '+enemy.samples+' member-status checks in '+enemy.checks+
+      ' roster polls. Confidence: '+esc(enemy.coverage)+'.</p>'+
+      '<div class="ws-grid">'+
+      stat('Opponent online',scoreLabel(enemy.onlinePct)+(enemy.onlinePct===null?'':'%'),'Share of recorded member-checks')+
+      stat('Opponent travelling',scoreLabel(enemy.awayPct)+(enemy.awayPct===null?'':'%'),'Share of observed member-checks')+
+      stat('Opponent hospitalised',scoreLabel(enemy.hospitalPct)+(enemy.hospitalPct===null?'':'%'),'Observed member-checks only')+
+      stat('Our online',scoreLabel(ours.onlinePct)+(ours.onlinePct===null?'':'%'),'Same war, separate roster samples')+'</div>');
+    const hours=new Set([...ours.hours.map(x=>x[0]),...enemy.hours.map(x=>x[0])]);
+    const oHour=Object.fromEntries(ours.hours),eHour=Object.fromEntries(enemy.hours);
+    html+=card('Observed hourly timeline | TCT (UTC)',
+      '<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>UTC hour</th><th>Our online</th><th>Enemy online</th><th>Enemy travelling</th><th>Enemy hospital</th><th>Polling coverage</th></tr></thead><tbody>'+
+      [...hours].sort((a,b)=>Number(b)-Number(a)).slice(0,60).map(h=>{
+        const o=oHour[h],e=eHour[h],pct=(obj,k)=>obj?.samples?fmt(100*obj[k]/obj.samples)+'%':'--';
+        return '<tr><td>'+esc(stamp(Number(h)*HOUR))+'</td><td>'+pct(o,'online')+
+          '</td><td>'+pct(e,'online')+'</td><td>'+pct(e,'away')+'</td><td>'+pct(e,'hospital')+
+          '</td><td>'+n(o?.checks)+' / '+n(e?.checks)+' polls</td></tr>';}).join('')+
+      '</tbody></table></div>');
+    const players=enemy.players.slice().sort((a,b)=>
+      (b.samples?b.away/b.samples:0)-(a.samples?a.away/a.samples:0)).slice(0,25);
+    html+=card('Individual opponent travel during war #'+rec.id,
+      players.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Member</th><th>Checks</th><th>Travelling</th><th>Online</th><th>Hospital</th><th>Intel</th></tr></thead><tbody>'+
+      players.map(p=>'<tr><td>'+infoButton(p.name,p.id)+'</td><td>'+p.samples+'</td><td>'+
+        fmt(100*p.away/p.samples)+'%</td><td>'+fmt(100*p.online/p.samples)+'%</td><td>'+
+        fmt(100*p.hospital/p.samples)+'%</td><td>'+infoButton('Profile',p.id)+'</td></tr>').join('')+
+      '</tbody></table></div>':empty('Enemy member samples are missing in this war.'));
+    return html;
+  }
   function overview(){
     const w=state.data.war,score=warScore(),our=sideActivity('ours'),them=sideActivity('enemies');
     const ff=ffCoverage();
