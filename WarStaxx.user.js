@@ -1191,6 +1191,65 @@
        (ev.tier!==0&&!(r.mode==='aggressive'&&ev.tier===1)))return null;
     return ev;
   }
+
+  // Explicit coverage inventory for the Skull Capo. An assignment is not proof
+  // of a successful or even currently possible fight.
+  function blackSkullsCoverage(at=Date.now()){
+    const bands=enemyRoleBands(),skulls=state.data.ours.filter(p=>cfg.blackSkulls[p.id]),
+      teamReady=rosterFresh('ours',at),enemiesReady=rosterFresh('enemies',at);
+    const targets=bands.ranked.filter(x=>bands.heavy.has(x.enemy.id)).map(x=>{
+      const assigned=skulls.filter(p=>positive(cfg.assignments[p.id])===positive(x.enemy.id));
+      const viable=teamReady&&enemiesReady&&memberState(x.enemy)==='okay'?
+        skulls.map(player=>({player,evidence:roleMatch(player,x.enemy,bands)}))
+          .filter(z=>z.evidence).sort((a,b)=>a.evidence.match.ratio-b.evidence.match.ratio||
+            b.evidence.score-a.evidence.score):[];
+      const free=viable.filter(z=>!positive(cfg.assignments[z.player.id]));
+      const covered=assigned.length>0,verified=assigned.some(p=>
+        viable.some(v=>v.player.id===p.id));
+      const reason=!teamReady||!enemiesReady?'Roster stale - refresh':
+        memberState(x.enemy)!=='okay'?'Enemy not available at this moment':
+        covered?verified?'Assigned Black Skull has favourable verified evidence':
+          'Assigned, but matchup needs verification or current availability':
+        free.length?'Unassigned - eligible Black Skull available':
+        viable.length?'Unassigned - verified hitters already have other orders':
+          'Unassigned - no verified favourable Black Skull matchup';
+      return {enemy:x.enemy,bss:x.value,source:x.source,assigned,viable,free,
+        covered,verified,reason,needsAssignment:!covered};
+    }).sort((a,b)=>Number(b.needsAssignment)-Number(a.needsAssignment)||
+      b.bss-a.bss||a.enemy.id-b.enemy.id);
+    return {bands,skulls,targets,unassigned:targets.filter(x=>x.needsAssignment).length,
+      assigned:targets.filter(x=>x.covered).length,
+      verifiedAssigned:targets.filter(x=>x.verified).length,
+      missingEvidence:targets.filter(x=>!x.covered&&!x.viable.length).length};
+  }
+  function blackSkullsCoverageCard(maxItems=30){
+    const data=blackSkullsCoverage(),cutoff=data.bands.rule;
+    return card('Black Skulls target coverage | Skull Capo',
+      '<p><b>'+fmt(data.assigned)+' / '+fmt(data.targets.length)+'</b> heavy targets have a saved Black Skull assignment; '+
+      fmt(data.verifiedAssigned)+' assigned targets currently pass a verified hitter matchup. '+
+      'Not assigned: <b>'+fmt(data.unassigned)+'</b>. An order does not prove a target is hittable.</p>'+
+      '<p>Heavy policy: '+(cutoff.mode==='min-bss'?
+        'minimum BSS '+fmt(cutoff.minBss):
+        'top '+fmt(cutoff.percent)+'% of '+fmt(data.bands.known)+' known BSS opponents')+
+        '. '+fmt(data.bands.unknown)+' opponents have unknown BSS and need scouting.</p>'+
+      (data.targets.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr>'+
+        '<th>High-strength opponent</th><th>BSS</th><th>Current status</th>'+
+        '<th>Assigned Black Skull</th><th>Coverage / next move</th></tr></thead><tbody>'+
+        data.targets.slice(0,maxItems).map(x=>'<tr><td>'+infoButton(x.enemy.name,x.enemy.id)+
+          ' '+ffBadge(x.enemy.id)+'<br><small>Lv '+fmt(x.enemy.level)+'</small></td>'+
+          '<td>'+fmt(x.bss)+'<br><small>'+esc(x.source)+'</small></td>'+
+          '<td>'+pill(x.enemy.status,memberState(x.enemy)==='okay'?'good':'')+'</td>'+
+          '<td>'+(x.assigned.length?x.assigned.map(p=>infoButton(p.name,p.id)).join(', '):
+            pill('UNASSIGNED','bad'))+'</td>'+
+          '<td>'+pill(x.reason,x.verified?'good':x.needsAssignment?'bad':'')+
+            '<br>'+(!x.covered&&x.free.length?
+              b('Assign '+x.free[0].player.name,'skull-assign:'+x.free[0].player.id+':'+x.enemy.id):
+              b('Inspect enemy','player:'+x.enemy.id))+'</td></tr>').join('')+
+        '</tbody></table></div>':empty('No known high-strength targets at this cutoff. Change policy or collect BSS evidence.'))+
+      '<div class="ws-toolbar">'+b('Manage cutoff','tab:leader')+
+        b('Black Skulls', 'tab:skulls')+
+        b('Manual orders','tab:command')+b('Refresh status','refresh')+'</div>');
+  }
   function personalShortlist(friend,limit=8){
     if(!friend)return [];
     return state.data.enemies.map(e=>matchEvidence(friend,e))
