@@ -40,6 +40,7 @@ function targetFixture(){
     'const lastKnownMemberScore=(side,id)=>id===101?800:100;',
     'const attackHistoryFor=()=>({wins:0,losses:0,unknown:0,total:0,last:0});',
     'const hitterReadiness=()=>({energyEnough:null});',
+    'const hitterRisk=()=>({mode:"balanced",maxRatio:.70,minWins:0});',
     "const matchup=(friend,enemy)=>enemy.ratio===null?{known:false,ratio:null,ff:null}:{known:true,ratio:enemy.ratio,ff:2.2,confidence:'model'};"
   ].join('\n');
   return runInNewContext(setup+extract('  function rosterFresh(','  function assignments(){')+
