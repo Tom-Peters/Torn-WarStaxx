@@ -56,7 +56,11 @@
     document.dispatchEvent(new CustomEvent('staxx:ping'));
     const timer=setInterval(()=>{if(document.getElementById('staxx-hub-root'))root.remove();if(!root.isConnected)clearInterval(timer);},2500);
   }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
+  // Emergency launcher must never prevent the dedicated War module from loading.
+  const safeMount=()=>{try{mount();}catch(err){
+    window.__TornStaxxFallbackError='Emergency launcher failed ('+(err?.name||'Error')+')';
+  }};
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',safeMount,{once:true});else safeMount();
 })();
 
 /* WarStaxx loader probe · independent of the optional API and full WarStaxx UI */
