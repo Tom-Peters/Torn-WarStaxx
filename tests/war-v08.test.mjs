@@ -68,7 +68,8 @@ test('turtling exposure follows fresh observed states, not manual duty labels',(
     'const positive=v=>Number(v)||0;',
     "const cfg={enemyId:20,turtlePlans:{'500':{mode:'full',members:{1:'turtle'}}}};",
     "const state={data:{war:{id:500},ours:[{id:1,status:'Okay',lastAction:'Online'},"+
-      "{id:2,status:'Hospital',until:Date.now()+10*60000,lastAction:'Idle'}],"+
+      "{id:2,status:'Hospital',until:Date.now()+10*60000,revivable:true,lastAction:'Idle'},"+
+      "{id:3,status:'Abroad',lastAction:'Idle'}],"+
       "enemies:[{id:101,status:'Okay',lastAction:'Online'}],updated:{ours:Date.now(),enemies:Date.now()}}};",
     "const memberState=p=>p.status.toLowerCase()==='okay'?'okay':p.status.toLowerCase()==='hospital'?'hospital':'away';",
     'const isOnline=p=>p.lastAction==="Online";',
@@ -81,8 +82,9 @@ test('turtling exposure follows fresh observed states, not manual duty labels',(
     '; ({state,cfg,turtleAssessment,turtlePlan})');
   const a=f.turtleAssessment(now);
   assert.equal(a.plan.mode,'full');
-  assert.equal(a.exposed,1);
+  assert.equal(a.exposed,2,'Landed-abroad member cannot count as sheltered');
   assert.equal(a.sheltered,1);
+  assert.equal(a.reviveWarnings,1);
   assert.equal(a.dueSoon,1);
   assert.equal(a.rows.find(x=>x.p.id===1).assigned,'turtle');
   assert.equal(a.rows.find(x=>x.p.id===1).danger,true,'Manual turtle label cannot fake hospital status');
@@ -124,4 +126,23 @@ test('all six surfaces and manual defensive controls are connected and parser sa
   assert.doesNotThrow(()=>new Script(source));
   const normalised=source.replace(/[\u2018\u2019]/g,"'").replace(/[\u201c\u201d]/g,'"');
   assert.doesNotThrow(()=>new Script(normalised));
+});
+
+test('failed or zero-respect attempts never become confirmed enemy scoring threats',()=>{
+  const setup=[
+    'const n=v=>Number.isFinite(Number(v))?Number(v):0;',
+    'const positive=v=>Number(v)||0;',
+    'const cfg={enemyId:20};',
+    "const state={data:{war:{id:500},enemies:[{id:101,name:'Enemy',status:'Okay'}],reports:{}}};",
+    'const warHitLedger=()=>({theirs:{players:{101:{hits:2,scoringHits:0,respect:0}}}});',
+    'const latestFinished=()=>null;',
+    'const memberState=()=> "okay";'
+  ].join('\n');
+  const f=runInNewContext(setup+extract('  function enemyThreatRows(','  function blackSkullScorecards(')+
+    '; ({enemyThreatRows})');
+  const result=f.enemyThreatRows();
+  assert.equal(result.length,1);
+  assert.equal(result[0].live,null);
+  assert.equal(result[0].attempted.hits,2);
+  assert.equal(result[0].source,'Non-scoring attempts');
 });
