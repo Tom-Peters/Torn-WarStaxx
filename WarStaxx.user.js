@@ -3630,17 +3630,8 @@
       card('Immediate priorities',alerts.length?alerts.map(x=>'<div class="ws-row"><span><b>'+
         esc(x.title)+'</b><br><small>'+esc(x.detail)+'</small></span>'+
         b('Review','alert:'+x.id)+'</div>').join(''):empty('No verified urgent alerts. Keep statuses fresh.'))+
-      '<div class="ws-toolbar">'+b(state.warMore?'Hide other stats':'Show other stats','war-more')+
-      b('Opponent intelligence','tab:enemy')+b('Reports / tools','tab:reports')+
-      b('Leader command','tab:leader')+'</div>';
-    if(state.warMore)body+=card('More war intelligence','<div class="ws-toolbar">'+[
-      ['Enemy intelligence','intel'],['Black Skulls','skulls'],['Player FF','targets'],['Matchups','matchups'],
-      ['Pace','pace'],['Hit ledger','ledger'],['Threats','threats'],
-      ['Turtling strategy','turtle'],['Hospital control','control'],['Leadership','command'],
-      ['Operations','operations'],['Activity','activity'],['Previous wars','history'],
-      ['Timeline','timeline'],['Orders','assignments'],['After action','afteraction'],
-      ['Settings','settings']
-    ].map(([label,tab])=>b(label,'tab:'+tab)).join('')+'</div>');
+      '<div class="ws-toolbar">'+b('Opponent intelligence','tab:enemy')+
+      b('Reports and advanced tools','tab:reports')+b('Leader command','tab:leader')+'</div>';
     return body;
   }
   function overview(){
@@ -4588,21 +4579,8 @@
       (/^\/page\.php$/i.test(location.pathname) && /^(rankedwar|factionwar|war)$/i.test(new URLSearchParams(location.search).get('sid')||''));
   }
   function mountFactionShortcut(){
-    // The persistent native strip now replaces the old faction-only shortcut.
-    document.getElementById('warstaxx-faction-open')?.remove();return;
-    if(!factionRoute() || document.getElementById('warstaxx-faction-open'))return;
-    const host=document.querySelector('#mainContainer, #mainWrapper, #mainContent, #main-content, main, [role="main"]');
-    if(!host || host.closest('#staxx-hub-root, #warstaxx-root'))return;
-    const bar=document.createElement('div');
-    bar.id='warstaxx-faction-open';
-    bar.style.cssText='display:flex;justify-content:flex-end;align-items:center;gap:6px;margin:8px 0;padding:4px 0;clear:both;';
-    const button=document.createElement('button');
-    button.type='button';button.textContent='\u2694 Open WarStaxx';
-    button.setAttribute('aria-label','Open WarStaxx ranked-war intelligence');
-    button.style.cssText='border:1px solid #54d7fa;border-radius:9px;background:#103b60;color:#ddf8ff;padding:8px 12px;font:600 12px/1.3 system-ui,sans-serif;cursor:pointer;min-height:38px;';
-    button.addEventListener('click',()=>{open({section:'overview'});});
-    bar.appendChild(button);
-    host.insertBefore(bar,host.firstChild);
+    // The persistent strip replaces the old faction-only duplicate shortcut.
+    document.getElementById('warstaxx-faction-open')?.remove();
   }
   function boot(){
     if(!document.body){document.addEventListener('DOMContentLoaded',boot,{once:true});return;}
