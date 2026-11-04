@@ -12,6 +12,7 @@ Deployment:
 
 Scope and safety:
 - Both GET and PUT require a valid bearer token. PUT additionally requires the write token.
+- One deployment is bound to exactly one FACTION_ID. Read/write tokens cannot query records for a different faction.
 - Only Torn main-site browser origins are permitted. D1 stores the records in a faction ID + war ID namespace.
 - Updates are revision-checked in an atomic D1 UPSERT. Conflicting writes return HTTP 409. No silent last-write-wins.
 - No script deploys this Worker automatically; you must provision it in your own Cloudflare account.
