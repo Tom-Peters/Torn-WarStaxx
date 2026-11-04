@@ -2209,6 +2209,68 @@
         draft.length?'':'disabled')+b('Review manual assignments','tab:command')+'</div>');
     return html+flightWatchPanel();
   }
+  function ledger(){
+    const id=positive(state.data.war?.id)||positive(latestFinished('ours')?.id);
+    const d=warHitLedger(id);
+    let h=statusNote()+'<div class="ws-lead"><span class="ws-data-label">PARTIAL OFFICIAL ATTACK FEED</span>'+
+      '<h2>Ranked-war hit ledger</h2><p>Real API attack events, filtered by ranked-war flag, opposing faction IDs and official war dates. It is a local sample, not the authoritative total score.</p>'+
+      '<div class="ws-toolbar">'+b('Refresh attacks','refresh')+b('Enemy scorers','tab:threats')+
+      b('Black Skulls after-action','tab:afteraction')+'</div></div>';
+    if(!cfg.enableAttacks)h+=card('Optional attack API permission',
+      '<p>Enable the faction attacks selection in Settings to collect hits. Only authorised key scopes can read these records.</p>'+
+      b('Settings','tab:settings'));
+    if(!d.window)return h+empty('No identified active or past ranked war yet.');
+    h+='<div class="ws-grid">'+
+      stat('Our sampled attacks',fmt(d.ours.hits),'Partial API records')+
+      stat('Enemy sampled attacks',fmt(d.theirs.hits),'Only if incoming attacks are accessible')+
+      stat('Our sampled respect',fmt(d.ours.respect),'Not official total')+
+      stat('Enemy sampled respect',fmt(d.theirs.respect),'Not official total')+
+      stat('Feed freshness',age(d.lastFetch),'Limited to recent attack pages')+
+      stat('Verified war events',fmt(d.rows.length),'Faction and time verified')+'</div>';
+    let skullContent='<p>These are locally captured hits, not complete war contribution. See official post-war scorecards for definitive totals.</p>';
+    if(d.blackSkulls.length){
+      skullContent+='<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Black Skull</th><th>Recorded hits</th><th>Recorded respect</th><th>Hospitalised</th><th>Latest</th></tr></thead><tbody>'+
+        d.blackSkulls.map(x=>'<tr><td>'+infoButton(x.player.name,x.player.id)+'</td><td>'+
+          scoreLabel(x.stats?.hits)+'</td><td>'+scoreLabel(x.stats?.respect)+'</td><td>'+
+          scoreLabel(x.stats?.hospitalised)+'</td><td>'+esc(age(x.stats?.lastAt))+'</td></tr>').join('')+
+        '</tbody></table></div>';
+    }else skullContent+=empty('Mark your Black Skulls in Leadership to display member-specific records.');
+    h+=card('Black Skulls | sampled hit contribution',skullContent);
+    let rowsHtml=d.rows.length?
+      '<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>TCT</th><th>Side</th><th>Attacker</th><th>Defender</th><th>Result</th><th>Respect</th></tr></thead><tbody>'+
+      d.rows.slice(0,60).map(x=>'<tr><td>'+esc(stamp(x.at))+'</td><td>'+
+        pill(x.side==='ours'?'Ours':'Enemy',x.side==='ours'?'good':'bad')+'</td><td>'+
+        infoButton(x.attackerName||('#'+x.attacker),x.attacker)+'</td><td>'+
+        infoButton(x.defenderName||('#'+x.defender),x.defender)+'</td><td>'+esc(x.result)+
+        '</td><td>'+scoreLabel(x.respect)+'</td></tr>').join('')+'</tbody></table></div>':
+      empty('No ranked-war attacks have been collected. This is not proof that neither side attacked.');
+    h+=card('Last '+Math.min(60,d.rows.length)+' observed war attacks',
+      rowsHtml+'<p class="ws-small">Source: authorised faction attacks API. Paginated and missed records are not reconstructed; official end-of-war reports are authoritative.</p>');
+    return h;
+  }
+  function threats(){
+    const rows=enemyThreatRows(),hit=warHitLedger(),fresh=rosterFresh('enemies'),
+      live=rows.filter(x=>x.live).length;
+    let h=statusNote()+'<div class="ws-lead"><span class="ws-data-label">SCORING THREAT INTELLIGENCE</span>'+
+      '<h2>Who is driving enemy war scoring?</h2>'+
+      '<p>Prioritise observed incoming ranked-war attacks where available, with clearly labelled prior-war scores when live evidence is missing. No hidden combat strength is inferred.</p>'+
+      '<div class="ws-toolbar">'+b('Refresh','refresh')+b('Hospital control','tab:control')+
+      b('Score pace','tab:pace')+'</div></div>'+
+      '<div class="ws-grid">'+stat('Observed enemy scorers',fmt(live),
+      'Verified war attack events in current local cache')+
+      stat('Attack feed',cfg.enableAttacks?'Opted in':'Off','Last fetched '+age(hit.lastFetch))+
+      stat('Roster',fresh?'Fresh':'Stale','Current status requires fresh official roster')+'</div>';
+    let body=rows.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Enemy</th><th>Recorded hits / respect</th><th>Previous-war score</th><th>Evidence</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+
+      rows.slice(0,40).map(x=>'<tr><td>'+infoButton(x.player.name,x.player.id)+' '+ffBadge(x.player.id)+'</td>'+
+        '<td>'+(x.live?fmt(x.live.hits)+' / '+fmt(x.live.respect):'Not observed')+'</td>'+
+        '<td>'+scoreLabel(x.previous?.score)+'</td><td>'+pill(x.confidence)+'</td><td>'+
+        pill(x.player.status,fresh&&x.status==='okay'?'good':'')+'</td><td>'+
+        b('Hospital control','control-target:'+x.player.id)+' '+
+        b(cfg.watchlist[x.player.id]?'Unwatch':'Watch','watch:'+x.player.id)+'</td></tr>').join('')+
+        '</tbody></table></div>':empty('No enemy roster yet.');
+    body+='<p class="ws-small">Sampled incoming hits may be missing. Historical-only players have not been verified to score in this war. Threat priority is not a win probability.</p>';
+    return h+card('Opponent scoring priority | evidence labelled',body);
+  }
   function overview(){
     const w=state.data.war,score=warScore(),our=sideActivity('ours'),them=sideActivity('enemies');
     const ff=ffCoverage();
