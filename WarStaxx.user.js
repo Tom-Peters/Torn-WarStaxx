@@ -218,7 +218,7 @@
   const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},factionBasic:{},publicIntel:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},scoreTimelines:{},warTimelines:{},afterActions:{},ownerReadiness:{},sampleCount:0});
   const state={data:Object.assign(freshData(),safeRead(DATA,{})),open:false,tab:'overview',showMore:false,
     filter:'all',sort:'warScore',search:'',commanderFilter:'black',controlFocus:0,loading:false,ffLoading:false,spinner:'',error:'',scanning:false,alerts:[],chosen:0,
-    lastRefresh:0,historicalRead:0,localKeyError:false,warMore:false,warExpected:false,selectedWar:0,selectedTimeline:0,selectedPace:0,selectedDebrief:0,detailFrom:'targets',leaderFilter:'all',hitterFilter:'all'};
+    lastRefresh:0,historicalRead:0,localKeyError:false,warMore:false,quickHitPending:false,warExpected:false,selectedWar:0,selectedTimeline:0,selectedPace:0,selectedDebrief:0,detailFrom:'targets',leaderFilter:'all',hitterFilter:'all'};
   state.data.reports=state.data.reports||{};
   state.data.activity=state.data.activity||{};
   state.data.ffstats=state.data.ffstats||{};
@@ -1905,6 +1905,10 @@
     if(action==='clear-item'){try{sessionStorage.removeItem('warstaxx-item-intent');}catch(_){}renderWarStrip(true);return;}
     if(action.startsWith('item:')){locateItem(action.slice(5));return;}
     if(action!=='hit')return;
+    // After a manual heal, one more Hit checks the official roster immediately.
+    if(location.pathname.toLowerCase()==='/item.php'&&itemIntent()==='heal'&&self.kind!=='okay'){
+      verifyHealedThenHit();return;
+    }
     if(self.kind==='hospital'){itemFlow('heal');return;}
     if(self.kind!=='okay'||!self.fresh){
       open({section:'overview'});state.error='Hit unavailable: own Torn roster status is not confirmed Okay. Refresh before acting.';render();return;
@@ -1916,13 +1920,52 @@
     if(!target){
       open({section:'overview'});state.error='No verified favourable target. Open Matchups and obtain recent comparable spies; FFScouter alone cannot confirm a win.';render();return;
     }
+    try{sessionStorage.removeItem('warstaxx-item-intent');}catch(_){}
     location.assign(attackLink(target.player.id));
+  }
+  async function verifyHealedThenHit(){
+    if(state.quickHitPending)return;
+    if(!effectiveKey()||!positive(cfg.ourId)){
+      open({section:'overview'});
+      state.error='Cannot recheck healing without a configured Torn API key and faction ID.';
+      render();return;
+    }
+    state.quickHitPending=true;renderWarStrip(true);
+    try{
+      // This is a read-only official request initiated by the player's HIT tap.
+      const response=await call('/faction/'+cfg.ourId+'/members','ours',0);
+      if(!response)throw new Error('Current roster is temporarily unavailable; refresh then press HIT.');
+      state.data.ours=roster(response);
+      const now=ourWarReadiness();
+      if(now.kind==='hospital'){
+        open({section:'overview'});
+        state.error='Torn still reports you hospitalised. Verify the item was used; press HIT again after Torn updates.';
+        render();return;
+      }
+      if(now.kind!=='okay'){
+        open({section:'overview'});
+        state.error='Your current status is '+now.kind+'. HIT is limited to confirmed Okay status.';
+        render();return;
+      }
+      if(!rosterFresh('enemies')){
+        const enemies=await call('/faction/'+cfg.enemyId+'/members','enemies',0);
+        if(enemies)state.data.enemies=roster(enemies);
+      }
+      save();warQuick('hit');
+    }catch(e){
+      open({section:'overview'});
+      state.error='Could not confirm healed status: '+String(e.message||e).slice(0,140);
+      render();
+    }finally{
+      state.quickHitPending=false;save();renderWarStrip(true);
+    }
   }
   function renderWarStrip(force=false){
     let host=document.querySelector('#mainContent,#main-content,#mainContainer,#mainWrapper,main,[role="main"]')||document.body;
     let bar=document.getElementById('warstaxx-live-strip');
     if(!activeWarNow()){if(bar)bar.remove();return;}
     if(!host||host.closest('#warstaxx-root,#staxx-hub-root'))return;
+    document.getElementById('warstaxx-faction-open')?.remove();
     if(!document.getElementById('warstaxx-live-style')){
       const style=document.createElement('style');style.id='warstaxx-live-style';
       style.textContent='#warstaxx-live-strip{position:relative;z-index:40;clear:both;margin:8px 4px 12px;padding:10px;border-radius:12px;border:1px solid #448db0;background:linear-gradient(110deg,#091c30,#0d3b5b);color:#eafbff;font:13px/1.4 system-ui,Arial,sans-serif;box-sizing:border-box;box-shadow:0 8px 25px #0004}'+
@@ -1950,7 +1993,7 @@
     const self=ourWarReadiness(),score=warScore(),target=strongestVerifiedHit(),
       intent=location.pathname.toLowerCase()==='/item.php'?itemIntent():'',
       sig=[state.data.war.id,score?.our,score?.enemy,self.kind,self.energy,target?.player.id,
-        intent,cfg.warStripCompact,location.pathname,Math.floor(Date.now()/MIN)].join(':');
+        intent,cfg.warStripCompact,state.quickHitPending,location.pathname,Math.floor(Date.now()/MIN)].join(':');
     if(!force&&bar.dataset.signature===sig)return;
     bar.dataset.signature=sig;
     const btn=(name,action)=>'<button type="button" data-ws-quick="'+esc(action)+'">'+esc(name)+'</button>';
@@ -1961,7 +2004,7 @@
       (cfg.warStripCompact?'':'<div class="wsw-meta"><span>Your status: '+esc(self.kind)+' | '+(self.energy===null?'Energy unknown':fmt(self.energy)+' E')+'</span>'+
         '<span>'+(target?'Strongest verified hit: '+esc(target.player.name)+' (Lv '+fmt(target.player.level)+')':'No verified safe hit')+'</span>'+
         '<span>Official war '+esc(age(state.data.updated.wars))+' | own roster '+esc(age(state.data.updated.ours))+'</span></div>')+
-      '<div class="wsw-actions">'+btn('TURTLE','turtle')+btn(self.kind==='hospital'?'HEAL TO HIT':'HIT','hit')+
+      '<div class="wsw-actions">'+btn('TURTLE','turtle')+btn(state.quickHitPending?'CHECKING...':self.kind==='hospital'?'HEAL TO HIT':'HIT','hit')+
       btn('HEAL','heal')+btn('WAR ROOM','war')+btn('MORE STATS','stats')+'</div>'+
       (intent?'<div class="wsw-item-controls"><b>'+(intent==='turtle'?'Turtle items:':'Healing items:')+'</b>'+
         (intent==='turtle'?btn('Find Ipecac','item:ipecac')+btn('Find blood bags','item:blood'):
