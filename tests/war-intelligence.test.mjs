@@ -23,9 +23,9 @@ const warHistory = runInNewContext(helpers+extract('warHistory','detectWar')+'; 
 const roster = runInNewContext(helpers+extract('roster','warHistory')+'; roster');
 
 test('source remains ASCII and parses after smart-quote conversion',()=>{
-  assert.doesNotMatch(source,/[^\\x00-\\x7f]/u);
+  assert.doesNotMatch(source,/[^\x00-\x7f]/u);
   assert.doesNotThrow(()=>new Script(source));
-  const normalised=source.replace(/[\\u2018\\u2019]/gu,"'").replace(/[\\u201c\\u201d]/gu,'"');
+  const normalised=source.replace(/[\u2018\u2019]/gu,"'").replace(/[\u201c\u201d]/gu,'"');
   assert.doesNotThrow(()=>new Script(normalised));
 });
 test('official ranked war report includes actual end, winner, ranks, rewards and each player score',()=>{
@@ -73,10 +73,10 @@ test('roster keeps status, last-action timestamps and publicly supplied member m
 });
 test('every major intel view has navigation and manual-player controls',()=>{
   for(const view of ['overview','intel','warReportView','targets','playerIntel','activity','history','strategy']){
-    assert.match(source,new RegExp('function '+view+'\\\\('));
+    assert.match(source,new RegExp('function '+view+'\\('));
   }
   for(const action of ['player:','war:','load-report:','public:','hour:','tab:assignments']){
     assert.ok(source.includes(action),'Missing routed action '+action);
   }
-  assert.match(source,/const sections=\\['overview','intel','targets'/);
+  assert.ok(source.includes("const sections=['overview','intel','targets'"));
 });
