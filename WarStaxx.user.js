@@ -1003,6 +1003,17 @@
       if(score&&score.net<0)out.push({id:'war-score',title:'Ranked war score is behind',detail:'Current net score '+fmt(score.net)+'; review team assignments and coverage.',status:'review',priority:70,tab:'strategy'});
     }
     if(w&&(!t||Date.now()-t>5*MIN))out.push({id:'stale-roster',title:'Refresh opponent statuses',detail:'Last observed status is stale; refresh before hitting.',status:'soon',priority:75,tab:'overview'});
+    // Only current, time-stamped Torn status may trigger a watched hospital alert.
+    if(w&&rosterFresh('enemies')){
+      const watched=watchedTargetIds();
+      const exits=state.data.enemies.map(p=>enemyHospitalExit(p)).filter(x=>
+        x&&watched.has(x.player.id)&&x.minutes<=20&&x.eta>Date.now());
+      if(exits.length)out.push({id:'hospital-exit-watch',title:exits.length+
+        ' watched hospital exit(s) approaching',detail:exits.slice(0,3).map(x=>
+        x.player.name+' '+flightCountdown(x.eta)).join(', ')+
+        '. Estimated roster expiry, not proof they are Okay; refresh before any action.',
+        status:exits.some(x=>x.minutes<=10)?'now':'review',priority:87,tab:'operations'});
+    }
     const newDebrief=Object.values(state.data.afterActions).find(x=>x.newFromObservedWar&&!x.reviewed);
     if(newDebrief)out.push({id:'after-action-'+newDebrief.id,title:'Ranked war after-action ready',detail:'War #'+newDebrief.id+' '+newDebrief.outcome+'; review the scoreline, known contributors and tactical lessons.',status:'review',priority:81,tab:'afteraction'});
     if(w){const pace=warPace();
@@ -2631,6 +2642,21 @@
   function close(){state.open=false;render();event('panel',{id:ID,open:false});}
   function handle(action){
     if(action==='refresh'){refresh(true);return;}
+    if(action==='copy-ops'){
+      const content=operationalBrief();
+      if(navigator.clipboard&&typeof navigator.clipboard.writeText==='function'){
+        navigator.clipboard.writeText(content).then(()=>{
+          state.error='Operations brief copied locally; share it manually if needed.';render();
+        }).catch(()=>{state.error='Clipboard permission denied; no brief was shared.';render();});
+      }else{
+        const textarea=document.createElement('textarea');textarea.value=content;
+        textarea.style.cssText='position:fixed;left:-9999px';document.body.appendChild(textarea);
+        textarea.select();let copied=false;
+        try{copied=document.execCommand('copy');}catch(_){}
+        textarea.remove();state.error=copied?'Operations brief copied for manual sharing.':'Clipboard unavailable; no brief was shared.';render();
+      }
+      return;
+    }
     if(action==='refresh-readiness'){refreshOwnReadiness().then(()=>{save();render();});return;}
     if(action.startsWith('debrief:')){state.selectedDebrief=positive(action.slice(8));navigate('afteraction');return;}
     if(action.startsWith('debrief-timeline:')){state.selectedTimeline=positive(action.slice(17));navigate('timeline');return;}
