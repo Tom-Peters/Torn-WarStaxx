@@ -1996,7 +1996,10 @@
     if(action==='stats'){state.warMore=true;open({section:'overview'});return;}
     if(action.startsWith('opportunity:')){focusOpportunity(positive(action.slice(12)));return;}
     if(action==='heal'){itemFlow('heal');return;}
-    if(action==='turtle'){if(self.kind==='hospital')open({section:'turtle'});else itemFlow('turtle');return;}
+    if(action==='turtle'){
+      if(self.kind==='hospital'||turtleWindow().minutes===null){open({section:'turtle'});return;}
+      itemFlow('turtle');return;
+    }
     if(action==='clear-item'){try{sessionStorage.removeItem('warstaxx-item-intent');}catch(_){}renderWarStrip(true);return;}
     if(action.startsWith('item:')){locateItem(action.slice(5));return;}
     if(action!=='hit')return;
@@ -2055,6 +2058,22 @@
       state.quickHitPending=false;save();renderWarStrip(true);
     }
   }
+
+  function focusOpportunity(id){
+    if(!activeWarNow()||!positive(id)||!state.data.enemies.some(p=>p.id===id))return;
+    open({section:'targets'});state.chosen=id;state.playerOpen=true;render();
+  }
+  function handleWarScroll(e){
+    if(!activeWarNow())return;
+    if(e?.target?.closest?.('#warstaxx-root,#staxx-hub-root'))return;
+    const top=n(e?.target?.scrollTop)||n(window.scrollY)||
+      n(document.scrollingElement?.scrollTop)||0;
+    const next=top>130;
+    if(next===state.stripScrolled)return;
+    state.stripScrolled=next;
+    if(!next)state.stripExpanded=false;
+    renderWarStrip(true);
+  }
   function renderWarStrip(force=false){
     let host=document.querySelector('#mainContent,#main-content,#mainContainer,#mainWrapper,main,[role="main"]')||document.body;
     let bar=document.getElementById('warstaxx-live-strip');
@@ -2063,7 +2082,7 @@
     document.getElementById('warstaxx-faction-open')?.remove();
     if(!document.getElementById('warstaxx-live-style')){
       const style=document.createElement('style');style.id='warstaxx-live-style';
-      style.textContent='#warstaxx-live-strip{position:relative;z-index:40;clear:both;margin:8px 4px 12px;padding:10px;border-radius:12px;border:1px solid #448db0;background:linear-gradient(110deg,#091c30,#0d3b5b);color:#eafbff;font:13px/1.4 system-ui,Arial,sans-serif;box-sizing:border-box;box-shadow:0 8px 25px #0004}'+
+      style.textContent='#warstaxx-live-strip{position:sticky;top:3px;z-index:40;clear:both;margin:8px 4px 12px;padding:10px;border-radius:12px;border:1px solid #448db0;background:linear-gradient(110deg,#091c30,#0d3b5b);color:#eafbff;font:13px/1.4 system-ui,Arial,sans-serif;box-sizing:border-box;box-shadow:0 8px 25px #0004}'+
         '#warstaxx-live-strip *{box-sizing:border-box}#warstaxx-live-strip .wsw-top{display:flex;align-items:center;gap:9px;flex-wrap:wrap}'+
         '#warstaxx-live-strip .wsw-top strong{font-size:17px}#warstaxx-live-strip .wsw-kicker{color:#6dd6fb;font-size:10px;font-weight:900}'+
         '#warstaxx-live-strip .wsw-meta{display:flex;gap:6px 15px;flex-wrap:wrap;color:#bdd9e8;font-size:11px;margin:6px 0}'+
@@ -2073,6 +2092,8 @@
         '#warstaxx-live-strip button[data-ws-quick=compact]{margin-left:auto;background:#10314b;font-size:11px}'+
         '#warstaxx-live-strip .wsw-item-controls{border-top:1px solid #3b7794;margin-top:10px;padding-top:8px;display:flex;gap:7px;flex-wrap:wrap}'+
         '#warstaxx-live-strip .wsw-item-controls small{display:block;width:100%;color:#c6ddeb}'+
+        '#warstaxx-live-strip .wsw-opportunities{display:flex;align-items:center;gap:6px;flex-wrap:wrap;color:#ffdaa1;margin-top:7px;font-size:11px}'+
+        '#warstaxx-live-strip .wsw-opportunities button{min-height:31px;background:#394365;border-color:#849adc}'+
         '@media(max-width:600px){#warstaxx-live-strip{margin:6px 2px;padding:8px}#warstaxx-live-strip .wsw-actions{grid-template-columns:repeat(3,minmax(0,1fr))}#warstaxx-live-strip button{font-size:11px;min-height:44px}}';
       document.head.appendChild(style);
     }
@@ -2086,25 +2107,36 @@
     }
     if(bar.parentNode!==host)host.insertBefore(bar,host.firstChild);
     const self=ourWarReadiness(),score=warScore(),target=bestEfficiencyHit(),
+      opportunities=priorityOpportunities(),defence=turtleWindow(),
+      compact=Boolean(cfg.warStripCompact||(state.stripScrolled&&!state.stripExpanded)),
       intent=location.pathname.toLowerCase()==='/item.php'?itemIntent():'',
       sig=[state.data.war.id,score?.our,score?.enemy,self.kind,self.energy,target?.player.id,
-        intent,cfg.warStripCompact,state.quickHitPending,location.pathname,Math.floor(Date.now()/MIN)].join(':');
+        intent,compact,opportunities.map(x=>x.id+':'+x.at).join(','),state.quickHitPending,location.pathname,Math.floor(Date.now()/MIN)].join(':');
     if(!force&&bar.dataset.signature===sig)return;
     bar.dataset.signature=sig;
     const btn=(name,action)=>'<button type="button" data-ws-quick="'+esc(action)+'">'+esc(name)+'</button>';
     bar.innerHTML='<div class="wsw-top"><span class="wsw-kicker">RANKED WAR LIVE</span>'+
       '<strong>Us '+(score?fmt(score.our):'?')+' / Them '+(score?fmt(score.enemy):'?')+'</strong>'+
       '<strong>Net '+(score?(score.net>=0?'+':'')+fmt(score.net):'?')+'</strong>'+
-      btn(cfg.warStripCompact?'Expand':'Minimise','compact')+'</div>'+
-      (cfg.warStripCompact?'':'<div class="wsw-meta"><span>Your status: '+esc(self.kind)+' | '+(self.energy===null?'Energy unknown':fmt(self.energy)+' E')+'</span>'+
-        '<span>'+(target?'Strongest verified hit: '+esc(target.player.name)+' (Lv '+fmt(target.player.level)+')':'No verified safe hit')+'</span>'+
-        '<span>Official war '+esc(age(state.data.updated.wars))+' | own roster '+esc(age(state.data.updated.ours))+'</span></div>')+
-      '<div class="wsw-actions">'+btn('TURTLE','turtle')+btn(state.quickHitPending?'CHECKING...':self.kind==='hospital'?'HEAL TO HIT':'HIT','hit')+
-      btn('HEAL','heal')+btn('WAR ROOM','war')+btn('MORE STATS','stats')+'</div>'+
+      btn(compact?'Expand':'Minimise','compact')+'</div>'+
+      (compact?'':'<div class="wsw-meta"><span>Your status: '+esc(self.kind)+' | '+(self.energy===null?'Energy unknown':fmt(self.energy)+' E')+'</span>'+
+        '<span>'+(target?'Best points / E: '+esc(target.player.name)+' ('+fmt(target.pointsPer25)+' pts / 25 E proxy)':'No verified safe hit')+'</span>'+
+        '<span>Suggested cover '+(defence.minutes===null?'Review':defence.minutes+'m')+
+        ' | War '+esc(age(state.data.updated.wars))+' | roster '+esc(age(state.data.updated.ours))+'</span></div>')+
+      '<div class="wsw-actions">'+btn('TURTLE','turtle')+
+      btn(state.quickHitPending?'CHECKING...':self.kind==='hospital'?'HEAL TO HIT':'HIT','hit')+
+      (compact?btn('OPEN','war'):btn('HEAL','heal')+
+       btn(cfg.blackSkulls[self.id]?'MY SKULLS':'WAR ROOM',cfg.blackSkulls[self.id]?'skulls':'war')+
+       btn('MORE STATS','stats'))+'</div>'+
+      (opportunities.length?'<div class="wsw-opportunities"><b>AVAILABLE:</b> '+
+        opportunities.slice(0,2).map(x=>btn(x.name,'opportunity:'+x.id)).join('')+'</div>':'')+
       (intent?'<div class="wsw-item-controls"><b>'+(intent==='turtle'?'Turtle items:':'Healing items:')+'</b>'+
         (intent==='turtle'?btn('Find Ipecac','item:ipecac')+btn('Find blood bags','item:blood'):
           btn('Find blood bags','item:blood')+btn('Find Morphine','item:morphine')+btn('Find First Aid','item:firstaid'))+
         btn('Close shortcuts','clear-item')+
+        (intent==='turtle'?'<small>Suggested protection window '+(defence.minutes===null?'unavailable':
+          defence.minutes+' minutes; remaining '+defence.remaining+' minutes; gap '+defence.shortfall+' minutes')+
+          '. Actual Ipecac hospital duration is variable.</small>':'')+
         '<small data-ws-note>Locate an item, then tap Torn native Use. The script does not use medical items. Incompatible blood bags require your own blood-type check.</small></div>':'');
   }
 
@@ -2645,7 +2677,7 @@
     return h;
   }
   function turtle(){
-    const x=turtleAssessment(),p=x.plan;
+    const x=turtleAssessment(),p=x.plan,windowPlan=turtleWindow();
     let h=statusNote()+'<div class="ws-lead"><span class="ws-data-label">DEFENSIVE RANKED-WAR PLAN | TURTLING</span>'+
       '<h2>Protect points by denying enemy attacks</h2>'+
       '<p>Turtling means deliberately limiting exposed faction members while a smaller, proven hitting team seeks reliable points. Set a posture locally; this tool never starts flights, uses medical items, toggles revives or attacks.</p>'+
@@ -2656,6 +2688,15 @@
       stat('Hospital / flight / jail',x.ownFresh?fmt(x.sheltered):'Unknown','Airborne only; abroad after landing is NOT counted protected')+
       stat('Unknown coverage',fmt(x.unclear),'Missing or stale roster state')+
       stat('Expiries within 15m',x.ownFresh?fmt(x.dueSoon):'Unknown','Time-limited Torn roster statuses')+'</div>';
+    h+=card('Recommended self-hospital window | manual',
+      '<p><b>Suggested coverage:</b> '+
+      (windowPlan.minutes===null?'Unavailable / hitter exemption':windowPlan.minutes+' minutes')+
+      '</p><p>'+esc(windowPlan.advice)+'</p><p>'+esc(windowPlan.reason)+
+      '</p><p><b>Observed hospital remaining:</b> '+windowPlan.remaining+'m | '+
+      '<b>Additional desired cover:</b> '+(windowPlan.shortfall===null?'Unknown':windowPlan.shortfall+'m')+
+      '</p><p class="ws-small">A suggested coordination window, not a guaranteed medicine duration. '+
+      'Ipecac can cause around 60-90m in hospital; stock, compatibility, medical cooldown and Torn rules apply.</p>'+
+      b('Find turtle item','fast-turtle'));
     if(x.reviveWarnings)h+=card('Revive exposure warning',
       '<p>'+fmt(x.reviveWarnings)+' hospitalised member(s) currently appear revivable. If your faction intends to turtle in hospital, coordinate revive settings and hospital exits in Torn. WarStaxx will not change revival permissions.</p>');
     h+=card('War clock and net-score pressure',
@@ -3703,6 +3744,8 @@
     document.dispatchEvent(new CustomEvent('staxx:ping'));
   }},45000);
   const warStripTimer=setInterval(()=>{if(!document.hidden)renderWarStrip();},10000);
+  window.addEventListener('scroll',handleWarScroll,{passive:true});
+  document.addEventListener('scroll',handleWarScroll,{passive:true,capture:true});
   window.addEventListener('popstate',()=>renderWarStrip(true));
   window.addEventListener('hashchange',()=>renderWarStrip(true));
   const refreshTimer=setInterval(()=>{
