@@ -2552,7 +2552,7 @@
     return statusNote()+(state.alerts.length?state.alerts.map(x=>card(x.title,'<p>'+esc(x.detail)+'</p>'+b('Review now','tab:'+x.tab))).join(''):empty('No active actionable war alerts.')) ;
   }
   function settings(){
-    return card('Torn API connection','<p>Use your Torn PDA API placeholder when supported, or save a personal key on this device. The key is sent only to the official api.torn.com endpoint. Do not export it.</p>'+
+    return card('Torn API connection','<p>Use your Torn PDA API placeholder when supported, or save a personal key on this device. Torn API requests use api.torn.com. If you separately opt in to FFScouter below, your FFScouter key (or PDA key fallback) and requested target IDs are also sent to FFScouter. Do not export keys.</p>'+
       '<label>API key (saved locally, never displayed on diagnostics)<input id="ws-key" type="password" autocomplete="off" placeholder="'+(effectiveKey()?'Key available \u00b7 leave blank to keep':'Enter custom-scoped Torn API key')+'"></label>'+
       '<label><input type="checkbox" id="ws-auto-faction" '+(cfg.factionAuto!==false?'checked':'')+'> Automatically detect my faction from the Torn API (recommended)</label>'+
       '<p class="ws-small">Detected faction: '+(positive(cfg.ourId)?fmt(cfg.ourId):'Not detected yet')+
@@ -2571,7 +2571,7 @@
       '<div class="ws-toolbar">'+b('Save settings','save-settings')+b('Verify FF key','check-ff-key')+b('Refresh FF','refresh-ff')+b('Use PDA key for FF','clear-ff-key')+b('Detect my faction now','detect-faction')+b('Refresh all now','refresh')+b('Clear stored API key','clear-key')+'</div>'+
       '<p class="ws-small">API access depends on your custom key scope. Opponent member lists and ranked-war history use public selections; your own detailed attacks require faction access.</p>')+
       card('Local intelligence controls','<p>War histories, observations, manual spy reports and assignments remain in this browser storage. No central database or cross-device sync is active.</p>'+
-      b('Reset activity samples only','reset-activity')+' '+b('Reset manual orders','reset-orders'))+
+      b('Reset activity samples only','reset-activity')+' '+b('Clear this opponents orders','reset-orders'))+
       card('Other tools','<div class="ws-toolbar">'+b('Happy Jump','tool:happy')+b('ProfitStaxx','tool:profit')+b('Company Helper','tool:company')+'</div>');
   }
   function diagnostics(){
