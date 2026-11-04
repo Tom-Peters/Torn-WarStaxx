@@ -1165,7 +1165,7 @@
     html+=r.factions.map(f=>card((f.name||('Faction '+f.id))+' - individual contributions',
       '<p>Each score and attack count below comes from Torn official war report #'+id+'. Click a player to open their full dossier.</p>'+
       '<div class="ws-table-wrap"><table><thead><tr><th>Member</th><th>Score</th><th>Attacks</th><th>Share of faction score</th><th>Torn</th></tr></thead><tbody>'+
-      f.members.slice().sort((a,b)=>b.score-a.score).map(p=>'<tr><td>'+infoButton(p.name||('Player '+p.id),p.id)+
+      f.members.slice().sort((a,b)=>b.score-a.score).map(p=>'<tr><td>'+infoButton(p.name||('Player '+p.id),p.id)+(f.id===positive(cfg.enemyId)?' '+ffBadge(p.id):'')+
       '<br><small>#'+p.id+' | Lv '+fmt(p.level)+'</small></td><td>'+fmt(p.score)+'</td><td>'+fmt(p.attacks)+'</td><td>'+
       (f.score>0?fmt(100*p.score/f.score)+'%':'\u2014')+'</td><td>'+a('Profile',link(p.id))+'</td></tr>').join('')+
       '</tbody></table></div>')).join('');
@@ -1201,12 +1201,13 @@
     html+=card('Enemy roster | latest officially recorded individual scores',
       '<p>'+covered.length+' of '+leaders.length+' current members have a score in a fetched historical report. These scores may refer to different wars where the latest report is missing.</p>'+
       (leaders.length?'<div class="ws-table-wrap"><table><thead><tr><th>Player (open dossier)</th><th>War score</th><th>Historic avg</th><th>Last action</th><th>Status</th><th>Action</th></tr></thead><tbody>'+
-      leaders.map(x=>'<tr><td>'+infoButton(x.p.name,x.p.id)+'<br><small>#'+x.p.id+' Lv '+fmt(x.p.level)+'</small></td>'+
+      leaders.map(x=>'<tr><td>'+infoButton(x.p.name,x.p.id)+' '+ffBadge(x.p.id)+'<br><small>#'+x.p.id+' Lv '+fmt(x.p.level)+'</small></td>'+
       '<td><b>'+scoreLabel(x.last)+'</b></td><td>'+scoreLabel(x.lifetime.avg)+'</td>'+
       '<td>'+esc(x.p.lastAction)+'<br><small>'+esc(age(x.p.lastAt))+'</small></td>'+
       '<td>'+pill(x.p.status,memberState(x.p)==='okay'?'good':'')+'</td>'+
       '<td>'+a('Profile',link(x.p.id))+' '+a('Attack',attackLink(x.p.id))+'</td></tr>').join('')+
       '</tbody></table></div>':empty('No enemy roster yet. Set an opponent or open War during active matchmaking.')));
+    html+=ffStatusPanel();
     const matches=(state.data.enemyWars||[]).filter(w=>w.end).slice().sort((a,b)=>b.end-a.end).slice(0,6);
     html+=card('Previous enemy wars | official scorelines',
       matches.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>War</th><th>Result</th><th>Enemy / Opponent</th><th>Details</th></tr></thead><tbody>'+
@@ -1309,7 +1310,7 @@
       '<div class="ws-toolbar">'+b('Back to enemy players','tab:targets')+b('Opponent dossier','tab:intel')+
       a('Torn profile',link(id))+(side==='enemies'?a('Attack page',attackLink(id)):'')+'</div>'+
       '<div class="ws-lead"><span class="ws-data-label">PLAYER INTELLIGENCE | '+(side==='ours'?'OUR MEMBER':'OPPONENT')+'</span>'+
-      '<h2>'+esc(p.name)+' ['+id+']</h2>'+
+      '<h2>'+esc(p.name)+' ['+id+'] '+(side==='enemies'?ffBadge(id):'')+'</h2>'+
       '<div class="ws-inline-metrics"><span>Level '+fmt(p.level)+'</span><span>'+esc(p.position||'Role unknown')+'</span>'+
       '<span>'+esc(p.status)+'</span><span>Last action: '+esc(p.lastAction)+'</span></div>'+
       '<p>'+esc(p.statusText)+(p.statusDetails?' | '+esc(p.statusDetails):'')+
@@ -1350,13 +1351,15 @@
       ' | Confidence '+esc(pat.reliability)+'. These figures are sample proportions, not proven hours awake or a past-war travel history.</p>'+
       b('See faction activity heatmap','tab:activity'));
     html+=card('Battle strength and fair-fight evidence',
-      '<p>FFScouter: '+(third&&third.ff!==null?third.ff.toFixed(2)+'x estimated':'no estimate')+
+      '<p><b>FFScouter for your registered key:</b> '+(third&&third.ff!==null?third.ff.toFixed(2)+'x estimated':'no estimate')+
       ' | Public BSS estimate: '+(third&&third.bss?fmt(third.bss):'unknown')+
-      ' | Manual battle stats: '+(s?'saved':'not known')+'</p>'+
-      '<p>Enter all four stats only when verified from a spy. Estimates do not guarantee a win.</p>'+
+      ' | Manual battle stats: '+(s?'saved':'not known')+'</p>'+ 
+      '<p>FFScouter data source '+esc(third?.source||'unknown')+' | Public estimate updated '+esc(third?.updatedAt?age(third.updatedAt):'unknown')+
+      ' | Retrieved '+esc(third?.at?age(third.at):'never')+' | Estimated total stats '+esc(third?.bsHuman||'unknown')+'.</p>'+
+      '<p>Enter all four stats only when verified from a spy. FFScouter estimates are relative to your registered API-key owner, while the matchup page calculates individual hitter models. Estimates do not guarantee a win.</p>'+
       ['strength','speed','defense','dexterity'].map(k=>'<label>'+esc(k)+
         '<input type="number" min="0" step="1" data-spy="'+esc(k)+'" value="'+esc(s&&s[k]!==undefined?s[k]:'')+'"></label>').join('')+
-      '<div class="ws-toolbar">'+b('Save battle stats','spy:'+id)+b('Clear spy','clear-spy:'+id)+b('Matchups','tab:matchups')+'</div>');
+      '<div class="ws-toolbar">'+b('Save battle stats','spy:'+id)+b('Clear spy','clear-spy:'+id)+b('Matchups','tab:matchups')+b(cfg.watchlist[id]?'Unwatch player':'Watch player','watch:'+id)+'</div>');
     html+=card('Public Torn profile and personal stats',
       '<p>Additional publicly available profile and lifetime counters are fetched only when requested. A public stat is not an exact hidden battle stat.</p>'+
       b(state.loading?'Loading...':'Load public stats','public:'+id)+publicStatsHtml(id));
@@ -1375,9 +1378,9 @@
       .sort((a,b)=>Number(b.m.known)-Number(a.m.known)||(a.m.known?a.m.ratio-b.m.ratio:evaluate(b.e).score-evaluate(a.e).score));
     return statusNote()+card('Choose your hitter','<label>Friendly player<select id="ws-friend">'+friends.map(p=>
       '<option value="'+p.id+'" '+(p.id===friend.id?'selected':'')+'>'+esc(p.name)+' ['+p.id+']</option>').join('')+'</select></label>'+
-      '<p>'+fmt(rows.filter(x=>x.m.known).length)+' of '+fmt(rows.length)+' Okay opponents have both sets of battle stats. Unknown matchups are not marked safe.</p>')+
-      '<div class="ws-table-wrap"><table><thead><tr><th>Enemy</th><th>BS score comparison</th><th>Estimated FF</th><th>Observed FF</th><th>Decision</th></tr></thead><tbody>'+
-      rows.map(x=>'<tr><td>'+infoButton(x.e.name,x.e.id)+'<br><small>L'+fmt(x.e.level)+'</small></td>'+
+      '<p>'+fmt(rows.filter(x=>x.m.known).length)+' of '+fmt(rows.length)+' Okay opponents have both sets of battle stats. Blue FF badges are from FFScouter for the API-key owner; the modelled FF column is specific to the selected hitter.</p>')+
+      '<div class="ws-table-wrap"><table><thead><tr><th>Enemy + FFScouter</th><th>BS score comparison</th><th>Selected hitter FF model</th><th>Hitter observed FF</th><th>Decision</th></tr></thead><tbody>'+
+      rows.map(x=>'<tr><td>'+infoButton(x.e.name,x.e.id)+' '+ffBadge(x.e.id)+'<br><small>L'+fmt(x.e.level)+'</small></td>'+
         '<td>'+pill(x.m.verdict,x.m.known&&x.m.ratio<0.8?'good':'')+'<br><small>'+esc(x.m.confidence)+'</small></td>'+
         '<td>'+esc(x.m.ff===null?'Unknown':x.m.ff.toFixed(2)+'x modelled')+'</td>'+
         '<td>'+esc(x.ff.avg===null?'Not observed':x.ff.avg.toFixed(2)+'x \u00b7 '+x.ff.count+' recorded')+'</td>'+
@@ -1411,7 +1414,7 @@
         '</tbody></table></div>'+b('Full 24h chart','tab:activity'));
     }
     html+=card('Highest scoring enemy players | official war reports',
-      top.length?top.map(x=>'<div class="ws-row"><span>'+infoButton(x.p.name,x.p.id)+
+      top.length?top.map(x=>'<div class="ws-row"><span>'+infoButton(x.p.name,x.p.id)+' '+ffBadge(x.p.id)+
       '<small> Last reported: '+fmt(x.last)+' pts | '+x.lifetime.wars+' reports | '+esc(x.p.lastAction)+'</small></span>'+
       a('Profile',link(x.p.id))+'</div>').join(''):
       empty('No individual scorecards stored yet. Open previous wars and fetch available reports.'));
