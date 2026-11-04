@@ -217,7 +217,7 @@
   cfg.manualReadiness=cfg.manualReadiness&&typeof cfg.manualReadiness==='object'?cfg.manualReadiness:{};
   const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},factionBasic:{},publicIntel:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},scoreTimelines:{},warTimelines:{},afterActions:{},ownerReadiness:{},sampleCount:0});
   const state={data:Object.assign(freshData(),safeRead(DATA,{})),open:false,tab:'overview',showMore:false,
-    filter:'all',sort:'warScore',search:'',commanderFilter:'black',loading:false,ffLoading:false,spinner:'',error:'',scanning:false,alerts:[],chosen:0,
+    filter:'all',sort:'warScore',search:'',commanderFilter:'black',controlFocus:0,loading:false,ffLoading:false,spinner:'',error:'',scanning:false,alerts:[],chosen:0,
     lastRefresh:0,historicalRead:0,localKeyError:false,warExpected:false,selectedWar:0,selectedTimeline:0,selectedPace:0,selectedDebrief:0,detailFrom:'targets',leaderFilter:'all',hitterFilter:'all'};
   state.data.reports=state.data.reports||{};
   state.data.activity=state.data.activity||{};
@@ -1987,6 +1987,20 @@
             fmt(p.score)+'</td><td>'+fmt(p.attacks)+'</td><td>'+a('Torn profile',link(p.id))+'</td></tr>').join('')+
           '</tbody></table></div>':empty('Individual contributions not available in the stored Torn report.'));
     html+=table('Our top recorded contributors',r.ownContributors)+table('Opponent top recorded contributors',r.enemyContributors);
+    const skulls=blackSkullScorecards(r.id);
+    const scorecard='<p>Official individual score and attack totals are taken from the completed-war report, if available. The comparison is against up to three prior fetched official reports and is not a skill rating. Black Skulls are identified using your CURRENT local tags.</p>'+
+      (skulls.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Black Skull</th><th>Official score</th><th>Official attacks</th><th>Faction score share</th><th>Previous-war mean</th><th>Performance review</th></tr></thead><tbody>'+
+      skulls.map(z=>'<tr><td>'+infoButton(z.name,z.id)+'</td><td>'+scoreLabel(z.score)+'</td>'+
+        '<td>'+scoreLabel(z.hits)+'</td><td>'+(z.share===null?'Unknown':fmt(z.share)+'%')+'</td>'+
+        '<td>'+scoreLabel(z.previousAvg)+'</td><td>'+
+        (z.score===null?'Not in the official report; do not infer zero':
+         z.previousAvg===null?'No comparable prior report':
+         z.score>z.previousAvg?'Above available historical mean':
+         z.score<z.previousAvg?'Below available historical mean':'Similar to historical mean')+
+        '</td></tr>').join('')+'</tbody></table></div>':
+       empty('No locally tagged Black Skulls. Mark hitters under Leadership to compare their recorded scores.'))+
+      '<p class="ws-small">Scoring totals are official when the report exists. Earlier-wars comparisons use only fetched report rows, with unknown values preserved. Prior battle stats or combat wins cannot be inferred from scoring alone.</p>';
+    html+=card('Black Skulls | individual post-war scorecards',scorecard);
     return html;
   }
   function command(){
@@ -2931,7 +2945,7 @@
       '<label>Opponent faction ID (auto-updated if a ranked war is detected)<input type="number" id="ws-enemy" min="1" value="'+(positive(cfg.enemyId)||'')+'"></label>'+
       '<label>Automatic refresh<select id="ws-interval">'+[90,120,180,300].map(s=>'<option value="'+s+'" '+(cfg.refreshSeconds===s?'selected':'')+'>'+s+' seconds while visible</option>').join('')+'</select></label>'+
       '<label>Historical wars per side<select id="ws-limit">'+[3,5,8,12,20].map(s=>'<option value="'+s+'" '+(cfg.historyLimit===s?'selected':'')+'>'+s+' wars</option>').join('')+'</select></label>'+
-      '<label><input type="checkbox" id="ws-attacks" '+(cfg.enableAttacks?'checked':'')+'> Read my faction attacks for observed fair-fight data (extra API permission)</label>'+ 
+      '<label><input type="checkbox" id="ws-attacks" '+(cfg.enableAttacks?'checked':'')+'> Read faction attacks (optional faction API permission): FF observations, sampled ranked-war hit ledger and live opponent scoring where available</label>'+ 
       '<label><input type="checkbox" id="ws-owner-ready" '+(cfg.autoOwnerReadiness!==false?'checked':'')+'> Read my own energy and medical cooldown (only the Torn API-key owner; requires user bars/cooldowns permissions)</label>'+ 
       '<h3>FFScouter \u00b7 optional, independent service</h3><p>When enabled with explicit consent, WarStaxx uses your registered FFScouter key or your existing Torn PDA key if the separate field is empty. It sends that key and target player IDs to FFScouter, not to TornStaxx hub. You must first register the key with FFScouter. Read the <a href="https://ffscouter.com/#data-policy" target="_blank" rel="noopener noreferrer">FFScouter data policy</a>; free and premium plans may offer different data.</p>'+ 
       '<label>Optional FFScouter-specific API key<input id="ws-ffkey" type="password" autocomplete="off" placeholder="'+(cfg.ffKey?'Separate key saved; blank keeps it':effectiveKey()?'Uses your Torn PDA key when opted in':'Enter a registered key or connect Torn PDA key')+'"></label>'+ 
@@ -3018,6 +3032,21 @@
   function close(){state.open=false;render();event('panel',{id:ID,open:false});}
   function handle(action){
     if(action==='refresh'){refresh(true);return;}
+    if(action==='commander-filter'){
+      state.commanderFilter=state.commanderFilter==='black'?'all':'black';render();return;
+    }
+    if(action.startsWith('control-target:')){
+      const id=positive(action.slice(15));
+      if(state.data.enemies.some(p=>p.id===id)){state.controlFocus=id;navigate('control');}
+      return;
+    }
+    if(action.startsWith('turtle-mode:')){
+      const mode=action.slice(12);
+      if(!['balanced','defensive','full'].includes(mode))return;
+      const key=currentPlanKey(),prior=turtlePlan();
+      cfg.turtlePlans[key]={mode,members:{...prior.members},updated:Date.now()};
+      saveCfg();state.error='Local defensive posture saved. No travel, medical or attack action occurred.';render();return;
+    }
     if(action==='copy-ops'){
       const content=operationalBrief();
       if(navigator.clipboard&&typeof navigator.clipboard.writeText==='function'){
@@ -3193,6 +3222,25 @@
     }
   });
   root.addEventListener('change',e=>{
+    const control=e.target.closest('[data-control-target]');
+    if(control){
+      const enemyId=positive(control.dataset.controlTarget),watcher=positive(control.value);
+      if(!state.data.enemies.some(p=>p.id===enemyId))return;
+      if(watcher&&!state.data.ours.some(p=>p.id===watcher&&cfg.blackSkulls[p.id]))return;
+      const key=currentPlanKey(),prior=cfg.controlAssignments[key]||{};
+      if(watcher)prior[enemyId]=watcher;else delete prior[enemyId];
+      cfg.controlAssignments[key]=prior;saveCfg();
+      state.error='Hospital watcher assigned locally. No attack or hospitalisation performed.';render();return;
+    }
+    const turtleDuty=e.target.closest('[data-turtle-duty]');
+    if(turtleDuty){
+      const id=positive(turtleDuty.dataset.turtleDuty),value=String(turtleDuty.value);
+      if(!state.data.ours.some(p=>p.id===id)||!['auto','strike','turtle','reserve'].includes(value))return;
+      const key=currentPlanKey(),plan=turtlePlan();
+      if(value==='auto')delete plan.members[id];else plan.members[id]=value;
+      cfg.turtlePlans[key]={mode:plan.mode,members:plan.members,updated:Date.now()};
+      saveCfg();state.error='Defensive duty saved locally. Torn player status is unchanged.';render();return;
+    }
     const target=e.target.closest('[data-leader-target]');
     if(target){const ourId=positive(target.dataset.leaderTarget),enemyId=positive(target.value);
       if(!state.data.ours.some(p=>p.id===ourId))return;
