@@ -11,3 +11,5 @@ https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/docs/INTEGRATION.md
 - API access is read-only and rate-limited; no automatic attack, consumables, transfers, faction orders or state-changing Torn requests.
 - Public author **IamEEKY** only; do not commit keys, spy values, personally identifying player data or private imported history.
 - Include the small fallback launcher and hub event adapters; check `npm test`, CI, script injection timing and Torn PDA device behaviour separately.
+
+- **Torn PDA parse reliability:** The distributed `WarStaxx.user.js` must contain only ASCII source. Use JS `\\uXXXX` escapes for decorative glyphs; avoid curly apostrophes U+2018/U+2019 and curly quotes U+201C/U+201D. War 0.2.4 had two smart apostrophes in single-quoted JavaScript strings that broke parsing when normalized to straight quotes. Keep `tests/pda-quote-safety.test.mjs` and CI green on every edit. Avoid touching the user's local API key or war history when fixing injection bugs.
