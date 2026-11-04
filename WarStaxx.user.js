@@ -205,7 +205,7 @@
   cfg.blackSkulls=cfg.blackSkulls&&typeof cfg.blackSkulls==='object'?cfg.blackSkulls:{};
   cfg.spies=cfg.spies&&typeof cfg.spies==='object'?cfg.spies:{};
   cfg.notes=cfg.notes&&typeof cfg.notes==='object'?cfg.notes:{};
-  const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},publicIntel:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},sampleCount:0});
+  const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},factionBasic:{},publicIntel:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},sampleCount:0});
   const state={data:Object.assign(freshData(),safeRead(DATA,{})),open:false,tab:'overview',showMore:false,
     filter:'all',sort:'warScore',search:'',loading:false,spinner:'',error:'',scanning:false,alerts:[],chosen:0,
     lastRefresh:0,historicalRead:0,localKeyError:false,warExpected:false,selectedWar:0,detailFrom:'targets'};
@@ -213,6 +213,7 @@
   state.data.activity=state.data.activity||{};
   state.data.ffstats=state.data.ffstats||{};
   state.data.publicIntel=state.data.publicIntel||{};
+  state.data.factionBasic=state.data.factionBasic||{};
   state.data.updated=state.data.updated||{};
   state.data.errors=state.data.errors||{};
   state.data.backoff=state.data.backoff||{};
@@ -220,7 +221,7 @@
   // Repair malformed legacy cached containers without wiping valid user data.
   for(const k of ['ours','enemies','ourWars','enemyWars','attacks'])
     if(!Array.isArray(state.data[k]))state.data[k]=[];
-  for(const k of ['reports','activity','publicIntel','ffstats','seenAttacks','updated','errors','backoff','meta'])
+  for(const k of ['reports','activity','factionBasic','publicIntel','ffstats','seenAttacks','updated','errors','backoff','meta'])
     if(!state.data[k]||typeof state.data[k]!=='object'||Array.isArray(state.data[k]))state.data[k]={};
   if(state.data.war&&!Array.isArray(state.data.war.factions))state.data.war=null;
   for(const [key,value] of Object.entries(state.data.reports))
@@ -387,6 +388,50 @@
     const total=records.reduce((s,m)=>s+n(m.score),0);
     return {wars:records.length,score:total,avg:records.length?total/records.length:null,
       attacks:records.reduce((s,m)=>s+n(m.attacks),0)};
+  }
+  function normaliseFactionBasic(j){
+    const p=j?.basic||j||{},r=p.rank&&typeof p.rank==='object'?p.rank:{};
+    return {id:positive(p.id),name:String(p.name||''),tag:String(p.tag||''),
+      respect:p.respect===undefined?null:n(p.respect),members:p.members===undefined?null:n(p.members),
+      capacity:p.capacity===undefined?null:n(p.capacity),
+      daysOld:p.days_old===undefined?null:n(p.days_old),
+      leader:positive(p.leader_id),coLeader:positive(p.co_leader_id),
+      rankName:String(r.name||''),rankLevel:r.level===undefined?null:n(r.level),
+      rankPosition:r.position===undefined?null:n(r.position),
+      division:r.division===undefined?null:n(r.division),
+      rankedWins:r.wins===undefined?null:n(r.wins),
+      bestChain:p.best_chain===undefined?null:n(p.best_chain),
+      observed:Date.now()};
+  }
+  async function refreshFactionBasics(force=false){
+    for(const id of [positive(cfg.ourId),positive(cfg.enemyId)]){
+      if(!id)continue;
+      try{
+        const j=await call('/faction/'+id+'/basic','basic-'+id,force?0:30*MIN);
+        if(j)state.data.factionBasic[id]=normaliseFactionBasic(j);
+      }catch(e){state.data.errors['basic-'+id]=String(e.message||e);}
+    }
+    const latest=Object.keys(state.data.factionBasic).sort((a,b)=>n(state.data.factionBasic[b]?.observed)-n(state.data.factionBasic[a]?.observed));
+    for(const id of latest.slice(20))delete state.data.factionBasic[id];
+  }
+  function factionBasicsHtml(){
+    const groups=[['Our faction',positive(cfg.ourId)],['Enemy faction',positive(cfg.enemyId)]];
+    return '<div class="ws-grid">'+groups.map(([label,id])=>{
+      const x=state.data.factionBasic[id];
+      if(!x)return card(label,empty('Basic faction data not collected yet.'));
+      return card(label+' | '+(x.name||('Faction #'+id)),
+        '<p>'+pill(x.tag||'No tag')+' '+pill(x.rankName||'Rank unknown')+'</p>'+
+        '<div class="ws-inline-metrics"><span>Respect '+scoreLabel(x.respect)+'</span>'+
+        '<span>Members '+scoreLabel(x.members)+' / '+scoreLabel(x.capacity)+'</span>'+
+        '<span>Ranked wins '+scoreLabel(x.rankedWins)+'</span>'+
+        '<span>Best chain '+scoreLabel(x.bestChain)+'</span></div>'+
+        '<p>Rank level '+scoreLabel(x.rankLevel)+' | Division '+scoreLabel(x.division)+
+        ' | Position '+scoreLabel(x.rankPosition)+' | Age '+scoreLabel(x.daysOld)+' days</p>'+
+        '<div class="ws-toolbar">'+(x.leader?infoButton('Leader #'+x.leader,x.leader):'')+
+        (x.coLeader?infoButton('Co-leader #'+x.coLeader,x.coLeader):'')+
+        a('View faction',factionLink(id))+'</div>'+
+        '<p class="ws-small">Torn official public faction basics | '+esc(age(x.observed))+'</p>');
+    }).join('')+'</div>';
   }
   function recentWarRecords(side,id){
     const fid=positive(side==='ours'?cfg.ourId:cfg.enemyId);
@@ -728,6 +773,7 @@
         if(enemy)state.data.enemies=roster(enemy);
         if(own||enemy)snapshot([...(own?['ours']:[]),...(enemy?['enemies']:[])]);
       }
+      await refreshFactionBasics(force);
       await refreshHistory(force);
       await refreshAttacks();
       await refreshFF();
@@ -994,6 +1040,7 @@
       statAction('Average war score',scoreLabel(m.scoreAvg),'Official completed-war scores in this sample','tab:history')+
       statAction('Active last 24h',them.total?them.active24+' / '+them.total:'\u2014','From last-action timestamps only','tab:activity')+
       statAction('Online now',them.total?them.online+' / '+them.total:'\u2014','Latest observed enemy roster','tab:activity')+'</div>';
+    html+=card('Faction strength, leadership and rank | official',factionBasicsHtml());
     if(last){
       const reportStored=state.data.reports[last.id];
       html+=card('Most recent completed ranked war | #'+last.id,
