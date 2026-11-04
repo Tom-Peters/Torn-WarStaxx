@@ -811,6 +811,24 @@
       accelerating,observedAt:last.at,coverage:[old.at,mid.at,last.at],
       label:accelerating?'Enemy scoring accelerating':increase>0?'Enemy scoring rising':'Enemy scoring steady or slowing'};
   }
+  function rosterFresh(side,at=Date.now(),maxAge=5*MIN){
+    const stamp=n(state.data.updated?.[side]);
+    return stamp>0&&at>=stamp&&at-stamp<maxAge&&Array.isArray(state.data[side])&&state.data[side].length>0;
+  }
+  function enemyHospitalExit(player,at=Date.now()){
+    if(!player||memberState(player)!=='hospital')return null;
+    const until=n(player.until);
+    if(until<=at-2*MIN||until>at+4*HOUR)return null;
+    return {player,eta:until,minutes:Math.max(0,Math.ceil((until-at)/MIN)),
+      source:'Torn roster hospital expiry',fresh:rosterFresh('enemies',at)};
+  }
+  function watchedTargetIds(){
+    const ids=new Set(Object.keys(cfg.watchlist).filter(id=>cfg.watchlist[id]).map(positive).filter(Boolean));
+    for(const [id,target] of Object.entries(cfg.assignments)){
+      if(state.data.ours.some(p=>p.id===positive(id))&&state.data.enemies.some(p=>p.id===positive(target)))ids.add(positive(target));
+    }
+    return ids;
+  }
   function matchEvidence(friend,enemy){
     const m=matchup(friend,enemy),official=lastKnownMemberScore('enemies',enemy.id);
     const enemySpy=spy(enemy.id),friendSpy=spy(friend.id);
@@ -818,6 +836,7 @@
     const manuallyConfirmed=bsScore(friendSpy)!==null&&bsScore(enemySpy)!==null;
     const encounters=attackHistoryFor(friend.id,enemy.id);
     const knownLoss=encounters.losses>0;
+    const rosterVerified=rosterFresh('ours')&&rosterFresh('enemies');
     const freshSpies=manuallyConfirmed&&n(latest)>0&&n(friendSpy?.observedAt)>0&&
       Date.now()-latest<30*24*HOUR&&Date.now()-n(friendSpy?.observedAt)<30*24*HOUR;
     const externalOnly=m.known&&!manuallyConfirmed;
@@ -825,7 +844,8 @@
     const conflict=Object.entries(cfg.assignments).some(([id,target])=>
       positive(id)!==positive(friend.id)&&positive(target)===positive(enemy.id));
     let category='Scout',reason='Missing comparable stats',tier=3;
-    if(!active){category='Unavailable';reason=memberState(enemy)==='hospital'?'In hospital':memberState(enemy)==='away'?'Travelling / abroad':'Not Okay';tier=5;}
+    if(!rosterVerified){category='Refresh roster';reason='One or both rosters older than five minutes; current status unverified';tier=3;}
+    else if(!active){category='Unavailable';reason=memberState(enemy)==='hospital'?'In hospital':memberState(enemy)==='away'?'Travelling / abroad':'Not Okay';tier=5;}
     else if(m.known&&m.ratio>=1.15){category='Avoid';reason='Enemy modelled battle strength is higher';tier=4;}
     else if(manuallyConfirmed&&m.known&&m.ratio<0.8&&!freshSpies){
       category='Recheck old spies';reason='One or both spy records are older than 30 days or undated';tier=2;
@@ -846,7 +866,7 @@
     const reliability=tier===0&&encounters.wins>=2?'Repeat observed wins':
       tier===0?'Favourable current spies':tier===1?'Plausible, verify':
       knownLoss?'Past losses recorded':tier===2?'Evidence needs checking':'Not demonstrated';
-    return {friend,enemy,match:m,category,reason,tier,score,threat,reliability,encounters,
+    return {friend,enemy,match:m,category,reason,tier,score,threat,reliability,encounters,rosterVerified,
       official,conflict,verified:manuallyConfirmed,estimated:externalOnly,
       ffForHitter:m.known?m.ff:null};
   }
@@ -883,16 +903,43 @@
       duplicateTargets:[...conflicts].filter(([_,count])=>count>1).map(([id,count])=>({id,count})),
       tracked:enemy.filter(p=>Boolean(cfg.watchlist[p.id])).length};
   }
-  function suggestedDraft(){
-    const result=[],used=new Set(Object.values(cfg.assignments).map(positive).filter(Boolean));
-    const hitters=state.data.ours.filter(p=>cfg.blackSkulls[p.id]&&memberState(p)==='okay'&&!positive(cfg.assignments[p.id]));
-    for(const p of hitters){
-      const next=personalShortlist(p,state.data.enemies.length).find(x=>x.tier===0&&!used.has(x.enemy.id));
-      if(!next)continue;
-      result.push({friend:p,enemy:next.enemy,reason:next.reason});
-      used.add(next.enemy.id);
+  // Augmenting-path matching prioritises covering the maximum number of
+  // evidenced Black Skulls instead of giving the first roster member every
+  // strong target. It is a plan preview, never an attack or game-state write.
+  function suggestedDraft(at=Date.now()){
+    if(!rosterFresh('ours',at)||!rosterFresh('enemies',at))return [];
+    const claimed=new Set(Object.entries(cfg.assignments).filter(([id,target])=>
+      state.data.ours.some(p=>p.id===positive(id))&&state.data.enemies.some(p=>p.id===positive(target)))
+      .map(([id,target])=>positive(target)));
+    const candidates=state.data.ours.filter(p=>cfg.blackSkulls[p.id]&&memberState(p)==='okay'&&
+      !positive(cfg.assignments[p.id])&&hitterReadiness(p,at).energyEnough!==false)
+      .map(friend=>({friend,options:personalShortlist(friend,state.data.enemies.length)
+        .filter(x=>x.tier===0&&!claimed.has(x.enemy.id))
+        .sort((a,b)=>b.score-a.score)}))
+      .filter(x=>x.options.length)
+      .sort((a,b)=>a.options.length-b.options.length||a.friend.id-b.friend.id);
+    const byId=new Map(candidates.map(x=>[x.friend.id,x]));
+    const booked=new Map(),matched=new Map();
+    function place(friendId,seen){
+      const entry=byId.get(friendId);
+      if(!entry)return false;
+      for(const choice of entry.options){
+        const target=choice.enemy.id;
+        if(seen.has(target))continue;
+        seen.add(target);
+        const oldFriend=booked.get(target);
+        if(!oldFriend||place(oldFriend,seen)){
+          booked.set(target,friendId);matched.set(friendId,choice);
+          return true;
+        }
+      }
+      return false;
     }
-    return result;
+    for(const entry of candidates)place(entry.friend.id,new Set());
+    return [...matched.entries()].map(([id,choice])=>({
+      friend:byId.get(id).friend,enemy:choice.enemy,reason:choice.reason,
+      evidence:choice.reliability,score:choice.score,category:choice.category
+    })).sort((a,b)=>b.score-a.score||a.friend.id-b.friend.id);
   }
   function assignments(){
     const ours=state.data.ours.slice().sort((a,b)=>Number(Boolean(cfg.blackSkulls[b.id]))-Number(Boolean(cfg.blackSkulls[a.id])) || Number(isOnline(b))-Number(isOnline(a)));
