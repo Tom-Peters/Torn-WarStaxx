@@ -16,19 +16,21 @@ function matchingFixture(){
     'const positive=v=>Number.isSafeInteger(Number(v))&&Number(v)>0?Number(v):0;',
     'const fmt=v=>String(v);',
     'const now=Date.now();',
-    'const cfg={ourId:10,enemyId:20,assignments:{},watchlist:{},blackSkulls:{1:true,2:true},'+
-      'spies:{1:{observedAt:now},2:{observedAt:now},101:{observedAt:now},102:{observedAt:now}},'+
+    'const cfg={ourId:10,enemyId:20,assignments:{},watchlist:{},hitterRisk:{},blackSkulls:{1:true,2:true},'+
+      'spies:{1:{observedAt:now,bss:1000},2:{observedAt:now,bss:900},101:{observedAt:now,bss:300},102:{observedAt:now,bss:200}},'+
       'manualReadiness:{},planStatus:{}};',
     "const state={data:{war:{id:500},ours:[{id:1,name:'Alpha',status:'okay'},"+
       "{id:2,name:'Bravo',status:'okay'}],enemies:[{id:101,name:'Target One',status:'okay',until:0},"+
-      "{id:102,name:'Target Two',status:'okay',until:0}],updated:{ours:now,enemies:now},attacks:[]}};",
+      "{id:102,name:'Target Two',status:'okay',until:0}, {id:103,name:'Hospital3',status:'hospital',until:0},{id:104,name:'Hospital4',status:'hospital',until:0}],updated:{ours:now,enemies:now},attacks:[]}};",
     'const spy=id=>cfg.spies[id]||null;',
-    'const bsScore=p=>p?1:null;',
+    'const bsScore=p=>p?.bss??null;',
     "const memberState=p=>String(p.status||'unknown').toLowerCase();",
     'const isOnline=()=>false;',
     'const lastKnownMemberScore=()=>null;',
     'const attackHistoryFor=()=>({wins:0,losses:0,unknown:0,total:0,last:0});',
     'const hitterReadiness=()=>({energyEnough:null});',
+    'const ffscouter=id=>({bss:({103:80,104:60})[id]||null});',
+    'const ffIsStale=()=>false;',
     'const matchup=(friend,enemy)=>{const ratios={1:{101:0.35,102:0.45},2:{101:0.38,102:1.35}};'+
       "return {known:true,ratio:ratios[friend.id]?.[enemy.id],ff:2.5,confidence:'Two recent spies'};};"
   ].join('\n');
