@@ -2335,7 +2335,7 @@
     }
     if(action==='war'){open({section:cfg.blackSkulls[self.id]?'skulls':'overview'});return;}
     if(action==='skulls'){open({section:'skulls'});return;}
-    if(action==='stats'){state.warMore=true;open({section:'overview'});return;}
+    if(action==='stats'){open({section:'reports'});return;}
     if(action.startsWith('opportunity:')){focusOpportunity(positive(action.slice(12)));return;}
     if(action==='heal'){itemFlow('heal');return;}
     if(action==='turtle'){
@@ -3170,6 +3170,173 @@
   }
 
 
+
+  function enemyScreen(){
+    const enemy=sideActivity('enemies'),history=factionWarMetrics('enemies'),
+      bands=enemyRoleBands(),threat=enemyThreatRows().slice(0,5),
+      active=rosterFresh('enemies'),ff=ffCoverage(),last=history.last,
+      latest=last?state.data.reports[last.id]?.factions
+        ?.find(x=>x.id===positive(cfg.enemyId)):null;
+    let h=statusNote()+'<div class="ws-lead"><span class="ws-data-label">02 / OPPONENT INTELLIGENCE</span>'+
+      '<h2>Know who we are fighting</h2>'+
+      '<p>Strength, activity, travel, previous wars and who scores their points. '+
+      'FFScouter BSS is an estimate, not a confirmed spy or an individual hitter FF.</p>'+
+      '<div class="ws-toolbar">'+b('Refresh','refresh')+
+      b('Detailed enemy dossiers','tab:targets')+b('Last wars','tab:history')+'</div></div>'+
+      '<div class="ws-grid">'+
+      statAction('Enemy available',active?enemy.okay+' / '+enemy.total:'Stale',
+        'Observed Okay status','tab:targets')+
+      statAction('Active last 24 hours',enemy.total?enemy.active24+' / '+enemy.total:'Unknown',
+        'Based on last action, not sustained uptime','tab:activity')+
+      statAction('Travelling',active?fmt(enemy.away):'Stale',
+        'Observed current roster','tab:timeline')+
+      statAction('Hospitalised',active?fmt(enemy.hospital):'Stale',
+        'Hospital expiry and return watches','tab:control')+
+      statAction('Last war score',history.lastScore===null?'Unknown':fmt(history.lastScore),
+        'Official opponent score in latest completed war','tab:history')+
+      statAction('Recent war wins',history.decided?history.wins+' / '+history.decided:'Unknown',
+        'Official completed wars in local sample','tab:history')+
+      statAction('Known enemy BSS',bands.known+' / '+enemy.total,
+        bands.unknown+' need a fresh BSS estimate / spy','tab:targets')+
+      statAction('FFScouter FF coverage',ff.total?ff.covered+' / '+ff.total:'Unknown',
+        'Registered user-key FF, not per-faction-member','tab:settings')+'</div>'+
+      card('Enemy strength partition | who should tackle whom',
+        '<p><b>Black Skulls:</b> '+bands.heavyCount+
+        ' toughest opponents among the '+bands.known+
+        ' players with known BSS evidence. <b>Regular members:</b> '+
+        bands.regularCount+' lower-BSS opponents. <b>Unclassified:</b> '+
+        bands.unknown+' require scouting. Brackets are relative to this opponent faction, '+
+        'not absolute battle-stat thresholds; status changes do not reshuffle the bracket.</p>'+
+        (bands.ranked.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr>'+
+        '<th>Enemy</th><th>Est. BSS</th><th>Role</th><th>Status</th><th>FF for key owner</th><th>Inspect</th>'+
+        '</tr></thead><tbody>'+bands.ranked.slice(0,14).map(x=>
+          '<tr><td>'+infoButton(x.enemy.name,x.enemy.id)+
+          '<br><small>Lv '+fmt(x.enemy.level)+'</small></td>'+
+          '<td>'+fmt(x.value)+'<br><small>'+esc(x.source)+'</small></td>'+
+          '<td>'+pill(bands.heavy.has(x.enemy.id)?'BLACK SKULL':'REGULAR',
+            bands.heavy.has(x.enemy.id)?'good':'')+'</td>'+
+          '<td>'+pill(x.enemy.status,memberState(x.enemy)==='okay'?'good':'')+'</td>'+
+          '<td>'+ffBadge(x.enemy.id)+'</td><td>'+infoButton('Profile',x.enemy.id)+'</td></tr>').join('')+
+        '</tbody></table></div>':empty('No usable BSS. Enable FFScouter or enter manual battle stats on player dossiers.')))+
+      card('Enemy threats | actual scoring evidence',
+        threat.length?threat.map(x=>'<div class="ws-row"><span>'+infoButton(x.player.name,x.player.id)+
+          ' '+ffBadge(x.player.id)+'<br><small>'+esc(x.source)+
+          ' | '+(x.live?fmt(x.live.respect)+' respect from captured current hits':
+            x.previous?fmt(x.previous.score)+' points in latest available report':'Unknown contribution')+
+          ' | '+esc(x.player.status)+'</small></span>'+
+          b('Intel','player:'+x.player.id)+'</div>').join(''):
+          empty('No sourced threat history available yet.'))+
+      card('Their last completed war',
+        last?'<p>War #'+last.id+' | '+(last.winner===positive(cfg.enemyId)?'Won':
+          last.winner?'Lost':'Unknown')+' | score '+scoreLabel(history.lastScore)+
+          ' against '+scoreLabel(history.lastAgainst)+'. '+
+          (latest?'Member-level scorecard available.':'Load the official detailed report for member scores.')+
+          '</p><div class="ws-toolbar">'+b('War scorecard','war:'+last.id)+
+          b('Enemy war timeline','tab:timeline')+'</div>':
+          empty('No completed opponent history loaded; refresh to fetch official war records.'))+
+      '<div class="ws-toolbar">'+b('Enemy player dossiers','tab:targets')+
+        b('Activity heatmap','tab:activity')+b('Travel during wars','tab:timeline')+
+        b('Hospital control','tab:control')+
+        b('Player matchups','tab:matchups')+b('Previous wars','tab:history')+
+        b('Full enemy intelligence','tab:intel')+'</div>';
+    return h;
+  }
+  function reportsScreen(){
+    const last=Object.values(state.data.afterActions||{}).filter(x=>positive(x.id))
+        .sort((a,b)=>n(b.end)-n(a.end))[0]||null,
+      live=warHitLedger(),chain=chainStatus();
+    let h=statusNote()+'<div class="ws-lead"><span class="ws-data-label">03 / REPORTS AND MANAGEMENT</span>'+
+      '<h2>Analysis, history and every advanced tool</h2>'+
+      '<p>Dig into the evidence, plan future wars, manage settings, inspect hit logs and review completed wars.</p>'+
+      '<div class="ws-toolbar">'+b('Latest after-action report','tab:afteraction')+
+        b('Full war leadership','tab:leader')+
+        b('Torn and FF settings','tab:settings')+'</div></div>'+
+      '<div class="ws-grid">'+
+      statAction('Latest after-action',last?'#'+last.id:'No report',
+        last?last.outcome+' / '+(last.detail?'official detail':'summary only'):'Refresh after a war ends','tab:afteraction')+
+      statAction('Current war observed hits',live.known?fmt(live.ours.hits):'Unknown',
+        'Partial feed if enabled','tab:ledger')+
+      statAction('Chain',chain.fresh?'#'+fmt(chain.count):'Unknown',
+        'Observed current chain state','tab:skulls')+
+      statAction('Stored opponent wars',fmt(state.data.enemyWars.filter(x=>x.end).length),
+        'Past official wars','tab:history')+'</div>';
+    const groups=[
+      ['OPERATIONS & ORDERS',[
+        ['Faction leader command','leader'],['Black Skulls','skulls'],
+        ['Quick commander','commander'],['Daily operations','operations'],
+        ['Turtling','turtle'],['Hospital watchers','control'],
+        ['Assignments','assignments'],['Full leadership orders','command']]],
+      ['RESULTS & PERFORMANCE',[
+        ['After-action reports','afteraction'],['Hit ledger','ledger'],
+        ['Ranked-war score pace','pace'],['Current / previous war timelines','timeline'],
+        ['Official war history','history'],['Enemy threat report','threats']]],
+      ['SCOUTING & STRATEGY',[
+        ['Enemy dossiers','targets'],['Detailed opponent intel','intel'],
+        ['Member-by-member matchups','matchups'],['Activity analysis','activity'],
+        ['Tactical strategy','strategy'],['Alerts','alerts']]],
+      ['CONFIGURATION',[
+        ['Settings / FFScouter / Sync','settings'],['Diagnostics','diagnostics']]]
+    ];
+    for(const [heading,links] of groups)h+=card(heading,
+      '<div class="ws-toolbar">'+links.map(([label,tab])=>b(label,'tab:'+tab)).join('')+'</div>');
+    return h;
+  }
+  function leaderScreen(){
+    const data=leadershipSummary(),bands=enemyRoleBands(),score=warScore(),
+      chain=chainStatus(),pace=warPace(),plan=turtlePlan(),
+      own=state.data.ours;
+    const black=own.filter(p=>cfg.blackSkulls[p.id]),
+      defensive=own.filter(p=>!cfg.blackSkulls[p.id]&&
+        ['turtle','reserve'].includes(plan.members[p.id])),
+      regular=own.filter(p=>!cfg.blackSkulls[p.id]&&
+        !['turtle','reserve'].includes(plan.members[p.id]));
+    const teamRows=(people,kind)=>people.length?people.map(p=>{
+      const target=state.data.enemies.find(x=>x.id===positive(cfg.assignments[p.id])),
+        roleValid=target&&roleAllows(p,target,bands),read=hitterReadiness(p),
+        evidence=target?matchEvidence(p,target):null;
+      return '<div class="ws-row"><span><b>'+infoButton(p.name,p.id)+'</b>'+
+        ' '+pill(p.status,memberState(p)==='okay'?'good':'')+
+        '<br><small>'+esc(hitterPlanStatus(p.id))+' | energy '+
+        (read.energy===null?'unknown':fmt(read.energy)+' E')+
+        ' | target '+(target?esc(target.name):'unassigned')+
+        (target&&!roleValid?' | WRONG BSS BRACKET':'')+
+        (evidence?.tier===0?' | favourable manual spies':' | matchup unverified')+
+        '</small></span><span>'+
+        b('Assign','tab:command')+' '+b('Matchups','hitter:'+p.id)+'</span></div>';
+    }).join(''):empty('No members currently allocated to '+kind+'.');
+    return statusNote()+'<div class="ws-lead"><span class="ws-data-label">FACTION LEADERSHIP | WAR COMMAND</span>'+
+      '<h2>Three-team battle coordination</h2>'+
+      '<p>Black Skulls take the top opponent BSS bracket. Regular attackers use the lower bracket. '+
+      'Defence/reserve members protect points and rotate in when needed.</p>'+
+      '<div class="ws-toolbar">'+b('Refresh','refresh')+
+        b('Draft role-safe orders','draft-black')+b('Edit every order','tab:command')+
+        b('Sync orders','tab:settings')+'</div></div>'+
+      '<div class="ws-grid">'+
+      stat('Score',score?fmt(score.our)+' / '+fmt(score.enemy):'Unknown','Official live score')+
+      stat('Net lead',score?(score.net>=0?'+':'')+fmt(score.net):'Unknown','Current ranked war')+
+      stat('Black Skulls',fmt(black.length),'Strong-opponent specialists')+
+      stat('Regular attackers',fmt(regular.length),'Lower-BSS targets')+
+      stat('Defence and reserve',fmt(defensive.length),'Manual turtle duties')+
+      stat('Current chain',chain.fresh?'#'+fmt(chain.count):'Unknown',
+        chain.fresh?chain.remaining+' seconds left':'Refresh chain')+
+      stat('Net scoring pace',pace?.measurable?fmt(pace.netRate)+' points/h':'Unknown',
+        'Locally observed timeline')+'</div>'+
+      (data.duplicateTargets.length?card('Assignments collision warning',
+        '<p>'+data.duplicateTargets.map(x=>'Enemy #'+x.id+' assigned '+x.count+' times').join('; ')+
+        '. Review manual orders before coordinating attacks.</p>'+b('Fix orders','tab:command')):'')+
+      (cfg.shared.enabled?card('Shared orders', '<p>Revision '+fmt(cfg.shared.revision||0)+
+        ' | '+(cfg.shared.localDirty?'Unpublished changes':'No pending local edits')+
+        (state.sharedError?' | '+esc(state.sharedError):'')+'</p>'+
+        '<div class="ws-toolbar">'+b('Pull orders','shared-pull')+
+        (cfg.shared.canWrite?b('Publish orders','shared-push'):'')+'</div>'):'')+
+      card('BLACK SKULLS | strongest enemy targets',teamRows(black,'Black Skulls'))+
+      card('REGULAR ATTACKERS | lower BSS targets',teamRows(regular,'regular attackers'))+
+      card('DEFENCE / RESERVE | coordinated cover',teamRows(defensive,'defence'))+
+      '<div class="ws-toolbar">'+b('Black Skulls control','tab:skulls')+
+        b('Turtling duties','tab:turtle')+b('Hospital control','tab:control')+
+        b('Performance leaderboard','tab:reports')+
+        b('Full planning','tab:command')+'</div>';
+  }
   function blackSkullsRoom(){
     const self=ourWarReadiness(),skulls=state.data.ours.filter(p=>cfg.blackSkulls[p.id]),
       personal=bestEfficiencyHit(),myId=positive(self.id),
@@ -3271,7 +3438,8 @@
         esc(x.title)+'</b><br><small>'+esc(x.detail)+'</small></span>'+
         b('Review','alert:'+x.id)+'</div>').join(''):empty('No verified urgent alerts. Keep statuses fresh.'))+
       '<div class="ws-toolbar">'+b(state.warMore?'Hide other stats':'Show other stats','war-more')+
-      b('Full commander','tab:commander')+'</div>';
+      b('Opponent intelligence','tab:enemy')+b('Reports / tools','tab:reports')+
+      b('Leader command','tab:leader')+'</div>';
     if(state.warMore)body+=card('More war intelligence','<div class="ws-toolbar">'+[
       ['Enemy intelligence','intel'],['Black Skulls','skulls'],['Player FF','targets'],['Matchups','matchups'],
       ['Pace','pace'],['Hit ledger','ledger'],['Threats','threats'],
@@ -3862,17 +4030,27 @@
     renderWarStrip();
     if(!state.open)return;
     const simple=(()=>{try{return JSON.parse(localStorage.getItem('staxx-hub-mode-v1'))!=='advanced';}catch(_){return true;}})();
-    const basics=['overview','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts'];
-    const focus=activeWarNow()?['overview','skulls','commander','operations','threats','targets']:basics;
-    const displayed=simple&&!state.showMore?sections.filter(s=>focus.includes(s)||s===state.tab):sections;
-    $('.ws-tabs',root).innerHTML=displayed.map(s=>'<button type="button" class="'+(s===state.tab?'on':'')+'" data-tab="'+s+'">'+esc(activeWarNow()&&s==='overview'?'LIVE WAR':labels[s])+'</button>').join('')+
-      (simple?'<button type="button" data-action="more">'+(state.showMore?'Less':'More')+'</button>':'');
-    const pages={overview,skulls:blackSkullsRoom,commander,operations,ledger,threats,control,turtle,command,pace,afteraction,intel,targets,matchups,timeline,strategy,activity,history,assignments:orders,alerts:alertView,settings,diagnostics};
+    // The permanent Torn strip is layer 0; the modal has exactly three primary screens.
+    // All legacy deep links remain valid and are reachable from Reports / Opponent.
+    const primary=['overview','enemy','reports'];
+    const detailGroup=['intel','targets','matchups','timeline','activity','history','threats']
+      .includes(state.tab)?'enemy':'reports';
+    $('.ws-tabs',root).innerHTML=primary.map(tab=>
+      '<button type="button" class="'+((state.tab===tab||
+        !primary.includes(state.tab)&&tab===detailGroup)?'on':'')+
+      '" data-tab="'+tab+'">'+esc(labels[tab])+'</button>').join('');
+    const pages={overview,enemy:enemyScreen,reports:reportsScreen,leader:leaderScreen,skulls:blackSkullsRoom,commander,operations,ledger,threats,control,turtle,command,pace,afteraction,intel,targets,matchups,timeline,strategy,activity,history,assignments:orders,alerts:alertView,settings,diagnostics};
     const content=$('.ws-content',root);
     const scroll=content.scrollTop;
     const form=state.tab==='settings'?Array.from(content.querySelectorAll('input,select,textarea')).map(x=>({id:x.id,checked:x.checked,value:x.value,type:x.type})):null;
     const priorLeaderNote=state.tab==='command'&&$('#ws-leader-note',content)?$('#ws-leader-note',content).value:null;
-    try{content.innerHTML=state.tab==='targets'&&state.playerOpen?playerIntel(state.chosen):(pages[state.tab]||overview)();}catch(e){content.innerHTML=empty('Render error: '+String(e.message||e));}
+    try{
+      const detail=!primary.includes(state.tab)?
+        '<div class="ws-toolbar">'+b('Back to '+(detailGroup==='enemy'?'Opponent':'Reports'),
+          'tab:'+detailGroup)+' '+pill(labels[state.tab]||state.tab)+'</div>':'';
+      content.innerHTML=detail+(state.tab==='targets'&&state.playerOpen?
+        playerIntel(state.chosen):(pages[state.tab]||overview)());
+    }catch(e){content.innerHTML=empty('Render error: '+String(e.message||e));}
     if(form)for(const prior of form){if(!prior.id)continue;const field=content.querySelector('#'+prior.id);
       if(!field)continue;if(prior.type==='checkbox')field.checked=prior.checked;else field.value=prior.value;}
     if(priorLeaderNote!==null&&$('#ws-leader-note',content))$('#ws-leader-note',content).value=priorLeaderNote;
