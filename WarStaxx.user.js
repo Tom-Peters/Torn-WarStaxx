@@ -2873,7 +2873,7 @@
     if(state.warMore)body+=card('More war intelligence','<div class="ws-toolbar">'+[
       ['Enemy intelligence','intel'],['Black Skulls','skulls'],['Player FF','targets'],['Matchups','matchups'],
       ['Pace','pace'],['Hit ledger','ledger'],['Threats','threats'],
-      ['Turtling strategy','turtle'],['Hospital control','control'],['Black Skulls','command'],
+      ['Turtling strategy','turtle'],['Hospital control','control'],['Leadership','command'],
       ['Operations','operations'],['Activity','activity'],['Previous wars','history'],
       ['Timeline','timeline'],['Orders','assignments'],['After action','afteraction'],
       ['Settings','settings']
@@ -3476,7 +3476,12 @@
       root.style.display='block';
       root.style.visibility='visible';
       root.style.pointerEvents='auto';
-      if(detail.alertId){const alert=currentAlerts().find(a=>a.id===detail.alertId);navigate(alert?.tab||'alerts',detail.alertId);}
+      if(detail.alertId){
+        const alert=currentAlerts().find(a=>a.id===detail.alertId);
+        if(alert?.targetId&&state.data.enemies.some(p=>p.id===positive(alert.targetId))){
+          navigate('targets');state.chosen=positive(alert.targetId);state.playerOpen=true;render();
+        }else navigate(alert?.tab||'alerts',detail.alertId);
+      }
       else navigate(sections.includes(detail.section)?detail.section:state.tab);
       // Announce opening only after mounting the real visible UI.
       event('panel',{id:ID,open:true});
@@ -3495,7 +3500,6 @@
     if(action==='refresh'){refresh(true);return;}
     if(action==='war-more'){state.warMore=!state.warMore;render();return;}
     if(action==='fast-turtle'){warQuick('turtle');return;}
-    if(action==='fast-skulls'){warQuick('skulls');return;}
     if(action==='fast-skulls'){warQuick('skulls');return;}
     if(action==='fast-hit'){warQuick('hit');return;}
     if(action==='fast-heal'){warQuick('heal');return;}
