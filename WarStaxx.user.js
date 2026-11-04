@@ -1209,6 +1209,21 @@
           '. Partial attack feed; check hospital control and status.',
         status:'review',priority:83,tab:'threats'});
     }
+    if(w&&rosterFresh('ours')){
+      const defence=turtleAssessment();
+      const exposedDuty=defence.rows.filter(x=>x.assigned==='turtle'&&x.danger);
+      const uncovered=defence.plan.mode==='full'&&defence.exposed>0;
+      if(exposedDuty.length||uncovered)
+        out.push({id:'turtle-exposure',title:'Turtling exposure requires review',
+          detail:(exposedDuty.length?exposedDuty.length+' manually marked turtle member(s) are currently targetable. ':
+            '')+(uncovered?defence.exposed+' faction member(s) are still exposed in full-turtle posture. ':'')+
+            'Local duties are not proof of hospital or travel protection.',
+          status:'review',priority:89,tab:'turtle'});
+      if(defence.plan.mode!=='balanced'&&defence.dueSoon>0)
+        out.push({id:'turtle-expiry',title:defence.dueSoon+' defensive status expiry(s) approaching',
+          detail:'Observed own hospital or flight timer within 15 minutes. Recheck Torn status and coordinate manually.',
+          status:'review',priority:85,tab:'turtle'});
+    }
     const newDebrief=Object.values(state.data.afterActions).find(x=>x.newFromObservedWar&&!x.reviewed);
     if(newDebrief)out.push({id:'after-action-'+newDebrief.id,title:'Ranked war after-action ready',detail:'War #'+newDebrief.id+' '+newDebrief.outcome+'; review the scoreline, known contributors and tactical lessons.',status:'review',priority:81,tab:'afteraction'});
     if(w){const pace=warPace();
