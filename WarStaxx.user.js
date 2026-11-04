@@ -785,6 +785,83 @@
   function empty(s){return '<p class="ws-empty">'+esc(s)+'</p>';}
   function b(text,action,extra=''){return '<button class="ws-btn" type="button" data-action="'+esc(action)+'" '+extra+'>'+esc(text)+'</button>';}
   function a(text,url){return '<a href="'+esc(url)+'" target="_self" class="ws-btn secondary">'+esc(text)+'</a>';}
+  function infoButton(text,id){return b(text,'player:'+id);}
+  function scoreLabel(value){return value===null||value===undefined?'\u2014':fmt(value);}
+  function lastWarLine(side,id){
+    const rec=recentWarRecords(side,id).find(x=>x.covered);
+    return rec?'War #'+rec.war.id+' | '+fmt(rec.score)+' score | '+fmt(rec.attacks)+' attacks':
+      'No official member report loaded';
+  }
+  function reportSide(r,id){return r?.factions?.find(x=>x.id===positive(id))||null;}
+  function factionLink(id){return 'https://www.torn.com/factions.php?step=profile&ID='+positive(id);}
+  function perMemberRows(side,limit=50){
+    return (state.data[side]||[]).map(p=>({p,last:lastKnownMemberScore(side,p.id),
+      lifetime:pastPerformance(p.id,side),activity:pattern(side,p.id)}))
+      .sort((a,b)=>(b.last??-1)-(a.last??-1)||b.lifetime.score-a.lifetime.score)
+      .slice(0,limit);
+  }
+  function statAction(title,value,detail,action){
+    return '<button type="button" class="ws-card ws-stat-action" data-action="'+esc(action)+'">'+
+      '<span class="ws-stat-title">'+esc(title)+'</span><span class="ws-number">'+esc(value)+'</span>'+
+      '<small>'+esc(detail)+'</small><span class="ws-stat-link">Explore \u2192</span></button>';
+  }
+  function publicMetricItems(value,depth=0,prefix=''){
+    if(depth>3||!value||typeof value!=='object')return [];
+    const out=[];
+    for(const [key,v] of Object.entries(value)){
+      if(['_metadata','id','name','player_id','faction_id'].includes(key))continue;
+      if(typeof v==='number'&&Number.isFinite(v))out.push({name:(prefix?prefix+' / ':'')+key,value:v});
+      else if(v&&typeof v==='object'&&!Array.isArray(v))out.push(...publicMetricItems(v,depth+1,prefix?prefix+' / '+key:key));
+      if(out.length>=100)break;
+    }
+    return out.slice(0,100);
+  }
+  function publicStatsHtml(id){
+    const item=state.data.publicIntel[id];
+    if(!item)return empty('Public profile and personal statistics not yet loaded. Select the lookup button to fetch them from Torn.');
+    const p=item.profile||{},stats=publicMetricItems(item.stats||{}).slice(0,65);
+    return '<p>Last checked '+esc(age(item.at))+' | Torn public API. These may be lifetime stats, not ranked-war totals.</p>'+
+      '<div class="ws-grid">'+
+      stat('Profile rank',p.rank||'\u2014','Torn public profile')+
+      stat('Account age',p.age===null||p.age===undefined?'\u2014':fmt(p.age)+' days','Torn public profile')+
+      stat('Public awards',p.awards===null||p.awards===undefined?'\u2014':fmt(p.awards),'Torn public profile')+
+      '</div>'+(stats.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Public statistic</th><th>Value</th></tr></thead><tbody>'+
+      stats.map(x=>'<tr><td>'+esc(x.name.replace(/_/g,' '))+'</td><td>'+fmt(x.value)+'</td></tr>').join('')+'</tbody></table></div>':
+      empty('This key returned no numerical public personal-stat fields.'));
+  }
+  async function loadPublicIntel(id){
+    if(!positive(id)||state.loading)return;
+    const item=state.data.publicIntel[id];
+    if(item&&Date.now()-n(item.at)<6*HOUR){state.error='Public lookup is cached '+age(item.at)+'. Refresh after six hours.';render();return;}
+    state.loading=true;state.error='';render();
+    const obj={profile:item?.profile||{},stats:item?.stats||{},at:Date.now()};
+    try{
+      const profile=await call('/user/'+id+'/profile','public-profile-'+id,6*HOUR);
+      const pr=profile?.profile||profile||{};
+      if(profile)obj.profile={rank:String(pr.rank||''),age:pr.age===undefined?null:n(pr.age),
+        awards:pr.awards===undefined?null:n(pr.awards)};
+    }catch(e){state.data.errors['public-profile-'+id]=String(e.message||e);}
+    try{
+      const stats=await call('/user/'+id+'/personalstats?cat=popular','public-stats-'+id,6*HOUR);
+      if(stats)obj.stats=stats.personalstats||stats;
+    }catch(e){state.data.errors['public-stats-'+id]=String(e.message||e);}
+    if(Object.keys(obj.profile).length||Object.keys(obj.stats).length){
+      state.data.publicIntel[id]=obj;
+      const keys=Object.keys(state.data.publicIntel).sort((a,b)=>n(state.data.publicIntel[b]?.at)-n(state.data.publicIntel[a]?.at));
+      for(const old of keys.slice(80))delete state.data.publicIntel[old];
+    }else state.error='Public profile and stats unavailable. Check Diagnostics for denied selections.';
+    state.loading=false;save();render();
+  }
+  async function loadWarReport(id){
+    if(!positive(id)||state.loading)return;
+    state.loading=true;state.error='';render();
+    try{
+      const data=await call('/faction/'+id+'/rankedwarreport','report-'+id);
+      if(data)state.data.reports[id]=report(data,id);
+      else if(!state.data.reports[id])state.error='War report not available yet. Check Diagnostics for endpoint errors.';
+    }catch(e){state.error='Cannot load official report: '+String(e.message||e);}
+    finally{state.loading=false;save();render();}
+  }
   function statusNote(){
     const latest=Math.max(n(state.data.updated.enemies),n(state.data.updated.ours));
     const fresh=latest&&Date.now()-latest<5*MIN;
