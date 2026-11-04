@@ -126,7 +126,7 @@ test('Black Skulls and regular-member reports have separate copyable, source-lab
   '  squadSource:"Tags observed during war",source:"Official report",',
   '  points:side==="black"?200:80,attacks:side==="black"?10:8,perHit:side==="black"?20:10,',
   '  enemyPointsReceived:side==="black"?60:25,netProxy:side==="black"?140:55,',
-  '  rows:[{id:10,name:"Hitter",score:200,attacks:10,received:60,incomingHits:2}]}),',
+  '  rows:[{id:10,name:"Hitter",score:200,attacks:10,received:60,incomingHits:2}]});',
  ].join('\n');
  const f=fixture(setup,'  function squadReportText(','  function squadReportCard(',
    '({squadReportText})');
