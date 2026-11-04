@@ -1,5 +1,41 @@
 > **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v1.0.0). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
 
+## v1.2.0 - Black Skulls hard-target allocation and four-layer war workflow (4 November 2026)
+
+### The four parts of WarStaxx
+
+1. **Always-on strip on Torn's own pages**: a small persistent WarStaxx command bar appears even while scouting or between ranked wars, with **Act Now / Opponent / Reports** shortcuts. During a recently verified active ranked war the bar expands to show official score/net, chain/countdown, imminent bonuses, own energy/status, the best evidence-gated target and manual Turtle / Hit / Heal shortcuts. On scrolling it reduces to compact controls.
+2. **01 | ACT NOW**: first screen, focused on the live war's score, chain, what to do next, verified target, the most important enemy status facts, near-chain-bonus guidance, a small source-qualified live player leaderboard, and urgent actions. No 20-tab horizontal menu.
+3. **02 | OPPONENT**: faction-level scouting. Current availability, online/recent activity, travel/hospital status, their last completed war and scoring, actual enemy top-hitters, FFScouter coverage, a ranked BSS/BSE roster and the Black Skulls versus regular target split. Every opponent row opens a profile, with drilldowns into existing timelines, player intel, hospital control, previous wars and individual matchups.
+4. **03 | REPORTS**: advanced tools grouped into Operations & Orders, Results & Performance, Scouting & Strategy, and Configuration. All legacy WarStaxx sections remain accessible here (and old hub deep links still work). A separate **Leader command** view provides role-separated war management.
+
+### Black Skulls = the heavy hitters
+
+**Black Skulls are reserved for the toughest approximately 40% of opponents with known BSS**, sorted by BSS first and level second. Regular attackers are recommended opponents from the lower known-BSS bracket. Any opponent lacking valid BSS evidence is **unclassified**, not automatically treated as weak. The buckets are stable across enemy hospital status changes, so members do not receive a sudden easier/harder assignment simply because someone temporarily goes to hospital.
+
+- Enemy BSS source priority: a **recent (<=30 days) manually entered spy**; otherwise a **fresh FFScouter public BSS estimate**, with FFScouter enabled by that individual user and their own registered key and consent. Never reuse the FF multiplier for the API-key owner as a different member's FF, and never treat an estimate as a verified fight.
+- Black Skulls are specifically shown opponent strength, status and the teammates with favourable **recent comparable manual spies**. An in-role target with no verified matchup is marked **scout first**.
+- The automatic Hit action and the auto-draft consider **only that member's assigned strength bracket**, verify own/enemy roster freshness, confirmed manual matchup margin, risk profile, wins/losses and conflicting orders. Manual assignment controls reject new orders to the wrong bracket; previously saved wrong-bracket orders are flagged for review instead of silently deleted.
+- Leadership sees three coordinated groups: **Black Skulls / regular attackers / defence and reserve**. Each member's status, manually saved role, energy evidence, assigned target and verification state is clickable.
+
+### Five additional upgrades
+
+- **Share more duties**: the opt-in, faction-scoped Cloudflare D1 backend now synchronises **six kinds of information**: member targets, Black Skull tags, individual risk settings, hospital-control watchers, per-war turtle posture/member duties, and per-war leader duty statuses. Each write has an atomic revision check. Shared payloads deliberately exclude Torn keys, FFScouter keys, spy reports, notes and private readiness. The backend still needs deployment and explicit tokens; it is off by default.
+- **Underperformance relative to own previous wars**: Black Skulls have a personal performance watch comparing points per attack against their own last three available official ranked-war scorecards. A below-own-baseline flag requires two comparable prior scorecards, at least five current recorded attacks, and a >=30% decline. This is a review prompt, not proof of worse combat ability: live captures may be incomplete and assignments, bonuses and energy use vary. It is available in the Black Skulls screen, Leader command and completed after-action report.
+- **Dedicated chain-bonus hit recommendation**: within three successful hits of an observed chain milestone, WarStaxx reserves a potential enemy-faction victim chosen from recent favourable per-member manual spies, prioritising proven winning encounters and larger battle-stat margin. The bonus amount is shown only as unlocked-conditional and is **not** applied if the member hits outside the opposing ranked-war faction. Attack initiation remains manual.
+- **Live faction leaderboard**: captured per-member points, attacks, points per attack, individual history baseline, Black Skull identity and source confidence in a small first-screen view and full report/leaderboard. Missing attack API access is labelled **unknown**, not zero.
+- **Leader strategic view**: separate tactical coordination dashboard with scores, net scoring pace, Black Skulls high-strength allocation, regular attackers, defensive members, chain/bonus planning, role clashes, sync status, underperformance evidence and one-click navigation to change local leader orders.
+
+### Important accuracy limits
+
+FFScouter provides a probabilistic estimate of battle-stat score; it is not an exact spy. All manual attack recommendations require a favourable, recent comparable **manual** battle-stat spy; FF/BSS alone does not authorise a hit. Role classification itself can use FFScouter BSS, but stale BSS is excluded. Source timestamps and unavailable information are shown honestly.
+
+The live bar, role tabs and post-war metrics are usable without deploying the shared backend. No script automatically attacks, flies, uses an item or changes Torn settings. Refreshes happen only when Torn PDA is visible and API access permits them; the service does not watch while closed.
+
+### Testing
+
+WarStaxx regression checks include old functionality, new role allocation, preserving other-war duties during shared sync, historical performance baseline mathematics and the four-layer navigation. Additional Worker tests verify token roles, faction isolation, revision conflicts and turtle/leader-duty validation. **Live Torn PDA UI and an actual deployed Cloudflare Worker must still be verified on device.**
+
 ## v1.1.0 - Adaptive combat learning, Black Skulls risk, chain and shared war orders (4 November 2026)
 
 Install / update at the **existing Torn PDA URL**:
