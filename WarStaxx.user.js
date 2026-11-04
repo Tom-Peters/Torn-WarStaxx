@@ -1459,7 +1459,7 @@
       '<p class="ws-small">Each check contributes once per member; this is not a continuous online record or a verified prediction of sleep. Both rosters need samples in the same hour for comparison.</p>');
     html+=card('Player-by-player activity and travel',
       summary.length?'<div class="ws-table-wrap"><table><thead><tr><th>Opponent</th><th>Online checks</th><th>General travel</th><th>War travel</th><th>Peak observed hour</th><th>Coverage</th><th>Intel</th></tr></thead><tbody>'+
-      summary.map(x=>'<tr><td>'+infoButton(x.p.name,x.p.id)+'</td><td>'+
+      summary.map(x=>'<tr><td>'+infoButton(x.p.name,x.p.id)+' '+ffBadge(x.p.id)+'</td><td>'+
       (x.pat.count?x.pat.online+'%':'\u2014')+'</td><td>'+
       (x.pat.count?x.pat.travel+'%':'\u2014')+'</td><td>'+
       (x.pat.warTravel===null?'No war samples':x.pat.warTravel+'% / '+x.pat.warSamples+' checks')+'</td>'+
@@ -1496,19 +1496,19 @@
     html+=card('Top recorded performers',
       '<div class="ws-grid">'+[['Our side','ours'],['Opponent','enemies']].map(([label,side])=>
       '<div><h3>'+label+'</h3>'+perMemberRows(side,10).filter(x=>x.last!==null)
-      .map(x=>'<div class="ws-row">'+infoButton(x.p.name,x.p.id)+
+      .map(x=>'<div class="ws-row">'+infoButton(x.p.name,x.p.id)+(side==='enemies'?' '+ffBadge(x.p.id):'')+
       '<span>'+fmt(x.last)+' recent score</span></div>').join('')+'</div>').join('')+'</div>');
     return html;
   }
   function orders(){
     const rows=assignments();
-    return statusNote()+card('Member-by-member orders','<p>Auto-assigned targets require manually entered, comparable battle stats for both players. Otherwise the tool recommends reconnaissance rather than pretending a hit is safe. Saved manual orders always take priority.</p>'+
+    return statusNote()+card('Member-by-member orders','<p>FF badges are FFScouter estimates for your key, not for each Black Skulls member. A modelled per-hitter FF appears in the reason column only when comparable BSS data exists. Unverified hits stay manual.</p>'+
       (!rows.length?empty('Your faction roster is missing. Refresh to load members.'):
       '<div class="ws-toolbar">'+b('Copy war orders','copy-orders')+'</div>'+ 
       '<div class="ws-table-wrap"><table><thead><tr><th>Our member</th><th>Next assignment</th><th>Reason / confidence</th><th>Actions</th></tr></thead><tbody>'+
       rows.map(x=>'<tr><td>'+infoButton(x.friend.name,x.friend.id)+(cfg.blackSkulls[x.friend.id]?' '+pill('Black Skull','good'):'')+(isOnline(x.friend)?' '+pill('Online','good'):'')+'</td>'+
-        '<td>'+(x.enemy?infoButton(x.enemy.name,x.enemy.id):'Scout / Support / Standby')+'</td>'+
-        '<td>'+esc(x.reason)+(x.details?.known?'<br><small>'+x.details.verdict+'; model FF '+x.details.ff.toFixed(2)+'x</small>':'')+'</td>'+
+        '<td>'+(x.enemy?infoButton(x.enemy.name,x.enemy.id)+' '+ffBadge(x.enemy.id):'Scout / Support / Standby')+'</td>'+
+        '<td>'+esc(x.reason)+(x.details?.known?'<br><small>'+x.details.verdict+'; '+x.friend.name+' model FF '+x.details.ff.toFixed(2)+'x</small>':'<br><small>Specific hitter FF unknown</small>')+'</td>'+
         '<td>'+(x.enemy?a('Profile',link(x.enemy.id))+' '+a('Attack',attackLink(x.enemy.id)):'')+
           ' '+b(cfg.blackSkulls[x.friend.id]?'Unmark Black Skull':'Mark Black Skull','black-skill:'+x.friend.id)+
           ' '+b('Clear order','clear-assign:'+x.friend.id)+'</td></tr>').join('')+'</tbody></table></div>'))+
@@ -1529,11 +1529,11 @@
       '<label>Automatic refresh<select id="ws-interval">'+[90,120,180,300].map(s=>'<option value="'+s+'" '+(cfg.refreshSeconds===s?'selected':'')+'>'+s+' seconds while visible</option>').join('')+'</select></label>'+
       '<label>Historical wars per side<select id="ws-limit">'+[3,5,8,12,20].map(s=>'<option value="'+s+'" '+(cfg.historyLimit===s?'selected':'')+'>'+s+' wars</option>').join('')+'</select></label>'+
       '<label><input type="checkbox" id="ws-attacks" '+(cfg.enableAttacks?'checked':'')+'> Read my faction attacks for observed fair-fight data (extra API permission)</label>'+ 
-      '<h3>FFScouter \u00b7 optional, independent service</h3><p>Enter your own Torn API key that you have registered with FFScouter. This sends that key and selected opponent IDs to FFScouter; unlike the standard Torn API requests, this is a third-party service. Read the <a href="https://ffscouter.com/#data-policy" target="_blank" rel="noopener noreferrer">FFScouter data policy</a> and consider their premium plans if useful.</p>'+ 
-      '<label>Registered FFScouter API key<input id="ws-ffkey" type="password" autocomplete="off" placeholder="'+(cfg.ffKey?'Key saved \u00b7 leave blank to keep':'Torn key registered with FFScouter')+'"></label>'+ 
+      '<h3>FFScouter \u00b7 optional, independent service</h3><p>When enabled with explicit consent, WarStaxx uses your registered FFScouter key or your existing Torn PDA key if the separate field is empty. It sends that key and target player IDs to FFScouter, not to TornStaxx hub. You must first register the key with FFScouter. Read the <a href="https://ffscouter.com/#data-policy" target="_blank" rel="noopener noreferrer">FFScouter data policy</a>; free and premium plans may offer different data.</p>'+ 
+      '<label>Optional FFScouter-specific API key<input id="ws-ffkey" type="password" autocomplete="off" placeholder="'+(cfg.ffKey?'Separate key saved; blank keeps it':effectiveKey()?'Uses your Torn PDA key when opted in':'Enter a registered key or connect Torn PDA key')+'"></label>'+ 
       '<label><input type="checkbox" id="ws-ff-consent" '+(cfg.ffConsent?'checked':'')+'> I have read the FFScouter data policy and knowingly enable this third-party lookup.</label>'+ 
-      '<label><input type="checkbox" id="ws-ff-enable" '+(cfg.ffEnabled?'checked':'')+'> Fetch FFScouter estimates using my registered key, no more than once per 10 minutes.</label>'+
-      '<div class="ws-toolbar">'+b('Save settings','save-settings')+b('Detect my faction now','detect-faction')+b('Refresh all now','refresh')+b('Clear stored API key','clear-key')+'</div>'+
+      '<label><input type="checkbox" id="ws-ff-enable" '+(cfg.ffEnabled?'checked':'')+'> Show estimated FF next to players and fetch no more than once per 10 minutes.</label>'+
+      '<div class="ws-toolbar">'+b('Save settings','save-settings')+b('Verify FF key','check-ff-key')+b('Refresh FF','refresh-ff')+b('Use PDA key for FF','clear-ff-key')+b('Detect my faction now','detect-faction')+b('Refresh all now','refresh')+b('Clear stored API key','clear-key')+'</div>'+
       '<p class="ws-small">API access depends on your custom key scope. Opponent member lists and ranked-war history use public selections; your own detailed attacks require faction access.</p>')+
       card('Local intelligence controls','<p>War histories, observations, manual spy reports and assignments remain in this browser storage. No central database or cross-device sync is active.</p>'+
       b('Reset activity samples only','reset-activity')+' '+b('Reset manual orders','reset-orders'))+
@@ -1547,7 +1547,11 @@
       ' | Mode: '+(cfg.factionAuto===false?'manual':'automatic')+
       ' | Verified: '+esc(age(cfg.factionVerifiedAt))+'</p>'+
       '<p>Opponent ID: '+(positive(cfg.enemyId)?'configured':'missing')+'</p>'+
-      '<p>Last known roster: '+esc(age(Math.max(n(d.updated.enemies),n(d.updated.ours))))+'</p>'+
+      '<p>Last known roster: '+esc(age(Math.max(n(d.updated.enemies),n(d.updated.ours))))+'</p>'+ 
+      '<p>FFScouter: '+(cfg.ffEnabled?'enabled':'disabled')+' | consent '+(cfg.ffConsent?'yes':'no')+
+      ' | registration '+(d.meta?.ffRegistration?.registered?'verified':d.meta?.ffRegistration?.registered===false?'not registered':'unchecked')+
+      ' | API bridge '+(typeof PDA_httpGet==='function'?'Torn PDA':typeof GM_xmlhttpRequest==='function'?'GM':'missing')+
+      ' | last success '+esc(age(d.updated.ffscouter))+' | '+ffCoverage().covered+' fresh results</p>'+
       '<h3>Source freshness and API errors</h3>'+
       '<div class="ws-table-wrap"><table><thead><tr><th>Endpoint</th><th>Last success</th><th>Last error</th></tr></thead><tbody>'+
       [...new Set([...Object.keys(d.updated),...Object.keys(d.errors)])].slice(0,60).map(k=>
@@ -1648,6 +1652,7 @@
       return;
     }
     if(action==='clear-key'){cfg.key='';cfg.factionVerifiedAt=0;saveCfg();render();return;}
+    if(action==='clear-ff-key'){cfg.ffKey='';delete state.data.meta.ffRegistration;state.data.updated.ffscouter=0;saveCfg();save();state.error='FFScouter will use your Torn PDA key if you enabled and consented to FF lookup.';render();return;}
     if(action==='detect-faction'){
       cfg.factionAuto=true;
       cfg.factionVerifiedAt=0;
