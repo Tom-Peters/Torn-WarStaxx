@@ -14,6 +14,7 @@ function ffFixture(){
     const HOUR=3600000;
     const cfg={ffEnabled:true,ffConsent:true,ffKey:'myregisteredkey'};
     const state={data:{ffstats:{},enemies:[{id:101},{id:102},{id:103}],updated:{},attacks:[]}};
+    const n=v=>Number.isFinite(Number(v))?Number(v):0;
     const positive=v=>Number.isSafeInteger(Number(v))&&Number(v)>0?Number(v):0;
     const effectiveKey=()=> 'tornpdakey';
     const age=t=>t?'recent':'never';
