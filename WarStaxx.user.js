@@ -220,11 +220,12 @@
     cfg.heavyPolicy&&typeof cfg.heavyPolicy==='object'?cfg.heavyPolicy:{});
   cfg.shared=Object.assign({enabled:false,endpoint:'',token:'',canWrite:false},
     cfg.shared&&typeof cfg.shared==='object'?cfg.shared:{});
-  const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},factionBasic:{},publicIntel:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},scoreTimelines:{},warTimelines:{},afterActions:{},ownerReadiness:{},availabilityEvents:{},chain:{},sampleCount:0});
+  const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},factionBasic:{},publicIntel:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},scoreTimelines:{},warTimelines:{},afterActions:{},ownerReadiness:{},availabilityEvents:{},chain:{},squadSnapshots:{},sampleCount:0});
   const state={data:Object.assign(freshData(),safeRead(DATA,{})),open:false,tab:'overview',showMore:false,
     filter:'all',sort:'warScore',search:'',commanderFilter:'black',controlFocus:0,loading:false,ffLoading:false,spinner:'',error:'',scanning:false,alerts:[],chosen:0,
     lastRefresh:0,historicalRead:0,localKeyError:false,sharedBusy:false,sharedDirty:false,sharedRevision:0,sharedSyncAt:0,sharedEditVersion:0,sharedError:'',warMore:false,quickHitPending:false,stripScrolled:false,stripExpanded:false,warExpected:false,selectedWar:0,selectedTimeline:0,selectedPace:0,selectedDebrief:0,detailFrom:'targets',leaderFilter:'all',hitterFilter:'all'};
   state.data.reports=state.data.reports||{};
+  state.data.squadSnapshots=state.data.squadSnapshots||{};
   state.data.activity=state.data.activity||{};
   state.data.ffstats=state.data.ffstats||{};
   state.data.publicIntel=state.data.publicIntel||{};
@@ -3295,6 +3296,75 @@
 
 
 
+
+  // Enemy scored attacks against our members count toward their faction's
+  // ranked-war score, not deductions from the defender's personal score.
+  function inboundWarImpact(warId=positive(state.data.war?.id)){
+    const rows=warAttackRows(warId).filter(a=>a.side==='enemies'),
+      known=Boolean(rows.length||n(state.data.updated.attacks)>0),
+      byMember={},safePoints=a=>officialNumber(a.respect)!==null?
+        Math.max(0,n(a.respect)):0;
+    for(const a of rows){
+      if(!positive(a.defender))continue;
+      const id=positive(a.defender),row=byMember[id]||
+        (byMember[id]={id,attacks:0,scoringAttacks:0,enemyScore:0,
+          lastAt:0,source:'Captured enemy ranked-war attacks'});
+      row.attacks++;
+      if(safePoints(a)>0){row.scoringAttacks++;row.enemyScore+=safePoints(a);}
+      row.lastAt=Math.max(row.lastAt,n(a.at));
+    }
+    return {known,partial:true,byMember,rows:rows.length,
+      total:rows.reduce((sum,a)=>sum+safePoints(a),0)};
+  }
+  // Per-war role snapshot prevents past reports changing when local tags change.
+  function snapshotWarSquads(warId=positive(state.data.war?.id),at=Date.now()){
+    if(!positive(warId)||!state.data.ours?.length)return null;
+    const key=String(warId),db=state.data.squadSnapshots||
+      (state.data.squadSnapshots={}),prev=db[key]||{},
+      ids=state.data.ours.map(p=>positive(p.id)),
+      skullIds=ids.filter(id=>cfg.blackSkulls[id]===true);
+    db[key]={warId,at,memberIds:ids,blackSkullIds:skullIds,
+      source:'Local Black Skulls tags observed during this war',firstAt:prev.firstAt||at};
+    for(const old of Object.keys(db).sort((a,b)=>n(db[b].at)-n(db[a].at)).slice(30))
+      delete db[old];
+    return db[key];
+  }
+  function warSquadSnapshot(warId){
+    const snap=state.data.squadSnapshots?.[String(positive(warId))]||null;
+    if(snap?.memberIds?.length)return {
+      black:new Set((snap.blackSkullIds||[]).map(positive).filter(Boolean)),
+      source:snap.source||'Local squad tags observed during war',observedAt:snap.at,
+      historical:true};
+    return {black:new Set(Object.keys(cfg.blackSkulls)
+      .filter(id=>cfg.blackSkulls[id]).map(positive)),
+      source:'CURRENT local Black Skulls tags (no in-war snapshot)',
+      observedAt:0,historical:false};
+  }
+  function squadWarSummary(warId,side){
+    const snap=warSquadSnapshot(warId),source='Official completed-war scorecards',
+      report=state.data.reports[String(positive(warId))]
+        ?.factions?.find(x=>positive(x.id)===positive(cfg.ourId)),
+      members=report?.members||[],
+      selected=members.filter(p=>(side==='black')===snap.black.has(positive(p.id))),
+      inbound=inboundWarImpact(warId),known=Boolean(report),
+      ids=new Set(selected.map(p=>positive(p.id)));
+    const points=known?selected.reduce((sum,p)=>sum+n(p.score),0):null,
+      attacks=known?selected.reduce((sum,p)=>sum+n(p.attacks),0):null,
+      received=known&&inbound.known?
+        Object.values(inbound.byMember).filter(p=>ids.has(p.id))
+          .reduce((sum,p)=>sum+p.enemyScore,0):null;
+    return {side,warId,source:known?source:'Official member scorecard unavailable',
+      squadSource:snap.source,members:known?selected.length:null,points,attacks,
+      perHit:attacks?points/attacks:null,enemyPointsReceived:received,
+      netProxy:points!==null&&received!==null?points-received:null,
+      incomingPartial:inbound.known,
+      rows:selected.slice().sort((a,b)=>n(b.score)-n(a.score)).map(p=>({
+        id:p.id,name:p.name,score:officialNumber(p.score),
+        attacks:officialNumber(p.attacks),
+        received:inbound.known?inbound.byMember[p.id]?.enemyScore||0:null,
+        incomingHits:inbound.known?inbound.byMember[p.id]?.scoringAttacks||0:null
+      }))};
+  }
   function ownHistoricalEfficiency(memberId,excludeWar=0){
     const list=state.data.ourWars.filter(w=>w.end&&positive(w.id)!==positive(excludeWar))
       .sort((a,b)=>n(b.end)-n(a.end));
@@ -3321,6 +3391,10 @@
       source=report?'Official completed-war report':ledger?'Partial captured attack feed':'Unknown',
       hits=report?officialNumber(report.attacks):ledger?.hits??null,
       points=report?officialNumber(report.score):ledger?.respect??null,
+      incoming=inboundWarImpact(warId),
+      received=incoming.known?incoming.byMember[positive(player.id)]||null:null,
+      enemyPointsReceived=incoming.known?received?.enemyScore||0:null,
+      enemyScoringHits=incoming.known?received?.scoringAttacks||0:null,
       base=ownHistoricalEfficiency(player.id,warId),
       perHit=hits&&points!==null?points/hits:null;
     let status='Insufficient comparable evidence',ratio=null;
@@ -3330,7 +3404,10 @@
         ratio>=1.15?'Above own historical average':
           'In line with own historical average';
     }
-    return {player,hits,points,perHit,baseline:base.perHit,priorWars:base.samples,
+    return {player,hits,points,enemyPointsReceived,enemyScoringHits,
+      netProxy:points!==null&&enemyPointsReceived!==null?points-enemyPointsReceived:null,
+      inboundSource:incoming.known?'Partial captured enemy attack feed':'Inbound history unavailable',
+      perHit,baseline:base.perHit,priorWars:base.samples,
       ratio,status,source,limited:!report,flag:ratio!==null&&ratio<0.7};
   }
   function performanceLeaderboard(warId=positive(state.data.war?.id)){
