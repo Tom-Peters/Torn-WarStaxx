@@ -1006,7 +1006,7 @@
         pill(w.winner===fid?'Won':w.winner?'Lost':'Unknown',w.winner===fid?'good':'')+'</td><td>'+
         scoreLabel(one?.score)+' / '+scoreLabel(other?.score)+'</td><td>'+b('Scorecard','war:'+w.id)+'</td></tr>';}).join('')+
       '</tbody></table></div>':empty('No completed ranked wars have loaded yet. Refresh or select an enemy faction in Settings.'))+
-      '<div class="ws-toolbar">'+b('See all past wars','tab:history')+'</div>');
+      '<div class="ws-toolbar">'+b('See all past wars','tab:history')+'</div>';
     return html;
   }
   function targetRows(){
@@ -1225,7 +1225,7 @@
       '<td>'+pill(x.pat.reliability)+'<br><small>'+x.pat.count+' checks</small></td><td>'+
       infoButton('Full intel',x.p.id)+'</td></tr>').join('')+'</tbody></table></div>':
       empty('No opponent observations yet. Open WarStaxx in the foreground during different hours to build reliable evidence.'))+
-      '<p class="ws-small">An official war report cannot reconstruct how often someone travelled or was online during previous wars. In-war travel is shown only where this device actually sampled them during a war.</p>');
+      '<p class="ws-small">An official war report cannot reconstruct how often someone travelled or was online during previous wars. In-war travel is shown only where this device actually sampled them during a war.</p>';
     return html;
   }
   function history(){
