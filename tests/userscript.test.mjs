@@ -3,14 +3,14 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 const code=readFileSync(new URL('../WarStaxx.user.js',import.meta.url),'utf8');
 test('Torn PDA metadata, author, stable URL',()=>{
-  assert.match(code,/\/\/ @name\s+Torn WarStaxx/);
+  assert.match(code,/\/\/ @name\s+War-TornStaxx/);
   assert.match(code,/\/\/ @author\s+IamEEKY/);
   assert.match(code,/\/\/ @updateURL\s+https:\/\/raw\.githubusercontent\.com\/Tom-Peters\/Torn-WarStaxx\/main\/WarStaxx\.user\.js/);
   assert.match(code,/\/\/ @match\s+https:\/\/www\.torn\.com\/\*/);
   assert.match(code,/\/\/ @connect\s+api\.torn\.com/);
 });
 test('StaxxHub bundle and event interface',()=>{
-  assert.match(code,/\/\* StaxxHub v3\.5/);
+  assert.match(code,/\/\* TornStaxx 4\.0 module fallback/);
   assert.match(code,/id=.?war/);
   for(const name of ['register','panel','summary','actions','notice','diagnostics','visit','ping','closeall'])assert.ok(code.includes('staxx:'+name)||code.includes("event('"+name+"'"),name);
   assert.match(code,/never create another floating FAB/);
