@@ -91,8 +91,8 @@ test('native Torn PDA transport exposes HTTP errors rather than swallowing them'
 });
 test('FF is next to player names and remains distinct from team-specific matchup FF',()=>{
   assert.match(source,/infoButton\(p\.name,p\.id\)\+' '\+ffBadge\(p\.id\)/);
-  assert.match(source,/infoButton\(x\.e\.name,x\.e\.id\)\+' '\+ffBadge\(x\.e\.id\)/);
-  assert.match(source,/specific to the selected hitter/);
+  assert.match(source,/infoButton\(x\.enemy\.name,x\.enemy\.id\)\+' '\+ffBadge\(x\.enemy\.id\)/);
+  assert.match(source,/individual hitter/);
   assert.match(source,/const sb=manual!==null/);
   assert.match(source,/action==='refresh-ff'/);
   assert.match(source,/action==='check-ff-key'/);
@@ -102,7 +102,7 @@ test('FF is next to player names and remains distinct from team-specific matchup
 });
 test('distributed PDA source and smart-quote normalisation are parser-safe',()=>{
   assert.ok(source.startsWith('// ==UserScript==\n'));
-  assert.match(source,/\/\/ @version\s+0\.4\.0/);
+  assert.match(source,/\/\/ @version\s+0\.5\.0/);
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
   const normalised=source.replace(/[\u2018\u2019]/gu,"'").replace(/[\u201c\u201d]/gu,'"');
