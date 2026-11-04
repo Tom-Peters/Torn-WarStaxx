@@ -1753,7 +1753,14 @@
       cfg.refreshSeconds=Math.max(90,Math.min(300,positive($('#ws-interval',root)?.value)||120));
       cfg.historyLimit=Math.max(2,Math.min(20,positive($('#ws-limit',root)?.value)||8));
       cfg.enableAttacks=Boolean($('#ws-attacks',root)?.checked);
-      saveCfg();state.error='';state.data.backoff={};state.data.updated={};save();publish();navigate('overview');refresh(true);return;
+      // Force official Torn refresh without bypassing FFScouter's ten-minute
+      // refresh window or its temporary error backoff.
+      const ffStamp=n(state.data.updated.ffscouter);
+      const ffBackoff=state.data.backoff.ffscouter||null;
+      saveCfg();state.error='';
+      state.data.backoff=ffBackoff?{ffscouter:ffBackoff}:{};
+      state.data.updated=ffStamp?{ffscouter:ffStamp}:{};
+      save();publish();navigate('overview');refresh(true);return;
     }
   }
   root.addEventListener('click',e=>{
