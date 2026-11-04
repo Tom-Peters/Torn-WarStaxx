@@ -11,6 +11,7 @@ const helpers = `
     value&&typeof value==='object'?value:{}).filter(([key])=>/^\\d+$/.test(key))
     .map(([key,v])=>({id:positive(v.id||key),...v}));
   const unpack=(j,k)=>j?.[k]??j;
+  const officialNumber=value=>value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value))?Number(value):null;
 `;
 function extract(start,end) {
   const begin=source.indexOf('  function '+start+'(');
