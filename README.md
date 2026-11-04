@@ -92,3 +92,7 @@ All data, keys, spy stats, notes and personal orders remain **on the current dev
 
 - https://github.com/Tom-Peters/Torn-ProfitStaxx/blob/main/docs/TORN-SUITE-STANDARD.md
 - https://github.com/Tom-Peters/Torn-ProfitStaxx/blob/main/docs/STAXX-HUB-INTEGRATION.md
+
+## Automatic own-faction detection (v0.2.7)
+
+War-TornStaxx now resolves **your own faction ID** from your authenticated Torn user profile first, with user/faction and key/info fallbacks. A zero faction ID is not treated as a successful result; the next official source is checked. The discovered ID is cached for six hours, with a force-refresh option. If you change factions, old faction-specific roster and opponent information is cleared to prevent misidentification. The Settings panel displays the detection source and any failure; manual faction ID remains an optional fallback. A valid Torn PDA-substituted or locally entered API key is required. The user does not need to type their own faction ID when auto-detection succeeds.
