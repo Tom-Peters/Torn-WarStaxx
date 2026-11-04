@@ -34,6 +34,7 @@ For wars actually observed by WarStaxx, the script captures a small per-war Blac
 - Torn PDA installation remains at:
   https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js
 - Shared orders are opt-in and **not live until the Cloudflare Worker is deployed and connected**. The app never attacks, heals, spends energy or performs medical actions automatically.
+- Attack parsing now supports the current Torn API v2 `is_ranked_war`, `modifiers.chain`, `modifiers.group`, and `modifiers.warlord` fields, plus older `ranked_war` and modifier names. Stealthed or otherwise unattributable attacks are not invented. `tests/war-v13.test.mjs` covers both formats.
 - See `tests/war-v13.test.mjs` for cutoff, uncovered heavy targets, attacking/defending score attribution, squad role snapshots and shared data privacy.
 
 ## v1.2.0 - Black Skulls hard-target allocation and four-layer war workflow (4 November 2026)
