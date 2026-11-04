@@ -2734,7 +2734,8 @@
         '</td></tr>').join('')+'</tbody></table></div>':
        empty('No locally tagged Black Skulls. Mark hitters under Leadership to compare their recorded scores.'))+
       '<p class="ws-small">Scoring totals are official when the report exists. Earlier-wars comparisons use only fetched report rows, with unknown values preserved. Prior battle stats or combat wins cannot be inferred from scoring alone.</p>';
-    html+=card('Black Skulls | individual post-war scorecards',scorecard);
+    html+=card('Black Skulls | individual post-war scorecards',scorecard)+
+      blackSkullsPerformanceCard(r.id);
     return html;
   }
   function command(){
@@ -3249,6 +3250,63 @@
     return {chain,target:candidates[0]||null,available:candidates.length,
       reason:'Reserve a verified in-war target; the milestone hit must defeat an opponent in the rival faction.'};
   }
+
+  function leaderboardCard(limit=8,warId=positive(state.data.war?.id)){
+    const rows=performanceLeaderboard(warId).filter(x=>x.hits!==null);
+    return card('Live hitter performance | source-qualified leaderboard',
+      '<p>During war, totals use the captured optional faction-attack feed and can be incomplete. '+
+      'After war, the completed official report takes precedence when available. '+
+      'Points / attack and historical comparisons are not a guarantee of battle strength.</p>'+
+      (rows.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr>'+
+        '<th>Member</th><th>Captured points</th><th>Attacks</th><th>Points / attack</th><th>Own baseline</th><th>Trend</th></tr></thead><tbody>'+
+        rows.slice(0,limit).map(x=>'<tr><td>'+infoButton(x.player.name,x.player.id)+
+          (cfg.blackSkulls[x.player.id]?' '+pill('BLACK SKULL','good'):'')+
+          '<br><small>'+esc(x.source)+'</small></td>'+
+          '<td>'+(x.points===null?'Unknown':fmt(x.points))+'</td>'+
+          '<td>'+fmt(x.hits)+'</td><td>'+(x.perHit===null?'Unknown':fmt(x.perHit))+'</td>'+
+          '<td>'+(x.baseline===null?'Unknown':fmt(x.baseline)+' ('+x.priorWars+' wars)')+'</td>'+
+          '<td>'+pill(x.status,x.flag?'bad':x.ratio!==null&&x.ratio>=1.15?'good':'')+
+          '</td></tr>').join('')+
+        '</tbody></table></div>':empty('No ranked-war own-faction hits captured yet. Enable faction attacks to populate a live leaderboard.'))+
+      '<div class="ws-toolbar">'+b('Full hit ledger','tab:ledger')+
+        b('After-action reports','tab:afteraction')+'</div>');
+  }
+  function blackSkullsPerformanceCard(warId=positive(state.data.war?.id)){
+    const players=state.data.ours.filter(p=>cfg.blackSkulls[p.id]),
+      rows=players.map(p=>memberPerformance(p,warId)).filter(Boolean),
+      flagged=rows.filter(x=>x.flag);
+    return card('Black Skulls | compared with their own war history',
+      '<p>Uses points per attack, rather than raw totals across different war lengths. '+
+      'A flag requires at least two previous official scorecards and five current attacks, '+
+      'then a decline of at least 30%. Current-war figures can be partial, and a changed role '+
+      'or chain bonus allocation can explain a difference.</p>'+
+      (rows.length?rows.map(x=>'<div class="ws-row"><span>'+
+          infoButton(x.player.name,x.player.id)+'<br><small>'+
+          (x.perHit===null?'No current attack rate':fmt(x.perHit)+' pts / captured attack')+
+          ' | baseline '+(x.baseline===null?'Unknown':fmt(x.baseline)+' pts / attack')+
+          ' | '+x.priorWars+' comparable previous wars</small></span>'+
+          pill(x.status,x.flag?'bad':x.ratio!==null&&x.ratio>=1.15?'good':'')+
+        '</div>').join(''):empty('Mark your heavy hitters in Leadership, or load official war reports.'))+
+      (flagged.length?'<div class="ws-note ws-warn">'+flagged.length+
+        ' Black Skull(s) below their own historical points/attack baseline; review specific assignments and attack conditions before changing duties.</div>':''));
+  }
+  function bonusTargetCard(){
+    const bns=bonusHitRecommendation(),chain=chainStatus();
+    if(!chain.fresh||chain.next===null||chain.nextIn===null||chain.nextIn>3)return '';
+    return card('CHAIN BONUS | reserve the right opponent',
+      '<p><b>Hit #'+fmt(chain.next)+'</b> | '+fmt(chain.nextIn)+
+      ' chain hits until bonus | +'+fmt(chain.nextBonus)+
+      ' respect if faction bonus unlocked. Only a successful attack on the enemy faction '+
+      'counts as ranked-war score; finishing on an outsider can waste this opportunity.</p>'+
+      (bns?.target?'<p><b>Verified suitable target for you:</b> '+
+        infoButton(bns.target.enemy.name,bns.target.enemy.id)+
+        ' '+ffBadge(bns.target.enemy.id)+
+        ' | matchup ratio '+fmt(bns.target.evidence.match.ratio)+
+        ' | '+esc(bns.target.evidence.reliability)+'</p>'+
+        a('Attack manually',attackLink(bns.target.enemy.id)):
+        '<p>No verified suitable bonus target for the current key owner. Coordinate with other hitters; do not guess from FFScouter alone.</p>')+
+      '<p class="ws-small">Torn reports the chain state as a snapshot. Refresh before assigning a decisive bonus attack. No attack is started by this card.</p>');
+  }
   function enemyScreen(){
     const enemy=sideActivity('enemies'),history=factionWarMetrics('enemies'),
       bands=enemyRoleBands(),threat=enemyThreatRows().slice(0,5),
@@ -3338,6 +3396,7 @@
         'Observed current chain state','tab:skulls')+
       statAction('Stored opponent wars',fmt(state.data.enemyWars.filter(x=>x.end).length),
         'Past official wars','tab:history')+'</div>';
+    h+=leaderboardCard(24);
     const groups=[
       ['OPERATIONS & ORDERS',[
         ['Faction leader command','leader'],['Black Skulls','skulls'],
@@ -3407,6 +3466,7 @@
         (state.sharedError?' | '+esc(state.sharedError):'')+'</p>'+
         '<div class="ws-toolbar">'+b('Pull orders','shared-pull')+
         (cfg.shared.canWrite?b('Publish orders','shared-push'):'')+'</div>'):'')+
+      blackSkullsPerformanceCard()+bonusTargetCard()+leaderboardCard(12)+
       card('BLACK SKULLS | strongest enemy targets',teamRows(black,'Black Skulls'))+
       card('REGULAR ATTACKERS | lower BSS targets',teamRows(regular,'regular attackers'))+
       card('DEFENCE / RESERVE | coordinated cover',teamRows(defensive,'defence'))+
@@ -3449,6 +3509,7 @@
           b('My matchups','hitter:'+myId)+b('Defend','tab:turtle')+'</div>':
         '<p>You are not marked as a Black Skull on this device. Use Leadership to set membership.</p>'+
         b('Leadership','tab:command'))+
+      bonusTargetCard()+blackSkullsPerformanceCard()+
       card('My hospital-control assignments',watched.length?watched.map(p=>{
         const expiry=memberState(p)==='hospital'&&p.until>Date.now()?
           ' | approximate hospital expiry '+flightCountdown(p.until):'';
@@ -3512,6 +3573,8 @@
       statAction('Enemy hospital',fresh?fmt(enemies.hospital):'Unknown','Watch expiry windows','tab:control')+
       statAction('Enemy active 24h',enemies.total?fmt(enemies.active24)+' / '+fmt(enemies.total):'Unknown','Last actions, not uptime','tab:activity')+
       statAction('Enemy points / hour',pace?.measurable?fmt(pace.rateEnemy):'Unknown','Sampled observations','tab:pace')+'</div>'+
+      bonusTargetCard()+
+      leaderboardCard(5)+
       card('Immediate priorities',alerts.length?alerts.map(x=>'<div class="ws-row"><span><b>'+
         esc(x.title)+'</b><br><small>'+esc(x.detail)+'</small></span>'+
         b('Review','alert:'+x.id)+'</div>').join(''):empty('No verified urgent alerts. Keep statuses fresh.'))+
