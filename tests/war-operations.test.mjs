@@ -104,6 +104,8 @@ test('completed wars automatically create read-only reports with strict sampled 
     "const n=v=>Number.isFinite(Number(v))?Number(v):0;const positive=v=>Number(v)||0;"+
     "const officialNumber=v=>v===null||v===undefined?null:Number(v);"+
     "const warSamples=()=>({checks:0,onlinePct:null,awayPct:null});const warPace=()=>null;"+
+     "const warAttackInsights=()=>({known:false,per:[],attempts:0,scored:0,pointsPerEnergy:null});"+
+     "const warAttackRows=()=>[],squadWarSummary=()=>({points:null,enemyPointsReceived:null,netProxy:null});"+
     "const state={data:{ourWars:[],reports:{},afterActions:{},meta:{pendingAfterAction:500}}};"+
     "const cfg={ourId:10};",
     segment('  function makeAfterAction(','  function warContributionIntel('),
