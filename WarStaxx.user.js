@@ -1564,6 +1564,7 @@
       }catch(e){state.data.errors.chain=String(e.message||e).slice(0,150);}
       await refreshFF();
       await refreshOwnReadiness();
+      if(sharedEndpoint()&&sharedScope())sharedPull(false);
       state.lastRefresh=Date.now();
     }catch(e){state.error=String(e.message||e);}
     finally{state.loading=false;state.spinner='';save();publish();render();}
@@ -2137,12 +2138,13 @@
   }
   async function sharedPull(discardLocal=false){
     if(state.sharedBusy||!sharedEndpoint()||!sharedScope()||document.hidden)return;
+    sharedResetScope();
     if(cfg.shared.localDirty&&!discardLocal){
       state.sharedError='Unpublished local orders: publish, or choose Discard local and pull.';
       return;
     }
     if(!discardLocal&&Date.now()-n(state.sharedSyncAt)<75*1000)return;
-    sharedResetScope();state.sharedBusy=true;
+    state.sharedBusy=true;
     try{
       const response=await sharedRequest('GET');
       if(!response.ok)throw new Error('Shared GET '+response.status+': '+String(response.result.error||'denied'));
@@ -3643,6 +3645,22 @@
       '<p class="ws-small">API access depends on your custom key scope. Opponent member lists and ranked-war history use public selections; your own detailed attacks require faction access.</p>')+
       card('Local intelligence controls','<p>War histories, observations, manual spy reports and assignments remain in this browser storage. No central database or cross-device sync is active.</p>'+
       b('Reset activity samples only','reset-activity')+' '+b('Clear this opponents orders','reset-orders'))+
+      card('Shared faction war orders | opt-in synchronisation',
+        '<p>Requires your own deployed WarStaxx Cloudflare Worker and D1 database. Share ONLY assignments, Black Skull tags, per-hitter risk profiles and hospital watchers. Torn API keys and manual spies stay on this device.</p>'+
+        '<p><b>State:</b> '+(cfg.shared.enabled?'Enabled':'Off')+
+        ' | <b>Revision:</b> '+fmt(cfg.shared.revision||0)+
+        ' | <b>Local changes:</b> '+(cfg.shared.localDirty?'Not published':'None')+
+        (state.sharedError?' | '+esc(state.sharedError):'')+'</p>'+
+        '<label><input type="checkbox" id="ws-shared-enable" '+(cfg.shared.enabled?'checked':'')+
+        '> Enable shared faction orders (foreground only)</label>'+
+        '<label>Worker HTTPS base URL<input id="ws-shared-endpoint" type="url" autocomplete="off" placeholder="https://your-worker.workers.dev" value="'+esc(cfg.shared.endpoint||'')+'"></label>'+
+        '<label>Shared read/write token (stored locally; leave blank to keep)<input id="ws-shared-token" type="password" autocomplete="off" placeholder="'+(cfg.shared.token?'Token saved; leave blank to keep':'Shared faction token')+'"></label>'+
+        '<label><input type="checkbox" id="ws-shared-write" '+(cfg.shared.canWrite?'checked':'')+
+        '> I have the officer write token and may publish orders</label>'+
+        '<p class="ws-small">Click Save settings first. Readers get automatic updates while Torn PDA is visible. Writer edits publish after a short delay. Revisions prevent silently overwriting newer orders. If you already have local orders, choose explicitly whether to publish or replace them.</p>'+
+        '<div class="ws-toolbar">'+b('Pull shared orders','shared-pull')+
+        b('Publish my local orders','shared-push')+
+        b('Discard local and pull shared','shared-adopt')+'</div>')+
       card('Other tools','<div class="ws-toolbar">'+b('Happy Jump','tool:happy')+b('ProfitStaxx','tool:profit')+b('Company Helper','tool:company')+'</div>');
   }
   function diagnostics(){
@@ -3727,6 +3745,9 @@
   function close(){state.open=false;render();event('panel',{id:ID,open:false});}
   function handle(action){
     if(action==='refresh'){refresh(true);return;}
+    if(action==='shared-pull'){sharedPull(false);return;}
+    if(action==='shared-adopt'){sharedPull(true);return;}
+    if(action==='shared-push'){sharedPush();return;}
     if(action==='war-more'){state.warMore=!state.warMore;render();return;}
     if(action==='fast-turtle'){warQuick('turtle');return;}
     if(action==='fast-skulls'){warQuick('skulls');return;}
@@ -3796,7 +3817,7 @@
     if(action==='draft-black'){
       const drafts=suggestedDraft();
       for(const x of drafts)if(!positive(cfg.assignments[x.friend.id]))cfg.assignments[x.friend.id]=x.enemy.id;
-      saveCfg();state.error=drafts.length?'Drafted '+drafts.length+' Black Skulls targets locally. Review and confirm each manually.':'No verified unassigned Black Skulls targets; obtain comparable spies first.';render();return;
+      saveCfg();markSharedDirty();state.error=drafts.length?'Drafted '+drafts.length+' Black Skulls targets locally. Review and confirm each manually.':'No verified unassigned Black Skulls targets; obtain comparable spies first.';render();return;
     }
     if(action==='save-leader-note'){
       const key=positive(state.data.war?.id)||('scout-'+positive(cfg.enemyId));
@@ -3837,9 +3858,9 @@
     if(action.startsWith('clear-spy:')){delete cfg.spies[positive(action.slice(10))];saveCfg();render();return;}
     if(action.startsWith('note:')){cfg.notes[positive(action.slice(5))]=String($('#ws-note',root)?.value||'').slice(0,500);saveCfg();render();return;}
     if(action.startsWith('assign:')){const [friend,enemy]=action.slice(7).split(':').map(positive);
-      if(friend&&enemy){cfg.assignments[friend]=enemy;saveCfg();navigate('assignments');}return;}
-    if(action.startsWith('clear-assign:')){delete cfg.assignments[positive(action.slice(13))];saveCfg();render();return;}
-    if(action.startsWith('black-skill:')){const id=positive(action.slice(12));if(cfg.blackSkulls[id])delete cfg.blackSkulls[id];else if(id)cfg.blackSkulls[id]=true;saveCfg();render();return;}
+      if(friend&&enemy){cfg.assignments[friend]=enemy;saveCfg();markSharedDirty();navigate('assignments');}return;}
+    if(action.startsWith('clear-assign:')){delete cfg.assignments[positive(action.slice(13))];saveCfg();markSharedDirty();render();return;}
+    if(action.startsWith('black-skill:')){const id=positive(action.slice(12));if(cfg.blackSkulls[id])delete cfg.blackSkulls[id];else if(id)cfg.blackSkulls[id]=true;saveCfg();markSharedDirty();render();return;}
     if(action==='copy-orders'){
       const text=copiedWarOrders();
       if(navigator.clipboard&&typeof navigator.clipboard.writeText==='function'){
@@ -3868,7 +3889,7 @@
       return;
     }
     if(action==='reset-activity'){state.data.activity={};state.data.sampleCount=0;save();render();return;}
-    if(action==='reset-orders'){cfg.assignments={};if(positive(cfg.enemyId))cfg.ordersByEnemy[String(positive(cfg.enemyId))]={};saveCfg();render();return;}
+    if(action==='reset-orders'){cfg.assignments={};if(positive(cfg.enemyId))cfg.ordersByEnemy[String(positive(cfg.enemyId))]={};saveCfg();markSharedDirty();render();return;}
     if(action==='save-settings'){
       const priorFFKey=ffApiKey();
       const previousOwnerKey=effectiveKey();
@@ -3892,6 +3913,18 @@
       cfg.enableAttacks=Boolean($('#ws-attacks',root)?.checked);
       cfg.autoOwnerReadiness=Boolean($('#ws-owner-ready',root)?.checked);
       cfg.priorityNotifications=Boolean($('#ws-priority-notifications',root)?.checked);
+      const oldEndpoint=String(cfg.shared.endpoint||'').trim();
+      const newEndpoint=String($('#ws-shared-endpoint',root)?.value||'').trim();
+      cfg.shared.enabled=Boolean($('#ws-shared-enable',root)?.checked);
+      cfg.shared.canWrite=Boolean($('#ws-shared-write',root)?.checked);
+      cfg.shared.endpoint=newEndpoint;
+      const token=String($('#ws-shared-token',root)?.value||'').trim();
+      if(token)cfg.shared.token=token;
+      if(oldEndpoint!==newEndpoint){
+        cfg.shared.scope='';cfg.shared.revision=0;cfg.shared.localDirty=false;
+        state.sharedRevision=0;state.sharedSyncAt=0;
+      }
+      if(cfg.shared.enabled&&!sharedEndpoint())state.error='Shared orders need an HTTPS Worker URL and a read/write token.';
       if(previousOwnerKey!==effectiveKey()){
         state.data.ownerReadiness={};delete state.data.meta.ownerId;
         for(const name of ['own-bars','own-cooldowns','owner-id-readiness']){
@@ -3907,7 +3940,7 @@
       // refresh window or its temporary error backoff.
       const ffStamp=n(state.data.updated.ffscouter);
       const ffBackoff=state.data.backoff.ffscouter||null;
-      saveCfg();state.error='';
+      saveCfg();if(!state.error)state.error='';
       state.data.backoff=ffBackoff?{ffscouter:ffBackoff}:{};
       state.data.updated=ffStamp?{ffscouter:ffStamp}:{};
       save();publish();navigate('overview');refresh(true);return;
@@ -3938,7 +3971,7 @@
       if(watcher&&!state.data.ours.some(p=>p.id===watcher&&cfg.blackSkulls[p.id]))return;
       const key=currentPlanKey(),prior=cfg.controlAssignments[key]||{};
       if(watcher)prior[enemyId]=watcher;else delete prior[enemyId];
-      cfg.controlAssignments[key]=prior;saveCfg();
+      cfg.controlAssignments[key]=prior;saveCfg();markSharedDirty();
       state.error='Hospital watcher assigned locally. No attack or hospitalisation performed.';render();return;
     }
     const turtleDuty=e.target.closest('[data-turtle-duty]');
@@ -3956,7 +3989,7 @@
       if(enemyId&&state.data.enemies.some(p=>p.id===enemyId))cfg.assignments[ourId]=enemyId;
       else if(!enemyId)delete cfg.assignments[ourId];
       else return;
-      saveCfg();state.error=enemyId?'Manual target saved locally; no Torn action performed.':'Manual target cleared.';render();return;
+      saveCfg();markSharedDirty();state.error=enemyId?'Manual target saved locally; no Torn action performed.':'Manual target cleared.';render();return;
     }
     const duty=e.target.closest('[data-leader-duty]');
     if(duty){const id=positive(duty.dataset.leaderDuty),value=String(duty.value);
@@ -4039,6 +4072,8 @@
     document.dispatchEvent(new CustomEvent('staxx:ping'));
   }},45000);
   const warStripTimer=setInterval(()=>{if(!document.hidden)renderWarStrip();},10000);
+  const sharedPolling=setInterval(()=>{if(!document.hidden&&sharedEndpoint()&&sharedScope())
+    sharedPull(false);},90000);
   window.addEventListener('scroll',handleWarScroll,{passive:true});
   document.addEventListener('scroll',handleWarScroll,{passive:true,capture:true});
   window.addEventListener('popstate',()=>renderWarStrip(true));
