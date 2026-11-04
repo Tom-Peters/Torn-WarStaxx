@@ -1010,56 +1010,124 @@
     return html;
   }
   function targetRows(){
-    const q=state.search.trim().toLowerCase();
-    const filter=state.filter;
+    const q=state.search.trim().toLowerCase(),filter=state.filter;
     return state.data.enemies.filter(p=>{
       const ev=evaluate(p);
-      if(q&&!((p.name+' '+p.id).toLowerCase().includes(q)))return false;
+      if(q&&!((p.name+' '+p.id+' '+p.position).toLowerCase().includes(q)))return false;
       if(filter==='ready'&&!ev.ready)return false;
       if(filter==='online'&&!isOnline(p))return false;
       if(filter==='away'&&ev.kind!=='away')return false;
       if(filter==='hospital'&&ev.kind!=='hospital')return false;
+      if(filter==='scorers'&&lastKnownMemberScore('enemies',p.id)===null)return false;
       return true;
-    }).sort((a,b)=>evaluate(b).score-evaluate(a).score||a.level-b.level);
+    }).sort((a,b)=>{
+      if(state.sort==='lastwar')return (lastKnownMemberScore('enemies',b.id)??-1)-(lastKnownMemberScore('enemies',a.id)??-1)||a.id-b.id;
+      if(state.sort==='activity')return n(b.lastAt)-n(a.lastAt)||a.id-b.id;
+      if(state.sort==='level')return b.level-a.level||a.id-b.id;
+      if(state.sort==='online')return pattern('enemies',b.id).online-pattern('enemies',a.id).online||a.id-b.id;
+      return evaluate(b).score-evaluate(a).score||a.id-b.id;
+    });
   }
   function targets(){
-    const row=targetRows();
-    const chips=['all','ready','online','hospital','away'].map(f=>'<button class="ws-btn '+(state.filter===f?'':'secondary')+'" data-filter="'+f+'">'+esc(f==='ready'?'Okay':f)+'</button>').join('');
-    let html=statusNote()+'<div class="ws-toolbar"><input type="search" id="ws-search" placeholder="Search player or ID" value="'+esc(state.search)+'" aria-label="Find enemy player">'+chips+'</div>';
-    if(!row.length)return html+empty('No opponent records match. Set an enemy faction in Settings or refresh the current war.');
-    return html+'<div class="ws-table-wrap"><table><thead><tr><th>Opponent</th><th>State</th><th>Activity</th><th>Previous wars</th><th>Travel pattern</th><th>Action</th></tr></thead><tbody>'+
-      row.map(p=>{const ev=evaluate(p),pat=ev.pat,ff=ffObserved(p.id);
-        return '<tr><td><a href="'+link(p.id)+'">'+esc(p.name)+'</a><small> ['+p.id+'] \u00b7 L'+fmt(p.level)+'</small><br>'+pill(ev.reason,ev.ready?'good':ev.kind==='hospital'?'bad':'')+'</td>'+
-          '<td>'+pill(p.status,ev.ready?'good':'')+'<br><small>'+esc(p.statusText)+'</small></td>'+
+    const row=targetRows(),total=state.data.enemies.length;
+    const chips=['all','ready','online','hospital','away','scorers'].map(f=>
+      '<button class="ws-btn '+(state.filter===f?'':'secondary')+'" data-filter="'+f+'">'+
+      esc(f==='ready'?'Okay':f==='scorers'?'War scorers':f)+'</button>').join('');
+    let html=statusNote()+
+      '<div class="ws-lead"><span class="ws-data-label">ENEMY PLAYERS | OPEN ANY NAME FOR FULL INTELLIGENCE</span>'+
+      '<h2>'+row.length+' shown / '+total+' current enemies</h2>'+
+      '<p>Live state, last action, official war performance and observed travel are separate evidence sources. Unknown scores are never treated as zero.</p></div>'+
+      '<div class="ws-toolbar"><input type="search" id="ws-search" placeholder="Search name, ID or role" value="'+esc(state.search)+'" aria-label="Find enemy player">'+
+      '<select id="ws-sort" aria-label="Sort enemy players">'+
+      [['warScore','Recommended priority'],['lastwar','Last reported war score'],['activity','Most recently active'],['online','Observed online rate'],['level','Level high to low']]
+      .map(x=>'<option value="'+x[0]+'" '+(state.sort===x[0]?'selected':'')+'>'+x[1]+'</option>').join('')+'</select></div>'+
+      '<div class="ws-toolbar">'+chips+'</div>';
+    if(!row.length)return html+empty('No matching opponents. Clear filters, refresh, or configure a faction in Settings.');
+    return html+'<div class="ws-table-wrap"><table><thead><tr><th>Opponent</th><th>Current state</th><th>Last activity</th><th>Last reported score</th><th>Travel / FF</th><th>Go to</th></tr></thead><tbody>'+
+      row.map(p=>{const ev=evaluate(p),pat=ev.pat,ff=ffObserved(p.id),third=ffscouter(p.id);
+        const score=lastKnownMemberScore('enemies',p.id);
+        return '<tr><td>'+infoButton(p.name,p.id)+'<br><small>#'+p.id+' | Lv'+fmt(p.level)+
+          (p.position?' | '+esc(p.position):'')+'</small></td>'+
+          '<td>'+pill(p.status,ev.ready?'good':ev.kind==='hospital'?'bad':'')+
+          '<br><small>'+esc(p.statusText)+'</small></td>'+
           '<td>'+pill(p.lastAction,isOnline(p)?'good':'')+'<br><small>'+esc(age(p.lastAt))+'</small></td>'+
-          '<td>'+fmt(ev.hist.wars)+' wars'+(ev.hist.avg===null?'':' \u00b7 avg '+fmt(ev.hist.avg)+' points')+
-          '<br><small>Observed FF '+(ff.avg===null?'unknown':ff.avg.toFixed(2)+'x ('+ff.count+')')+'</small><br><small>FFScouter '+(ffscouter(p.id)?.ff!==null&&ffscouter(p.id)?.ff!==undefined?ffscouter(p.id).ff.toFixed(2)+'x estimated':'unavailable')+'</small></td>'+
-          '<td>'+esc(pat.warSamples?pat.warTravel+'% in observed wars ('+pat.warSamples+' checks)':'No in-war samples')+'<br><small>'+esc(pat.reliability)+'</small></td>'+
-          '<td>'+a('Profile',link(p.id))+' '+a('Attack',attackLink(p.id))+' '+b('Intel','player:'+p.id)+'</td></tr>';
-      }).join('')+'</tbody></table></div><p class="ws-small">Priority is an advisory shortlist, never a proven win chance. Attack buttons only navigate to Torn.</p>';
+          '<td><b>'+scoreLabel(score)+'</b><br><small>'+ev.hist.wars+' report(s) | avg '+scoreLabel(ev.hist.avg)+'</small></td>'+
+          '<td><small>In war: '+(pat.warTravel===null?'No samples':pat.warTravel+'% away')+
+          '<br>FF: '+(ff.avg===null?'Not observed':ff.avg.toFixed(2)+'x observed')+
+          (third?.ff!==null&&third?.ff!==undefined?'<br>'+third.ff.toFixed(2)+'x FFScouter estimate':'')+'</small></td>'+
+          '<td>'+infoButton('Full intel',p.id)+' '+a('Attack',attackLink(p.id))+' '+a('Profile',link(p.id))+'</td></tr>';
+      }).join('')+'</tbody></table></div>'+
+      '<p class="ws-small">Scores shown only where official detailed reports exist. Attack links open Torn for manual action; no attack is submitted.</p>';
   }
   function playerIntel(id){
-    const p=[...state.data.enemies,...state.data.ours].find(x=>x.id===id);
-    if(!p)return empty('Player not found in the latest roster.');
-    const ours=state.data.ours.some(x=>x.id===id),side=ours?'ours':'enemies';
-    const pat=pattern(side,id),hist=pastPerformance(id,side),s=spy(id);
-    const myFf=ffObserved(id),third=ffscouter(id);
-    return card(p.name+' ['+id+']','<div class="ws-grid">'+
-      '<div><h3>Live observation</h3><p>'+pill(p.status)+' \u00b7 '+pill(p.lastAction)+'</p><p>'+esc(p.statusText)+'</p>'+
-      '<small>Last action '+esc(age(p.lastAt))+'; snapshot '+esc(age(p.updated))+'</small></div>'+
-      '<div><h3>Historical output</h3><p>'+hist.wars+' official war reports</p><p>'+fmt(hist.score)+' total score \u00b7 '+fmt(hist.attacks)+' attacks</p>'+
-      '<small>Same member ID, no assumption about changed faction membership</small></div>'+
-      '<div><h3>Travel/activity sampling</h3><p>'+pat.count+' checks \u00b7 '+pat.travel+'% away \u00b7 '+pat.online+'% online</p>'+
-      '<small>Coverage '+esc(pat.reliability)+(pat.peak===null?'':'; peak sampled '+pat.peak+':00 TCT')+'</small><br><small>In-war: '+esc(pat.warSamples?pat.warTravel+'% travelling/abroad in '+pat.warSamples+' checks':'No in-war samples')+'</small></div>'+
-      '<div><h3>Fair fight</h3><p>'+esc(myFf.avg===null?'No observed FF':myFf.avg.toFixed(2)+'x observed')+'</p>'+
-      '<small>'+myFf.count+' recorded encounters from faction attacks</small><br><small>FFScouter (your key): '+esc(third&&third.ff!==null?third.ff.toFixed(2)+'x estimated':'Unavailable')+' \u00b7 public BSS '+esc(third&&third.bss?fmt(third.bss):'unknown')+'</small></div></div>'+
-      '<h3>Manual spy or verified battle stats</h3>'+
-      '<p>Enter all four stats only if known. Predictions use the weighted battle-stat score, and remain estimates; they do not guarantee a hit.</p>'+
-      ['strength','speed','defense','dexterity'].map(k=>'<label>'+esc(k)+'<input type="number" min="0" step="1" data-spy="'+esc(k)+'" value="'+esc(s&&s[k]!==undefined?s[k]:'')+'"></label>').join('')+
-      b('Save spy stats','spy:'+id)+' '+b('Clear spy stats','clear-spy:'+id)+
-      '<label>Local tactical note<textarea id="ws-note" maxlength="500">'+esc(cfg.notes[id]||'')+'</textarea></label>'+
-      b('Save note','note:'+id)+' '+a('Open profile',link(id))+(ours?'':' '+a('Open attack page',attackLink(id))))+
-      b('Back to targets','tab:targets');
+    let p=[...state.data.enemies,...state.data.ours].find(x=>x.id===id),side=state.data.ours.some(x=>x.id===id)?'ours':'enemies';
+    if(!p){
+      for(const rep of Object.values(state.data.reports)){
+        const rs=rep.factions?.find(f=>f.members?.some(m=>m.id===id));
+        if(!rs)continue;
+        side=rs.id===positive(cfg.ourId)?'ours':'enemies';
+        const member=rs.members.find(m=>m.id===id);
+        p={id,name:member.name,level:member.level,position:'Previous war participant',status:'Unknown',
+          statusText:'Not in current roster',lastAction:'Unknown',lastAt:0,updated:0,until:0,daysInFaction:0};
+        break;
+      }
+    }
+    if(!p)return empty('Player was not found in current rosters or stored official reports.');
+    const pat=pattern(side,id),hist=pastPerformance(id,side),s=spy(id),
+      myFf=ffObserved(id),third=ffscouter(id),records=recentWarRecords(side,id),
+      current=state.data[side].some(x=>x.id===id),currentStatus=current?memberState(p):'unknown';
+    const last=records.find(x=>x.covered&&x.member)||null;
+    const note=cfg.notes[id]||'';
+    let html=statusNote()+
+      '<div class="ws-toolbar">'+b('Back to enemy players','tab:targets')+b('Opponent dossier','tab:intel')+
+      a('Torn profile',link(id))+(side==='enemies'?a('Attack page',attackLink(id)):'')+'</div>'+
+      '<div class="ws-lead"><span class="ws-data-label">PLAYER INTELLIGENCE | '+(side==='ours'?'OUR MEMBER':'OPPONENT')+'</span>'+
+      '<h2>'+esc(p.name)+' ['+id+']</h2>'+
+      '<div class="ws-inline-metrics"><span>Level '+fmt(p.level)+'</span><span>'+esc(p.position||'Role unknown')+'</span>'+
+      '<span>'+esc(p.status)+'</span><span>Last action: '+esc(p.lastAction)+'</span></div>'+
+      '<p>'+esc(p.statusText)+(p.statusDetails?' | '+esc(p.statusDetails):'')+
+      (p.until&&p.until>Date.now()?' | Timer to '+esc(stamp(p.until)):'')+'</p>'+
+      '<p class="ws-small">Roster '+age(p.updated)+' | Last action '+age(p.lastAt)+
+      (p.daysInFaction?' | '+p.daysInFaction+' days in faction':'')+
+      ' | Status is an observation, not a forecast.</p></div>'+
+      '<div class="ws-grid">'+
+      stat('Last reported war score',last?fmt(last.score):'\u2014',last?'War #'+last.war.id+' | '+fmt(last.attacks)+' attacks':'No detailed member report')+
+      stat('All known war score',hist.wars?fmt(hist.score):'\u2014',hist.wars+' official reports | avg '+scoreLabel(hist.avg))+
+      stat('Recent activity',current?esc(p.lastAction):'Unknown','Last action '+age(p.lastAt))+
+      stat('Online checks',pat.count?pat.online+'%':'\u2014',pat.count+' samples | '+pat.reliability)+
+      stat('Travel checks',pat.count?pat.travel+'%':'\u2014','War sample '+(pat.warTravel===null?'unknown':pat.warTravel+'%'))+
+      stat('Observed FF',myFf.avg===null?'\u2014':myFf.avg.toFixed(2)+'x',myFf.count+' faction encounters')+'</div>';
+    html+=card('Historical ranked-war performance',
+      records.length?'<p>Official points and attacks from reports are shown per war. A dash means report or member data is unavailable, not zero.</p>'+
+      '<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>War</th><th>Score</th><th>Attacks</th><th>Outcome</th><th>Open</th></tr></thead><tbody>'+
+      records.slice(0,20).map(x=>'<tr><td>'+esc(stamp(x.war.end*1000))+'<br><small>#'+x.war.id+'</small></td>'+
+      '<td>'+scoreLabel(x.score)+'</td><td>'+scoreLabel(x.attacks)+'</td><td>'+
+      pill(x.war.winner===positive(side==='ours'?cfg.ourId:cfg.enemyId)?'Won':x.war.winner?'Lost':'Unknown')+
+      '</td><td>'+b('Scorecard','war:'+x.war.id)+'</td></tr>').join('')+'</tbody></table></div>':
+      empty('No previous wars for this player are loaded on this device.'));
+    html+=card('Online and travel evidence',
+      '<p>Observed '+pat.count+' foreground checks. Online '+(pat.count?pat.online+'%':'unknown')+
+      ', away '+(pat.count?pat.travel+'%':'unknown')+
+      '. During ranked wars: '+(pat.warTravel===null?'not sampled':pat.warTravel+'% away across '+pat.warSamples+' checks')+'.</p>'+
+      '<p>Most-active observed TCT hour: '+(pat.peak===null?'Unknown':pat.peak+':00')+
+      ' | Confidence '+esc(pat.reliability)+'. These figures are sample proportions, not proven hours awake or a past-war travel history.</p>'+
+      b('See faction activity heatmap','tab:activity'));
+    html+=card('Battle strength and fair-fight evidence',
+      '<p>FFScouter: '+(third&&third.ff!==null?third.ff.toFixed(2)+'x estimated':'no estimate')+
+      ' | Public BSS estimate: '+(third&&third.bss?fmt(third.bss):'unknown')+
+      ' | Manual battle stats: '+(s?'saved':'not known')+'</p>'+
+      '<p>Enter all four stats only when verified from a spy. Estimates do not guarantee a win.</p>'+
+      ['strength','speed','defense','dexterity'].map(k=>'<label>'+esc(k)+
+        '<input type="number" min="0" step="1" data-spy="'+esc(k)+'" value="'+esc(s&&s[k]!==undefined?s[k]:'')+'"></label>').join('')+
+      '<div class="ws-toolbar">'+b('Save battle stats','spy:'+id)+b('Clear spy','clear-spy:'+id)+b('Matchups','tab:matchups')+'</div>');
+    html+=card('Public Torn profile and personal stats',
+      '<p>Additional publicly available profile and lifetime counters are fetched only when requested. A public stat is not an exact hidden battle stat.</p>'+
+      b(state.loading?'Loading...':'Load public stats','public:'+id)+publicStatsHtml(id));
+    html+=card('Local player notes',
+      '<label>Useful observations / tactical notes<textarea id="ws-note" maxlength="500">'+esc(note)+'</textarea></label>'+
+      '<div class="ws-toolbar">'+b('Save note','note:'+id)+a('Open profile',link(id))+
+      (side==='enemies'?a('Open manual attack',attackLink(id)):'')+'</div>');
+    return html;
   }
   function matchups(){
     const friends=state.data.ours,enemies=state.data.enemies;
