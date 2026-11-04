@@ -1422,6 +1422,14 @@
           const target=state.data.enemies.find(e=>e.id===positive(cfg.assignments[p.id]));
           return target&&!roleAllows(p,target,bands);
         });
+        const unassigned=[...bands.heavy].filter(id=>
+          !state.data.ours.some(p=>cfg.blackSkulls[p.id]&&
+            positive(cfg.assignments[p.id])===id));
+        if(unassigned.length)out.push({id:'skulls-uncovered-heavy',
+          title:unassigned.length+' high-BSS opponents without Black Skull coverage',
+          detail:'These enemies fall within your chosen Skull Capo strength cutoff. '+
+            'Review uncovered opponents and identify a verified heavy hitter before assigning.',
+          status:'review',priority:90,tab:'leader'});
         if(wrong.length)out.push({id:'role-target-conflict',
           title:wrong.length+' assigned hitter(s) in the wrong enemy BSS bracket',
           detail:'Black Skulls must receive top-BSS enemies; regular members take the lower bracket. '+
@@ -3452,6 +3460,25 @@
   }
 
 
+
+  function squadReportText(warId,side){
+    const report=squadWarSummary(warId,side),
+      name=side==='black'?'Black Skulls | Skull Capo':'Regular faction members';
+    return 'WarStaxx '+name+' report - war #'+warId+'\n'+
+      'Membership source: '+report.squadSource+'\n'+
+      'Official score source: '+report.source+'\n'+
+      'Points earned: '+(report.points??'Unknown')+
+      ' | Official attacks: '+(report.attacks??'Unknown')+
+      ' | Points per attack: '+(report.perHit===null?'Unknown':report.perHit.toFixed(2))+'\n'+
+      'Enemy score gained by attacking this squad (PARTIAL CAPTURE): '+
+      (report.enemyPointsReceived??'Unknown')+'\n'+
+      'Earned - enemy score conceded (PROXY): '+(report.netProxy??'Unknown')+'\n'+
+      report.rows.map(p=>p.name+' ['+p.id+'] | earned '+(p.score??'Unknown')+
+        ' | own attacks '+(p.attacks??'Unknown')+
+        ' | enemy points on this member '+(p.received??'Unknown (not captured)')+
+        ' | captured incoming scoring hits '+(p.incomingHits??'Unknown')).join('\n')+'\n'+
+      'Enemy points conceded are not deductions from player points. Incoming feed may be incomplete.';
+  }
   function squadReportCard(warId,side){
     const data=squadWarSummary(warId,side),label=side==='black'?
       'Black Skulls | heavy-hitter war report':'Regular members | war report';
@@ -3480,7 +3507,9 @@
           '<td>'+(p.received===null?'Unknown':fmt(p.received)+' (partial)')+'</td>'+
           '<td>'+(p.incomingHits===null?'Unknown':fmt(p.incomingHits))+'</td></tr>').join('')+
         '</tbody></table></div>':
-        empty('Official per-member war scorecard not loaded yet. Do not infer zero output.')));
+        empty('Official per-member war scorecard not loaded yet. Do not infer zero output.'))+
+      '<div class="ws-toolbar">'+b('Copy '+(side==='black'?'Black Skulls':'regular-member')+
+        ' report','copy-squad:'+warId+':'+side)+'</div>');
   }
   function leaderboardCard(limit=8,warId=positive(state.data.war?.id)){
     const rows=performanceLeaderboard(warId).filter(x=>x.hits!==null||x.enemyScoringHits!==null);
@@ -3624,7 +3653,7 @@
       '<h2>Analysis, history and every advanced tool</h2>'+
       '<p>Dig into the evidence, plan future wars, manage settings, inspect hit logs and review completed wars.</p>'+
       '<div class="ws-toolbar">'+b('Latest after-action report','tab:afteraction')+
-        b('Full war leadership','tab:leader')+
+        b('Skull Capo squad command','tab:leader')+
         b('Torn and FF settings','tab:settings')+'</div></div>'+
       '<div class="ws-grid">'+
       statAction('Latest after-action',last?'#'+last.id:'No report',
@@ -4545,6 +4574,20 @@
     if(action.startsWith('debrief-pace:')){state.selectedPace=positive(action.slice(13));navigate('pace');return;}
     if(action.startsWith('review-debrief:')){const id=positive(action.slice(15));const record=state.data.afterActions[id];
       if(record){record.reviewed=!record.reviewed;save();publish();render();}return;}
+    if(action.startsWith('copy-squad:')){
+      const [idText,side]=action.slice(11).split(':'),id=positive(idText);
+      if(!id||!['black','regular'].includes(side)||!state.data.afterActions[id])return;
+      const value=squadReportText(id,side);
+      const success=()=>{state.error=(side==='black'?'Black Skulls':'Regular-member')+
+        ' report copied for manual sharing.';render();};
+      const failure=()=>{state.error='Clipboard unavailable; no report was shared.';render();};
+      if(navigator.clipboard?.writeText)navigator.clipboard.writeText(value).then(success).catch(failure);
+      else{const area=document.createElement('textarea');area.value=value;
+        area.style.cssText='position:fixed;left:-9999px';document.body.appendChild(area);
+        area.select();let ok=false;try{ok=document.execCommand('copy');}catch(_){}
+        area.remove();if(ok)success();else failure();}
+      return;
+    }
     if(action.startsWith('copy-debrief:')){const id=positive(action.slice(13)),record=state.data.afterActions[id];
       if(!record)return;
       const value=afterActionText(record);
