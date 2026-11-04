@@ -901,7 +901,8 @@
       return {p,observed,kind,airborne,abroad,assigned,cover,danger,expiry,approaching,readiness};
     });
     const online=all.filter(isOnline).length,enemyOnline=enemy.filter(isOnline).length;
-    const pace=warPace(),score=warScore();
+    const pace=warPace(),score=warScore(),warStart=epochMs(state.data.war?.start),
+      elapsedHours=warStart&&at>=warStart?(at-warStart)/HOUR:null;
     const losing=pace?.measurable&&Date.now()-pace.last.at<10*MIN&&pace.netRate<-30;
     const suggestion=!ownFresh||!enemyFresh?'Refresh both rosters before changing posture':
       !state.data.war?'Scout opponent before selecting a war defence posture':
@@ -911,7 +912,8 @@
       score&&score.net>0?'Lead protection may help, but do not surrender all scoring capability':
       'Balance safe, evidenced hits with protection for members who cannot contribute right now';
     return {plan,rows,ownFresh,enemyFresh,exposed,sheltered,unclear,dueSoon,reviveWarnings,
-      online,enemyOnline,pace,score,suggestion};
+      online,enemyOnline,pace,score,suggestion,elapsedHours,
+      decayPhase:elapsedHours===null?'Unknown':elapsedHours<24?'Before 24h':'24h+ reduction period'};
   }
   function controlTargets(at=Date.now()){
     const fresh=rosterFresh('enemies',at),key=currentPlanKey();
@@ -2376,6 +2378,13 @@
       stat('Expiries within 15m',x.ownFresh?fmt(x.dueSoon):'Unknown','Time-limited Torn roster statuses')+'</div>';
     if(x.reviveWarnings)h+=card('Revive exposure warning',
       '<p>'+fmt(x.reviveWarnings)+' hospitalised member(s) currently appear revivable. If your faction intends to turtle in hospital, coordinate revive settings and hospital exits in Torn. WarStaxx will not change revival permissions.</p>');
+    h+=card('War clock and net-score pressure',
+      '<div class="ws-inline-metrics"><span>Elapsed '+(x.elapsedHours===null?'Unknown':fmt(x.elapsedHours)+' hours')+
+      '</span><span>Target stage '+esc(x.decayPhase)+'</span><span>Official net score '+
+      (x.score?fmt(x.score.net):'Unknown')+'</span><span>Target from API '+
+      scoreLabel(x.score?.target)+'</span></div>'+
+      '<p>The ranked-war target begins reducing by 1% of the ORIGINAL target per hour after 24 hours, according to the Torn wiki. This tool does not reconstruct that original target or claim a precise victory forecast. Turtling may deny score but it also delays your own progress.</p>'+
+      a('Check official ranked-war rules','https://wiki.torn.com/wiki/Ranked_War'));
     h+=card('Choose a coordinated team posture',
       '<p><b>Current:</b> '+pill(p.mode==='full'?'Full turtle':p.mode==='defensive'?'Defensive':'Balanced')+
       '. This is a local leadership instruction, not an automated game state.</p>'+
