@@ -1462,9 +1462,9 @@
     try{
       await identify(force);
       if(!positive(cfg.ourId))throw new Error('Unable to detect your faction from Torn API. Check your API key or use the optional manual faction ID in Settings.');
+      const previousWarId=positive(state.data.war?.id);
       const wars=await call('/faction/'+cfg.ourId+'/wars','wars',force?0:90*1000);
       if(wars){
-        const previousWarId=positive(state.data.war?.id);
         const w=detectWar(wars);state.data.war=w;
         if(previousWarId&&(!w||positive(w.id)!==previousWarId))state.data.meta.pendingAfterAction=previousWarId;
         if(w)recordWarScore(w);
