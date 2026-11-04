@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.1.0
+// @version      1.2.0
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -183,10 +183,10 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.1.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.2.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
-  const sections=['overview','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
-  const labels={overview:'War room',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
+  const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
+  const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Leader command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
   const $=(s,root=document)=>root.querySelector(s);
   const $$=(s,root=document)=>Array.from(root.querySelectorAll(s));
   const n=v=>Number.isFinite(Number(v))?Number(v):0;
@@ -1132,6 +1132,49 @@
       official,conflict,verified:manuallyConfirmed,estimated:externalOnly,
       ffForHitter:m.known?m.ff:null};
   }
+
+  // FFScouter BSS is a public statistical estimate; never confuse it with
+  // the API-key owner's personal FF multiplier or a verified spy.
+  function enemyBattleEstimate(enemy){
+    if(!enemy)return {value:null,source:'Unknown',verified:false};
+    const known=bsScore(spy(enemy.id));
+    if(known!==null)return {value:known,source:'Manual battle-stat spy',verified:true};
+    const third=ffscouter(enemy.id);
+    if(third&&!ffIsStale(third)&&Number.isFinite(third.bss)&&third.bss>0)
+      return {value:third.bss,source:'Fresh FFScouter public BSS estimate',verified:false};
+    return {value:null,source:'Unknown - obtain spy or enable FFScouter',verified:false};
+  }
+  // Stable buckets across changing enemy hospital status: toughest ~40% of
+  // KNOWN enemy BSS go to Black Skulls. Unclassified targets need scouting.
+  function enemyRoleBands(){
+    const ranked=state.data.enemies.map(enemy=>({
+      enemy,...enemyBattleEstimate(enemy)
+    })).filter(x=>x.value!==null).sort((a,b)=>b.value-a.value||
+      n(b.enemy.level)-n(a.enemy.level)||a.enemy.id-b.enemy.id);
+    const heavyCount=ranked.length?Math.max(1,Math.ceil(ranked.length*0.40)):0,
+      heavy=new Set(ranked.slice(0,heavyCount).map(x=>x.enemy.id)),
+      regular=new Set(ranked.slice(heavyCount).map(x=>x.enemy.id));
+    return {heavy,regular,heavyCount,regularCount:regular.size,
+      known:ranked.length,unknown:state.data.enemies.length-ranked.length,
+      threshold:ranked[heavyCount-1]?.value??null,ranked};
+  }
+  function enemyRole(enemy,band=enemyRoleBands()){
+    if(!enemy)return 'unknown';
+    return band.heavy.has(positive(enemy.id))?'heavy':
+      band.regular.has(positive(enemy.id))?'regular':'unclassified';
+  }
+  function roleAllows(friend,enemy,band=enemyRoleBands()){
+    return enemyRole(enemy,band)===(cfg.blackSkulls[positive(friend?.id)]?'heavy':'regular');
+  }
+  function roleMatch(friend,enemy,band=enemyRoleBands()){
+    if(!roleAllows(friend,enemy,band))return null;
+    const ev=matchEvidence(friend,enemy),r=hitterRisk(friend.id),ratio=ev.match?.ratio;
+    if(!ev.verified||!ev.rosterVerified||!Number.isFinite(ratio)||
+       ratio>r.maxRatio||ev.encounters.losses>0||ev.conflict||
+       ev.encounters.wins<r.minWins||
+       (ev.tier!==0&&!(r.mode==='aggressive'&&ev.tier===1)))return null;
+    return ev;
+  }
   function personalShortlist(friend,limit=8){
     if(!friend)return [];
     return state.data.enemies.map(e=>matchEvidence(friend,e))
@@ -2002,8 +2045,9 @@
       memberState(friend)!=='okay')return [];
     const ownBss=bsScore(spy(friend.id)),observed=cfg.enableAttacks?
       warAttackRows(positive(state.data.war?.id)):[];
-    const risk=hitterRisk(friend.id);
-    return state.data.enemies.filter(p=>memberState(p)==='okay').map(player=>{
+    const risk=hitterRisk(friend.id),bands=enemyRoleBands();
+    return state.data.enemies.filter(p=>memberState(p)==='okay'&&
+      roleAllows(friend,p,bands)).map(player=>{
       const ev=matchEvidence(friend,player),otherBss=bsScore(spy(player.id)),
         ratio=ev.match?.ratio;
       if(!ownBss||!otherBss||!ev.verified||!ev.rosterVerified||
@@ -2020,7 +2064,7 @@
       return {player,evidence:ev,ff,modeled:model,actual:learned.actual,
         sampleCount:learned.samples,pointsPer25:learned.pointsPer25,
         pointsPerEnergy:learned.pointsPer25/25,source:learned.confidence,
-        riskMode:risk.mode,ratio};
+        riskMode:risk.mode,ratio,role:cfg.blackSkulls[friend.id]?'Black Skull':'Regular'};
     }).filter(Boolean).sort((x,y)=>y.pointsPerEnergy-x.pointsPerEnergy||
       y.evidence.score-x.evidence.score||x.player.id-y.player.id).slice(0,limit);
   }
