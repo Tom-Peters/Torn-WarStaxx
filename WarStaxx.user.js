@@ -2271,6 +2271,145 @@
     body+='<p class="ws-small">Sampled incoming hits may be missing. Historical-only players have not been verified to score in this war. Threat priority is not a win probability.</p>';
     return h+card('Opponent scoring priority | evidence labelled',body);
   }
+  function control(){
+    const targets=controlTargets(),fresh=rosterFresh('enemies'),key=currentPlanKey(),
+      stored=cfg.controlAssignments[key]||{};
+    let h=statusNote()+'<div class="ws-lead"><span class="ws-data-label">BLACK SKULLS | HOSPITAL-CONTROL COORDINATION</span>'+
+      '<h2>Keep their high scorers off the board</h2>'+
+      '<p>Assign a human watcher to enemy hospital exits, prioritise verified scorers and review hospital timers. A hospital exit is an estimated state change, never a guaranteed attack opportunity.</p>'+
+      '<div class="ws-toolbar">'+b('Refresh target status','refresh')+b('Top enemy scorers','tab:threats')+
+      b('Quick commander','tab:commander')+'</div></div>'+
+      '<div class="ws-grid">'+stat('Tracked opponents',fmt(targets.length),'Watched, assigned, scoring threats or hospitalised')+
+      stat('Hospitalised',fmt(targets.filter(x=>x.kind==='hospital').length),'Latest official enemy roster')+
+      stat('Upcoming exits',fmt(targets.filter(x=>x.due!==null&&x.due<=20).length),'Observed expiry within 20 minutes')+
+      stat('Roster check',fresh?'Fresh':'Stale','Refresh before using any timer')+'</div>';
+    const leaders=state.data.ours.filter(p=>cfg.blackSkulls[p.id]);
+    const rows=targets.slice(0,30);
+    if(!rows.length)return h+empty('Enemy roster has no watched or hospitalised targets. Select opponents in Threats or add them to the watchlist.');
+    const body='<div class="ws-table-wrap"><table class="ws-leader-table"><thead><tr><th>Opponent</th><th>Observed state / timer</th><th>Recorded scoring</th><th>Assigned watcher</th><th>Actions</th></tr></thead><tbody>'+
+      rows.map(x=>{
+        const options=['<option value="0">No watcher</option>'].concat(leaders.map(p=>
+          '<option value="'+p.id+'" '+(x.leader===p.id?'selected':'')+'>'+esc(p.name)+'</option>'));
+        const threat=enemyThreatRows().find(z=>z.player.id===x.p.id);
+        return '<tr><td data-label="Opponent">'+infoButton(x.p.name,x.p.id)+' '+ffBadge(x.p.id)+
+          '</td><td data-label="Official state">'+pill(x.p.status,x.kind==='hospital'?'bad':'')+
+          '<br><small>'+(x.expiry?'Hospital expiry '+esc(stamp(x.expiry))+' | '+flightCountdown(x.expiry):
+            'No confirmed hospital expiry')+'</small></td>'+
+          '<td data-label="Scoring evidence">'+(threat?.live?
+            fmt(threat.live.hits)+' recorded hits / '+fmt(threat.live.respect)+' respect':
+            threat?.previous?'Previous report '+fmt(threat.previous.score)+' points':'No player scoring evidence')+
+          '</td><td data-label="Local watcher"><select data-control-target="'+x.p.id+'" aria-label="Watcher for '+esc(x.p.name)+'">'+
+          options.join('')+'</select><small>Manual coordination only</small></td>'+
+          '<td data-label="Actions">'+b(cfg.watchlist[x.p.id]?'Unwatch':'Watch','watch:'+x.p.id)+' '+
+          a('Profile',link(x.p.id))+
+          (x.kind==='okay'&&fresh?' '+a('Attack manually',attackLink(x.p.id)):'')+'</td></tr>';
+      }).join('')+'</tbody></table></div>';
+    h+=card('Opponent hospital-control watchboard',body+
+      '<p class="ws-small">Assigning a watcher only records an instruction on this device. WarStaxx does not perform hospital locks, announce a successful hit, or access teammates personal energy data.</p>');
+    if(state.controlFocus&&targets.some(x=>x.p.id===state.controlFocus)){
+      const item=targets.find(x=>x.p.id===state.controlFocus);
+      h+=card('Focused opponent | '+esc(item.p.name),
+        '<p>Observed state: '+esc(item.p.status)+
+        (item.expiry?' | hospital expiry '+esc(stamp(item.expiry)):'')+
+        ' | Roster '+esc(age(state.data.updated.enemies))+'</p>'+
+        b('Open player intel','player:'+item.p.id)+' '+b('Watch','watch:'+item.p.id));
+    }
+    return h;
+  }
+  function turtle(){
+    const x=turtleAssessment(),p=x.plan;
+    let h=statusNote()+'<div class="ws-lead"><span class="ws-data-label">DEFENSIVE RANKED-WAR PLAN | TURTLING</span>'+
+      '<h2>Protect points by denying enemy attacks</h2>'+
+      '<p>Turtling means deliberately limiting exposed faction members while a smaller, proven hitting team seeks reliable points. Set a posture locally; this tool never starts flights, uses medical items, toggles revives or attacks.</p>'+
+      '<div class="ws-toolbar">'+b('Refresh roster','refresh')+b('Phone commander','tab:commander')+
+      b('Black Skulls targets','tab:matchups')+'</div></div>'+
+      '<div class="ws-grid">'+
+      stat('Exposed (Okay)',x.ownFresh?fmt(x.exposed):'Unknown','May be hittable; official current status')+
+      stat('Hospital / away / jail',x.ownFresh?fmt(x.sheltered):'Unknown','Observed defensive states; expiry/revive can change exposure')+
+      stat('Unknown coverage',fmt(x.unclear),'Missing or stale roster state')+
+      stat('Expiries within 15m',x.ownFresh?fmt(x.dueSoon):'Unknown','Time-limited Torn roster statuses')+'</div>';
+    h+=card('Choose a coordinated team posture',
+      '<p><b>Current:</b> '+pill(p.mode==='full'?'Full turtle':p.mode==='defensive'?'Defensive':'Balanced')+
+      '. This is a local leadership instruction, not an automated game state.</p>'+
+      '<div class="ws-toolbar">'+
+      [['balanced','Balanced','Strike with reliable hitters, protect vulnerable members'],
+       ['defensive','Defensive','Limit exposure; prioritise strong hit windows'],
+       ['full','Full turtle','Maximum defensive coordination; still track how to gain points']].map(([mode,label])=>
+        b(label,'turtle-mode:'+mode,p.mode===mode?'disabled':'')).join('')+
+      '</div><p class="ws-note">'+esc(x.suggestion)+'</p>'+
+      '<p class="ws-small">Net-score objective: preserving a lead does not guarantee winning, and full turtling can prevent your own side from reaching the target. Compare live score, enemy pace and available hitters before changing posture.</p>');
+    let rows='<div class="ws-table-wrap"><table class="ws-leader-table"><thead><tr><th>Our member</th><th>Observed status</th><th>Local duty</th><th>Expiry / warning</th><th>Actions</th></tr></thead><tbody>'+
+      x.rows.slice().sort((a,b)=>Number(b.danger)-Number(a.danger)||Number(b.approaching)-Number(a.approaching)||a.p.id-b.p.id)
+      .map(z=>'<tr><td data-label="Our member">'+infoButton(z.p.name,z.p.id)+
+        (cfg.blackSkulls[z.p.id]?' '+pill('Black Skull','good'):'')+'</td>'+
+        '<td data-label="Official status">'+pill(z.observed,z.danger?'bad':z.cover?'good':'')+
+        '<br><small>'+esc(z.p.lastAction||'Unknown')+'</small></td>'+
+        '<td data-label="Local defensive duty"><select data-turtle-duty="'+z.p.id+'">'+
+        [['auto','Not assigned'],['strike','Reliable hitter'],['turtle','Defensive turtle'],['reserve','Reserve / return window']].map(([v,label])=>
+          '<option value="'+v+'" '+(z.assigned===v?'selected':'')+'>'+label+'</option>').join('')+
+        '</select></td><td data-label="Expiry / risk">'+
+        (z.expiry&&z.expiry>Date.now()?esc(stamp(z.expiry))+' | '+flightCountdown(z.expiry):
+         z.danger?'Currently Okay and potentially targetable':'No known near-term expiry')+
+        '</td><td data-label="Actions">'+b('Review readiness','tab:command')+'</td></tr>').join('')+
+      '</tbody></table></div>';
+    h+=card('Member-by-member defensive assignments',rows+
+      '<p class="ws-small">Turtle duty labels are explicitly manual. Marking someone as turtling does not mean Torn reports them protected; the adjacent official status is the source of truth.</p>');
+    h+=card('Turtling methods | manual planning checklist',
+      '<div class="ws-row"><span><b>Flights</b><br><small>Air travel can make a member inaccessible while airborne. Plan destination, return window and reconnection; being abroad after landing is not guaranteed protection.</small></span>'+
+      a('Travel agency','https://www.torn.com/travelagency.php')+'</div>'+
+      '<div class="ws-row"><span><b>Self-hospitalisation</b><br><small>Incompatible blood bags or Ipecac can create temporary defensive hospital time where allowed. Verify education, medical cooldown and available inventory; players choose and use items manually.</small></span>'+
+      a('Hospital','https://www.torn.com/hospitalview.php')+'</div>'+
+      '<div class="ws-row"><span><b>Revive coordination</b><br><small>Unexpected revives, med-outs and hospital expiry can expose a member. Review revivable state and keep the chosen team posture coordinated.</small></span>'+
+      b('Readiness','tab:command')+'</div>'+
+      '<div class="ws-row"><span><b>Emergency backups</b><br><small>Bounties, mercenary hospitalisations and prepared in-game devices have costs and timing trade-offs. Treat them as manual contingency plans, not guaranteed protection.</small></span>'+
+      b('Operations','tab:operations')+'</div>'+
+      '<p class="ws-small">Community strategy reference: Torn forum Neat Turtling Guide (8 April 2026). Verify game rules and time windows before using any method. No item is purchased or consumed by WarStaxx.</p>'+
+      '<div class="ws-toolbar">'+b('Live score / net target','tab:pace')+
+      b('Copy leadership briefing','copy-leader-brief')+'</div>');
+    return h;
+  }
+  function commander(){
+    const score=warScore(),pace=warPace(),lead=leadershipSummary(),
+      t=turtleAssessment(),threat=enemyThreatRows().slice(0,3),
+      tasks=operationalQueue().slice(0,4),ours=state.data.ours.filter(p=>
+        state.commanderFilter==='all'||cfg.blackSkulls[p.id]);
+    let h=statusNote()+'<div class="ws-lead"><span class="ws-data-label">PHONE FIRST | TACTICAL COMMAND</span>'+
+      '<h2>War commander</h2><p>Read the score, check top threats and issue local duties without opening multiple large tables. Source freshness is shown; actions are always manual.</p>'+
+      '<div class="ws-toolbar">'+b('Refresh','refresh')+b('Turtling','tab:turtle')+
+      b('Hospital control','tab:control')+b('Hit ledger','tab:ledger')+'</div></div>'+
+      '<div class="ws-grid">'+
+      stat('Official war score',score?fmt(score.our)+' / '+fmt(score.enemy):'Unknown','Ours / enemy')+
+      stat('Net advantage',score?fmt(score.net):'Unknown','Official sampled score')+
+      stat('Observed enemy pace',pace?.measurable?fmt(pace.rateEnemy)+'/h':'Unknown','Requires timed samples')+
+      stat('Black Skulls Okay',lead.skullReady+' / '+lead.skulls,'Roster '+age(state.data.updated.ours))+
+      stat('Exposed members',t.ownFresh?fmt(t.exposed):'Unknown','Current Okay status')+
+      stat('Turtle posture',t.plan.mode,'Local leadership choice')+'</div>';
+    h+=card('Immediate commander attention',
+      tasks.length?tasks.map(x=>'<div class="ws-row"><span><b>'+esc(x.title)+'</b>'+
+        '<br><small>'+esc(x.detail)+'</small></span>'+b('Review',x.action)+'</div>').join(''):
+        empty('No immediate tasks evidenced in the current sample.'));
+    h+=card('Enemy scorers to monitor',
+      threat.length?threat.map(x=>'<div class="ws-row"><span>'+infoButton(x.player.name,x.player.id)+
+        ' '+ffBadge(x.player.id)+'<br><small>'+esc(x.source)+' | '+esc(x.player.status)+
+        '</small></span>'+b('Control','control-target:'+x.player.id)+'</div>').join(''):
+        empty('No opponents have been loaded.'));
+    h+=card('Black Skulls quick actions',
+      '<div class="ws-toolbar">'+b(state.commanderFilter==='all'?'Black Skulls only':'Show all members','commander-filter')+
+      b('Full Leadership','tab:command')+'</div>'+
+      (ours.length?ours.slice(0,20).map(p=>{
+        const selected=state.data.enemies.find(e=>e.id===positive(cfg.assignments[p.id]));
+        const best=personalShortlist(p,1)[0],read=hitterReadiness(p),kind=memberState(p);
+        return '<div class="ws-commander-member"><div><b>'+esc(p.name)+'</b> '+
+          pill(p.status,kind==='okay'?'good':'')+
+          '<small>Energy: '+(read.energy===null?'unknown':fmt(read.energy)+' E')+
+          ' | duty '+esc(hitterPlanStatus(p.id))+'</small><small>Target: '+
+          (selected?esc(selected.name)+' (manual)':best?esc(best.enemy.name)+' ('+esc(best.category)+')':'not chosen')+
+          '</small></div><div class="ws-toolbar">'+b('Matchup','hitter:'+p.id)+
+          (selected?a('Attack',attackLink(selected.id)):'')+
+          b('Defence','tab:turtle')+'</div></div>';
+      }).join(''):empty('No Black Skulls roster members yet. Mark them in Leadership.')));
+    return h;
+  }
   function overview(){
     const w=state.data.war,score=warScore(),our=sideActivity('ours'),them=sideActivity('enemies');
     const ff=ffCoverage();
