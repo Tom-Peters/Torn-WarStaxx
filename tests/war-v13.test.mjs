@@ -11,6 +11,45 @@ function slice(start,end){
 function fixture(setup,start,end,out){
  return runInNewContext(setup+'\n'+slice(start,end)+';\n'+out);
 }
+test('Torn API v2 ranked attack format and older logs are both recognised',()=>{
+ const setup=[
+   'const n=Number,positive=Number;',
+   'const parseArray=x=>Array.isArray(x)?x:Object.values(x||{});',
+   'const unpack=(obj,key)=>obj[key]??obj;',
+   'const officialNumber=v=>v===null||v===undefined?null:Number(v);',
+   'const epochMs=v=>Number(v)*1000;',
+   'const validFF=v=>v===null||v===undefined?null:Number(v);'
+ ].join('\n');
+ const f=fixture(setup,'  function attacks(j){',
+   '  // Attack attribution is conservative:','({attacks})');
+ const raw={attacks:[
+   {id:555,started:1730000000,ended:1730000060,is_ranked_war:true,
+     attacker:{id:20,name:'Enemy',faction:{id:200}},
+     defender:{id:10,name:'OurMember',faction:{id:100}},
+     result:'Hospitalized',respect_gain:12.5,chain:25,
+     modifiers:{chain:1.2,war:2,group:1,warlord:1.3,fair_fight:2}},
+   {id:556,started:1730000000,ended:1730000061,ranked_war:1,
+     attacker_id:10,defender_id:20,attacker_faction_id:100,
+     defender_faction_id:200,result:'Hospitalized',respect:9,
+     modifiers:{group_attack:1,chain_bonus:1}},
+   {id:557,started:1730000000,ended:1730000062,is_ranked_war:false,
+     attacker:{id:10,faction:{id:100}},defender:{id:20,faction:{id:200}},
+     result:'Hospitalized',respect_gain:10}
+ ]};
+ const rows=f.attacks(raw);
+ assert.equal(rows.length,3);
+ assert.equal(rows[0].ranked,true);
+ assert.equal(rows[0].attackerFaction,200);
+ assert.equal(rows[0].defenderFaction,100);
+ assert.equal(rows[0].respect,12.5);
+ assert.equal(rows[0].modifierGroup,1);
+ assert.equal(rows[0].chainBonus,1.2);
+ assert.equal(rows[0].specialBonus,true);
+ assert.equal(rows[1].ranked,true);
+ assert.equal(rows[1].attackerFaction,100);
+ assert.equal(rows[1].chainBonus,1);
+ assert.equal(rows[2].ranked,false);
+});
 test('Skull Capo can choose top percentage or minimum BSS without misclassifying unknown players',()=>{
  const setup=[
   'const n=Number,positive=Number;',
