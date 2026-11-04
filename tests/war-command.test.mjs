@@ -30,16 +30,17 @@ function targetFixture(){
     'const positive=v=>Number.isSafeInteger(Number(v))&&Number(v)>0?Number(v):0;',
     'const fmt=v=>String(v);',
     "const cfg={ourId:10,enemyId:20,assignments:{},blackSkulls:{1:true,2:true},planStatus:{},watchlist:{},spies:{1:{known:true,observedAt:Date.now()},2:{known:true,observedAt:Date.now()},101:{known:true,observedAt:Date.now()},103:{known:true,observedAt:Date.now()}}};",
-    "const state={data:{war:{id:500},ours:[{id:1,name:'A',status:'okay',online:true},{id:2,name:'B',status:'okay',online:true}],enemies:[{id:101,name:'Known',status:'okay',ratio:0.65,online:true},{id:102,name:'Estimate',status:'okay',ratio:0.55,online:false},{id:103,name:'Hospital',status:'hospital',ratio:0.2,online:false},{id:104,name:'Unknown',status:'okay',ratio:null,online:false},{id:105,name:'Risky',status:'okay',ratio:1.4,online:true}]}};",
+    "const state={data:{war:{id:500},updated:{ours:Date.now(),enemies:Date.now()},ours:[{id:1,name:'A',status:'okay',online:true},{id:2,name:'B',status:'okay',online:true}],enemies:[{id:101,name:'Known',status:'okay',ratio:0.65,online:true},{id:102,name:'Estimate',status:'okay',ratio:0.55,online:false},{id:103,name:'Hospital',status:'hospital',ratio:0.2,online:false},{id:104,name:'Unknown',status:'okay',ratio:null,online:false},{id:105,name:'Risky',status:'okay',ratio:1.4,online:true}]}};",
     "const spy=id=>cfg.spies[id]||null;",
     'const bsScore=spy=>spy?1:null;',
     "const memberState=p=>String(p.status||'unknown').toLowerCase();",
     'const isOnline=p=>Boolean(p.online);',
     'const lastKnownMemberScore=(side,id)=>id===101?800:100;',
     'const attackHistoryFor=()=>({wins:0,losses:0,unknown:0,total:0,last:0});',
+    'const hitterReadiness=()=>({energyEnough:null});',
     "const matchup=(friend,enemy)=>enemy.ratio===null?{known:false,ratio:null,ff:null}:{known:true,ratio:enemy.ratio,ff:2.2,confidence:'model'};"
   ].join('\n');
-  return runInNewContext(setup+extract('  function matchEvidence(friend,enemy){','  function assignments(){')+
+  return runInNewContext(setup+extract('  function rosterFresh(','  function assignments(){')+
     '; ({cfg,state,matchEvidence,personalShortlist,hitterPlanKey,hitterPlanStatus,leadershipSummary,suggestedDraft})');
 }
 test('official war score snapshots produce true observed point rates',()=>{
