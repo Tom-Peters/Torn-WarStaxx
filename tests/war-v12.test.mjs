@@ -13,7 +13,7 @@ function fixture(setup,a,b,out){
 }
 test('FFScouter and manual BSS partition toughest 40% for Black Skulls',()=>{
  const setup=[
-   'const positive=Number,n=Number;',
+   'const positive=Number,n=Number,HOUR=3600000;',
    'const spy=id=>id===1?{bss:500,observedAt:Date.now()}:null;',
    'const bsScore=s=>s?.bss??null;',
    'const ffscouter=id=>({bss:({2:250,3:150,4:100,5:75})[id]||null});',
