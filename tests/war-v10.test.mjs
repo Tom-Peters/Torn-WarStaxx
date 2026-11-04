@@ -29,6 +29,8 @@ test('highest reliable points per 25 energy outranks level and excludes unavaila
     "const ourWarReadiness=()=>({kind:'okay',player:self});",
     'const warAttackRows=()=>[];',
     'const hitterRisk=()=>({mode:"balanced",maxRatio:0.70,minWins:0});',
+    'const enemyRoleBands=()=>({heavy:new Set([102,101]),regular:new Set(),known:2});',
+    'const roleAllows=()=>true;',
     'const learnedYield=(f,p,model)=>({pointsPer25:model,actual:null,samples:0,confidence:"Model only"});'
   ].join('\n');
   const x=fixture(setup,'  function efficiencyHits(','  function turtleWindow(',
@@ -92,7 +94,7 @@ test('live strip supports automatic compact mode, alert links, skull orders and 
     "cfg.priorityNotifications=Boolean($('#ws-priority-notifications'"]){
     assert.ok(source.includes(term),'Missing integration '+term);
   }
-  assert.match(source,/\/\/ @version\s+1\.1\.0/);
+  assert.match(source,/\/\/ @version\s+1\.2\.0/);
   assert.ok(source.startsWith('// ==UserScript==\n'));
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
