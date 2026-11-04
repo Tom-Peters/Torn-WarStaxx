@@ -2977,7 +2977,7 @@
        empty('No locally tagged Black Skulls. Mark hitters under Leadership to compare their recorded scores.'))+
       '<p class="ws-small">Scoring totals are official when the report exists. Earlier-wars comparisons use only fetched report rows, with unknown values preserved. Prior battle stats or combat wins cannot be inferred from scoring alone.</p>';
     html+=card('Black Skulls | individual post-war scorecards',scorecard)+
-      blackSkullsPerformanceCard(r.id)+squadReportCard(r.id,'black')+
+      blackSkullsPerformanceCard(r.id)+comparableStrengthCard(r.id)+squadReportCard(r.id,'black')+
       squadReportCard(r.id,'regular');
     return html;
   }
@@ -3671,6 +3671,14 @@
         ' | own attacks '+(p.attacks??'Unknown')+
         ' | enemy points on this member '+(p.received??'Unknown (not captured)')+
         ' | captured incoming scoring hits '+(p.incomingHits??'Unknown')).join('\n')+'\n'+
+      (side==='black'?'SIMILAR-STRENGTH OPPONENTS (partial, chain-normalised respect per captured attempt):\n'+
+        report.rows.map(p=>{
+          const x=similarStrengthPerformance(p.id,warId);
+          return p.name+' ['+p.id+'] | median target BSS '+(x.referenceBss??'unknown')+
+            ' | current '+(x.actual===null?'unknown':x.actual.toFixed(2))+
+            ' ('+x.currentSamples+' attempts) | past '+(x.historical===null?'unknown':x.historical.toFixed(2))+
+            ' ('+x.historicalSamples+' attempts, '+x.priorWars+' wars) | '+x.label;
+        }).join('\n')+'\n':'')+
       'Enemy points conceded are not deductions from player points. Incoming feed may be incomplete.';
   }
   function squadReportCard(warId,side){
@@ -3732,6 +3740,41 @@
         '</tbody></table></div>':empty('No ranked-war own-faction hits captured yet. Enable faction attacks to populate a live leaderboard.'))+
       '<div class="ws-toolbar">'+b('Full hit ledger','tab:ledger')+
         b('After-action reports','tab:afteraction')+'</div>');
+  }
+
+  function comparableStrengthCard(warId=positive(state.data.war?.id)){
+    const snap=warSquadSnapshot(warId),ids=[...snap.black],
+      official=state.data.reports[String(warId)]?.factions
+        ?.find(x=>positive(x.id)===positive(cfg.ourId)),
+      roster=new Map([...state.data.ours,...(official?.members||[])].map(p=>[positive(p.id),p])),
+      rows=ids.map(id=>({id,member:roster.get(id),result:similarStrengthPerformance(id,warId)}))
+        .sort((a,b)=>Number(b.result.flag)-Number(a.result.flag)||
+          (b.result.currentSamples-a.result.currentSamples)||a.id-b.id);
+    return card('Black Skulls | matched opponent-strength comparison',
+      '<p>Compares a Skull against their own attacks on opponents with BSS within 25% '+
+      'of their current target-strength median. Only BSS observed within 6 hours of '+
+      'the actual recorded attack is used. Respect is chain-normalised and unusual '+
+      'bonuses are excluded. This is <b>captured respect per recorded attempt</b>, not '+
+      'official war points or a battle win-rate.</p>'+
+      (rows.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr>'+
+        '<th>Black Skull</th><th>Target BSS reference</th><th>This war</th>'+
+        '<th>Previous 3 wars</th><th>Compared pace</th><th>Evidence</th></tr></thead><tbody>'+
+        rows.map(x=>{
+          const y=x.result;
+          return '<tr><td>'+infoButton(x.member?.name||('Player '+x.id),x.id)+'</td>'+
+            '<td>'+(y.referenceBss===null?'Unknown':fmt(y.referenceBss))+'</td>'+
+            '<td>'+(y.actual===null?'Unknown':fmt(y.actual)+' respect/attempt')+
+              '<br><small>'+y.currentSamples+' comparable captured attempts</small></td>'+
+            '<td>'+(y.historical===null?'Unknown':fmt(y.historical)+' respect/attempt')+
+              '<br><small>'+y.historicalSamples+' attempts across '+y.priorWars+' wars</small></td>'+
+            '<td>'+pill(y.label,y.flag?'bad':y.ratio!==null&&y.ratio>=1.15?'good':'')+'</td>'+
+            '<td><small>'+esc(y.source)+'</small></td></tr>';
+        }).join('')+'</tbody></table></div>':
+        empty('No Black Skulls identified for this war. Tag members or load their past-war records.'))+
+      '<p class="ws-small">Requires at least 3 comparable captured attempts this war, '+
+      '3 from at least 2 past completed wars, and a reliable nonzero baseline. '+
+      'Otherwise performance stays unclassified. Historical BSS is never '+
+      'inferred from the present enemy roster.</p>');
   }
   function blackSkullsPerformanceCard(warId=positive(state.data.war?.id)){
     const players=state.data.ours.filter(p=>cfg.blackSkulls[p.id]),
@@ -3943,7 +3986,7 @@
           'This controls targets only; it does not prove a win.</p>'+
         b('Save strength cutoff','save-heavy-cutoff'))+
       blackSkullsCoverageCard(40)+
-      blackSkullsPerformanceCard()+bonusTargetCard()+leaderboardCard(12)+
+      blackSkullsPerformanceCard()+comparableStrengthCard()+bonusTargetCard()+leaderboardCard(12)+
       card('BLACK SKULLS | strongest enemy targets',teamRows(black,'Black Skulls'))+
       card('REGULAR ATTACKERS | lower BSS targets',teamRows(regular,'regular attackers'))+
       card('DEFENCE / RESERVE | coordinated cover',teamRows(defensive,'defence'))+
@@ -4008,7 +4051,7 @@
               '<td>'+infoButton('Inspect',x.enemy.id)+'</td></tr>';
           }).join('')+'</tbody></table></div>':
           empty('No comparable enemy BSS estimates; fetch FFScouter or enter manual spies.')))+
-      blackSkullsPerformanceCard()+
+      blackSkullsPerformanceCard()+comparableStrengthCard()+
       card('My hospital-control assignments',watched.length?watched.map(p=>{
         const expiry=memberState(p)==='hospital'&&p.until>Date.now()?
           ' | approximate hospital expiry '+flightCountdown(p.until):'';
