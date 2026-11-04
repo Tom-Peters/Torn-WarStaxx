@@ -1,4 +1,4 @@
-> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v0.2.5). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v0.2.6). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
 
 # Torn-WarStaxx
 
@@ -33,6 +33,14 @@ Update the standalone TornStaxx hub to **v4.0.3** and War-TornStaxx to **v0.2.3*
 ## 2026-11-04 v0.2.1 startup connection fix
 
 Install/update **TornStaxx v4.0.1** and **War-TornStaxx v0.2.1** using their existing raw URLs, then fully reload Torn PDA. The module emits identity-only registration over DOM events and a same-origin message bridge, and writes a short-lived local startup marker so the hub can distinguish an injection failure from an inter-script communication failure. It does not share keys, spy stats or private faction data. If the hub says **War-TornStaxx has not executed on this Torn page**, check Torn PDA's **DevTools → Scripts** tab for the current page and verify this exact module version is active. The legacy notes for versions 0.1.1 and 0.1.2 below describe the earlier embedded-hub architecture.
+
+## v0.2.6 — automatically identify your own faction
+
+War-TornStaxx now detects the faction attached to your installed Torn API key. The primary source is **Torn API v2 `/key/info` -> `user.faction_id`**, which is available even for user-owned custom-scoped keys. If that endpoint fails or does not provide an ID, War tries the official `/user/faction` and `/user/profile` endpoints. No manually entered faction ID is required when one of these endpoints succeeds.
+
+On opening WarStaxx, and on foreground refresh, the tool verifies faction membership when needed (at most once every six hours after successful verification, unless you force a refresh). A changed verified faction resets only transient live rosters, opponents, current war state and recent stamps so old enemies are not mislabelled; local spy records, reports and orders stay stored. Settings displays the currently detected ID and its source, a **Detect my faction now** action, and an **automatic detection** checkbox with an optional manual fallback.
+
+An API key must be available through Torn PDA key substitution or the module's own locally stored settings. No API key is sent to the TornStaxx hub. All five current scripts remain protected by no-smart-quote parser regression checks; the War source stays ASCII. This build has automated tests for each API response source, transient failures, faction changes and manual override.
 
 ## Getting started
 
