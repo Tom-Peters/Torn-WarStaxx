@@ -1211,29 +1211,38 @@
   // Augmenting-path matching prioritises covering the maximum number of
   // evidenced Black Skulls instead of giving the first roster member every
   // strong target. It is a plan preview, never an attack or game-state write.
+
   function suggestedDraft(at=Date.now()){
     if(!rosterFresh('ours',at)||!rosterFresh('enemies',at))return [];
-    const claimed=new Set(Object.entries(cfg.assignments).filter(([id,target])=>
-      state.data.ours.some(p=>p.id===positive(id))&&state.data.enemies.some(p=>p.id===positive(target)))
-      .map(([id,target])=>positive(target)));
-    const candidates=state.data.ours.filter(p=>cfg.blackSkulls[p.id]&&memberState(p)==='okay'&&
+    const bands=enemyRoleBands(),claimed=new Set(Object.entries(cfg.assignments)
+      .filter(([id,target])=>state.data.ours.some(p=>p.id===positive(id))&&
+        state.data.enemies.some(p=>p.id===positive(target)))
+      .map(([,target])=>positive(target)));
+    const candidates=state.data.ours.filter(p=>memberState(p)==='okay'&&
       !positive(cfg.assignments[p.id])&&hitterReadiness(p,at).energyEnough!==false)
-      .map(friend=>({friend,options:personalShortlist(friend,state.data.enemies.length)
-        .filter(x=>x.tier===0&&!claimed.has(x.enemy.id))
-        .sort((a,b)=>b.score-a.score)}))
-      .filter(x=>x.options.length)
-      .sort((a,b)=>a.options.length-b.options.length||a.friend.id-b.friend.id);
+      .map(friend=>{
+        const black=Boolean(cfg.blackSkulls[friend.id]);
+        const options=state.data.enemies.filter(p=>memberState(p)==='okay'&&
+          !claimed.has(p.id)&&roleAllows(friend,p,bands))
+          .map(enemy=>({enemy,evidence:roleMatch(friend,enemy,bands),
+            bss:enemyBattleEstimate(enemy).value}))
+          .filter(x=>x.evidence)
+          .sort((a,b)=>black?(b.bss-a.bss||b.evidence.score-a.evidence.score):
+            b.evidence.score-a.evidence.score||a.bss-b.bss);
+        return {friend,options,black};
+      }).filter(x=>x.options.length)
+      .sort((a,b)=>a.options.length-b.options.length||
+        Number(b.black)-Number(a.black)||a.friend.id-b.friend.id);
     const byId=new Map(candidates.map(x=>[x.friend.id,x]));
     const booked=new Map(),matched=new Map();
     function place(friendId,seen){
-      const entry=byId.get(friendId);
-      if(!entry)return false;
+      const entry=byId.get(friendId);if(!entry)return false;
       for(const choice of entry.options){
         const target=choice.enemy.id;
         if(seen.has(target))continue;
         seen.add(target);
-        const oldFriend=booked.get(target);
-        if(!oldFriend||place(oldFriend,seen)){
+        const current=booked.get(target);
+        if(!current||place(current,seen)){
           booked.set(target,friendId);matched.set(friendId,choice);
           return true;
         }
@@ -1241,28 +1250,50 @@
       return false;
     }
     for(const entry of candidates)place(entry.friend.id,new Set());
-    return [...matched.entries()].map(([id,choice])=>({
-      friend:byId.get(id).friend,enemy:choice.enemy,reason:choice.reason,
-      evidence:choice.reliability,score:choice.score,category:choice.category
-    })).sort((a,b)=>b.score-a.score||a.friend.id-b.friend.id);
+    return [...matched.entries()].map(([id,choice])=>{
+      const friend=byId.get(id).friend;
+      return {friend,enemy:choice.enemy,reason:cfg.blackSkulls[id]?
+        'Black Skull: difficult enemy in top BSS bracket, verified relative matchup':
+        'Regular member: lower-BSS bracket, verified relative matchup',
+        evidence:choice.evidence.reliability,score:choice.evidence.score,
+        category:choice.evidence.category,bss:choice.bss};
+    }).sort((a,b)=>Number(Boolean(cfg.blackSkulls[b.friend.id]))-
+      Number(Boolean(cfg.blackSkulls[a.friend.id]))||
+      (cfg.blackSkulls[a.friend.id]?b.bss-a.bss:b.score-a.score)||
+      a.friend.id-b.friend.id);
   }
+
   function assignments(){
-    const ours=state.data.ours.slice().sort((a,b)=>Number(Boolean(cfg.blackSkulls[b.id]))-Number(Boolean(cfg.blackSkulls[a.id])) || Number(isOnline(b))-Number(isOnline(a)));
-    const enemies=state.data.enemies.filter(p=>evaluate(p).ready);
-    const ranked=enemies.slice().sort((a,b)=>evaluate(b).score-evaluate(a).score);
+    const ours=state.data.ours.slice().sort((a,b)=>
+      Number(Boolean(cfg.blackSkulls[b.id]))-Number(Boolean(cfg.blackSkulls[a.id]))||
+      Number(isOnline(b))-Number(isOnline(a)));
+    const bands=enemyRoleBands(),available=state.data.enemies.filter(p=>evaluate(p).ready),
+      claimed=new Set(Object.entries(cfg.assignments)
+        .filter(([id,target])=>state.data.ours.some(p=>p.id===positive(id))&&
+          available.some(e=>e.id===positive(target))).map(([,target])=>positive(target)));
     const used=new Set();
     return ours.map(p=>{
-      if(memberState(p)!=='okay')return {friend:p,enemy:null,reason:memberState(p)==='hospital'?'Recover / monitor hospital expiry':memberState(p)==='away'?'Travelling \u00b7 return and prepare':'Unavailable \u00b7 standby and support',details:null};
-      const fixed=positive(cfg.assignments[p.id]);
-      let target=ranked.find(e=>e.id===fixed);
-      let reason=target?'Your saved manual order':'';
-      if(!target){
-        const confirmed=personalShortlist(p,ranked.length).filter(x=>x.tier===0&&!used.has(x.enemy.id));
-        target=confirmed[0]?.enemy||null;
-        reason=target?'Favourable comparative manual spies (verify buffs)':'No sufficiently evidenced auto-match; scout first';
+      if(memberState(p)!=='okay')return {friend:p,enemy:null,
+        reason:memberState(p)==='hospital'?'Recover / monitor hospital expiry':
+          memberState(p)==='away'?'Travelling / return and prepare':'Standby / unavailable',details:null};
+      const fixed=positive(cfg.assignments[p.id]),manual=available.find(x=>x.id===fixed);
+      const invalid=manual&&!roleAllows(p,manual,bands);
+      let selected=manual&&!invalid?manual:null,reason=selected?
+        'Manual order - '+(cfg.blackSkulls[p.id]?'Black Skulls heavy bracket':'Regular target bracket'):'';
+      if(!selected){
+        const options=available.filter(x=>!claimed.has(x.id)&&!used.has(x.id)&&
+          roleAllows(p,x,bands)).map(enemy=>({enemy,evidence:roleMatch(p,enemy,bands),
+            strength:enemyBattleEstimate(enemy).value})).filter(x=>x.evidence);
+        options.sort((a,b)=>cfg.blackSkulls[p.id]?b.strength-a.strength||
+          b.evidence.score-a.evidence.score:b.evidence.score-a.evidence.score||
+          a.strength-b.strength);
+        selected=options[0]?.enemy||null;
+        reason=invalid?'Saved order is outside the member role - reassign manually':
+          selected?cfg.blackSkulls[p.id]?'Best evidenced tougher enemy reserved for a Black Skull':
+          'Favourable lower-BSS member target':'No verified in-role matchup; scout opponents';
       }
-      if(target)used.add(target.id);
-      return {friend:p,enemy:target,reason,details:target?matchup(p,target):null};
+      if(selected)used.add(selected.id);
+      return {friend:p,enemy:selected,reason,details:selected?matchup(p,selected):null};
     });
   }
   function leadershipBrief(){
@@ -3998,7 +4029,14 @@
     if(action.startsWith('clear-spy:')){delete cfg.spies[positive(action.slice(10))];saveCfg();render();return;}
     if(action.startsWith('note:')){cfg.notes[positive(action.slice(5))]=String($('#ws-note',root)?.value||'').slice(0,500);saveCfg();render();return;}
     if(action.startsWith('assign:')){const [friend,enemy]=action.slice(7).split(':').map(positive);
-      if(friend&&enemy){cfg.assignments[friend]=enemy;saveCfg();markSharedDirty();navigate('assignments');}return;}
+      if(friend&&enemy){
+        const hitter=state.data.ours.find(p=>p.id===friend),
+          target=state.data.enemies.find(p=>p.id===enemy);
+        if(!hitter||!target||!roleAllows(hitter,target)){
+          state.error='Order blocked: Black Skulls require higher enemy BSS; regular members take the lower bracket.';render();return;
+        }
+        cfg.assignments[friend]=enemy;saveCfg();markSharedDirty();navigate('assignments');
+      }return;}
     if(action.startsWith('clear-assign:')){delete cfg.assignments[positive(action.slice(13))];saveCfg();markSharedDirty();render();return;}
     if(action.startsWith('black-skill:')){const id=positive(action.slice(12));if(cfg.blackSkulls[id])delete cfg.blackSkulls[id];else if(id)cfg.blackSkulls[id]=true;saveCfg();markSharedDirty();render();return;}
     if(action==='copy-orders'){
@@ -4126,7 +4164,14 @@
     const target=e.target.closest('[data-leader-target]');
     if(target){const ourId=positive(target.dataset.leaderTarget),enemyId=positive(target.value);
       if(!state.data.ours.some(p=>p.id===ourId))return;
-      if(enemyId&&state.data.enemies.some(p=>p.id===enemyId))cfg.assignments[ourId]=enemyId;
+      if(enemyId&&state.data.enemies.some(p=>p.id===enemyId)){
+        const hitter=state.data.ours.find(p=>p.id===ourId),
+          target=state.data.enemies.find(p=>p.id===enemyId);
+        if(!roleAllows(hitter,target)){
+          state.error='Role separation: reserve top estimated BSS opponents for Black Skulls.';render();return;
+        }
+        cfg.assignments[ourId]=enemyId;
+      }
       else if(!enemyId)delete cfg.assignments[ourId];
       else return;
       saveCfg();markSharedDirty();state.error=enemyId?'Manual target saved locally; no Torn action performed.':'Manual target cleared.';render();return;
