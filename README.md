@@ -1,4 +1,21 @@
-> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v0.7.0). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v0.8.0). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+
+## v0.8.0 - Ranked-war command, Black Skulls performance, hospital control and turtling (4 November 2026)
+
+**Permanent Torn PDA installer:** https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js
+
+The specialist module now has six new or expanded ranked-war operations surfaces:
+
+- **Quick command:** a compact phone-first commander showing the current official score, net advantage, observed points-per-hour, Black Skulls readiness, top enemy scoring threats, and direct manual tactical controls.
+- **Hit ledger:** optional faction attack-feed collection; attributes ranked-war events only when the API explicitly marks them as ranked-war hits and both faction IDs and official war dates match. Includes our hitters, enemy hitters, timestamps, result, observed respect, and per-player contributions. A partial local feed is never presented as the authoritative war total.
+- **Enemy threats:** ranks actual observed enemy scoring hits when available, with previous official war scores clearly labelled as historical fallback. The tool cannot infer an opponent's hidden stats from activity.
+- **Hospital control:** tracks verified enemy scorers, hospital timers, watchlist members, and locally assigned Black Skulls watchers. The current roster status and watcher assignment are shown separately. A hospital exit is an estimated expiry, not a guaranteed opportunity.
+- **Turtling:** three manual leadership postures (balanced, defensive, full), a member-by-member defensive duty board, exposed versus temporarily sheltered counts, upcoming hospital/flight expiry, and revivable-member warnings when supported. Travelling abroad is not automatically counted as protected after landing. Posture labels never change Torn status or perform flights, attacks, revives or medical actions.
+- **Black Skulls post-war scorecards:** official individual scores and attacks, share of faction score and available prior-war mean, with unknown report rows left unknown instead of fabricated zeroes.
+
+All six surfaces are routed through the existing War-TornStaxx module and TornStaxx hub, with no extra script or installer. The ranked-war attack feed is **opt-in** in Settings and depends on the API key's authorised faction access. Live scoring, travel, status and hit data are only collected while the userscript is active, not by an unattended server. WarStaxx never automatically attacks, uses items, purchases bounties, starts travel or changes revive permissions.
+
+Validation: `tests/war-v08.test.mjs` adds regression coverage for war-specific hit attribution, no guessed attack totals, manual turtle status separation, Black Skulls official report values and mobile screen wiring. PDA ASCII and syntax checks are retained.
 
 ## v0.7.0 - Operations, reliable unique match assignments and evidence safeguards (4 November 2026)
 
