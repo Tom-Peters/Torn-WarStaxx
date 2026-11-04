@@ -80,7 +80,10 @@ test('turtling exposure follows fresh observed states, not manual duty labels',(
   ].join('\n');
   const f=runInNewContext(setup+extract('  function currentPlanKey(){','  function scoreAcceleration(')+
     '; ({state,cfg,turtleAssessment,turtlePlan})');
+  f.state.data.war.start=Math.floor((now-26*3600000)/1000);
   const a=f.turtleAssessment(now);
+  assert.equal(a.decayPhase,'24h+ reduction period');
+  assert.ok(a.elapsedHours>=25);
   assert.equal(a.plan.mode,'full');
   assert.equal(a.exposed,2,'Landed-abroad member cannot count as sheltered');
   assert.equal(a.sheltered,1);
