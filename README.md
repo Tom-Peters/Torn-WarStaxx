@@ -1,4 +1,36 @@
-> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v0.6.0). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v0.7.0). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+
+## v0.7.0 - Operations, reliable unique match assignments and evidence safeguards (4 November 2026)
+
+**Installer URL stays the same:** https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js
+
+### Operations action centre
+
+- New first-class **Operations** tab in the War module, accessible from the War Room and Leadership.
+- **Do now** lists missing API/faction/opponent configuration, outdated own/enemy rosters, enemy scoring acceleration, duplicate saved targets, low known Black Skulls energy, and manual orders requiring attention.
+- **Watch next** tracks hospital-status expiry and explicitly inbound return ETAs only for watched or already assigned opponents. Expiries are *not* confirmed attacks or proof of return to Okay; verify the latest Torn roster.
+- **Close information gaps** flags missing member energy, unverified manual matchup evidence and unread war debriefs. Each item routes to a meaningful WarStaxx screen.
+- **Copy operations briefing** copies text locally for optional manual sharing; WarStaxx does not send it or your API key to faction chat.
+
+### Collision-aware, reliability-first Black Skulls draft
+
+- Matching now uses an augmenting-path algorithm to maximise the number of **distinct hitters with verified favourable matches**, rather than letting earlier roster members reserve the scarce safe targets.
+- Each draft candidate must have recent (within 30 days) comparable manual spies for *both* players, a favourable modelled battle strength ratio, a currently Okay enemy, a current Okay hitter and no known recent loss on that pairing. A fresh own and enemy roster (within five minutes) is mandatory. Known sub-25 energy blocks automatic drafting; unknown energy is labelled unknown rather than assumed ready.
+- The Operations screen previews the suggested hitter-target pairs with confidence notes and separate **Review matchup**, **Save this order** and **Draft all locally** actions. This algorithm optimises the number of evidenced pairings; it does not claim to predict combat wins or optimise hidden battle mechanics.
+- A selected opponent is never assigned twice in a fresh draft, previously saved assignments are respected, and auto-drafting does not execute attacks.
+
+### Opponent-specific saved orders
+
+- Manual target assignments are now archived **per enemy faction** on this device. On opponent change, current assignments are safely archived, the new opponent gets its own orders and the old orders can be restored if that faction returns.
+- Existing saved assignments are automatically associated with the currently configured opponent; spies, past-war reports, notes, FF consent and historical observations remain intact.
+- **Clear this opponent's orders** clears only the active faction's stored assignments. No cross-device intelligence sharing is enabled.
+
+### Other quality fixes and validation
+
+- A new watched-hospital-expiry alert routes to the Operations screen when a currently observed timer is within 20 minutes. Alerts require an opponent roster observed less than five minutes ago.
+- The API-key Settings explanation now explicitly clarifies that **FFScouter** receives the opted-in FF key (or Torn PDA key fallback) and requested target IDs, unlike ordinary Torn API calls. It still requires explicit third-party consent.
+- \`tests/war-operations-v07.test.mjs\` covers unique matchings, stale-data safeguards, preserved manual orders, opponent switching, hospital time windows and PDA parsing. Existing v0.6 tests remain in the suite.
+- Observed data is collected only while the userscript executes on Torn; there is no backend background tracking, continuous monitoring or automatic gameplay.
 
 ## v0.6.0 - Reliability-first targeting, enemy acceleration, inbound flights, readiness and after-action (4 November 2026)
 
