@@ -363,6 +363,9 @@
 
   // Torn's chain endpoint supplies an observed chain count, remaining timeout and modifier.
   const chainMilestones=[10,25,50,100,250,500,1000,2500,5000,10000,25000,50000,100000];
+  const chainBonusRespect={10:10,25:20,50:40,100:80,250:160,500:320,
+    1000:640,2500:1280,5000:2560,10000:5120,25000:10240,
+    50000:20480,100000:40960};
   function chainSnapshot(raw,at=Date.now()){
     const c=raw?.chain&&typeof raw.chain==='object'?raw.chain:raw;
     if(!c||typeof c!=='object'||officialNumber(c.current)===null)return null;
@@ -376,6 +379,7 @@
     return {count:fresh?c.count:null,
       remaining:fresh?Math.max(0,n(c.timeout)-Math.floor((at-c.at)/1000)):null,
       next:fresh?c.next:null,nextIn:fresh?c.nextIn:null,
+      nextBonus:fresh&&c.next?chainBonusRespect[c.next]??null:null,
       modifier:fresh?c.modifier:null,at:n(c.at),fresh};
   }
   function hitterRisk(id){
@@ -2393,7 +2397,8 @@
        btn('MORE STATS','stats'))+'</div>'+
       (chain.fresh?'<div class="wsw-meta"><span>Chain #'+fmt(chain.count)+
         ' | '+chain.remaining+'s | next '+(chain.next===null?'unknown':
-        '#'+fmt(chain.next)+' in '+fmt(chain.nextIn)+' hits')+'</span></div>':'')+
+        '#'+fmt(chain.next)+' (+'+fmt(chain.nextBonus)+' respect if unlocked) in '+
+          fmt(chain.nextIn)+' hits')+'</span></div>':'')+
       (opportunities.length?'<div class="wsw-opportunities"><b>AVAILABLE:</b> '+
         opportunities.slice(0,2).map(x=>btn(x.name,'opportunity:'+x.id)).join('')+'</div>':'')+
       (intent?'<div class="wsw-item-controls"><b>'+(intent==='turtle'?'Turtle items:':'Healing items:')+'</b>'+
@@ -3110,9 +3115,9 @@
       stat('Chain',chainStatus().fresh?'#'+fmt(chainStatus().count):'Unknown','Official Torn chain')+
       stat('Chain timeout',chainStatus().fresh?chainStatus().remaining+'s':'Unknown',
         'Observed countdown, verify on Torn')+
-      stat('Next milestone',chainStatus().fresh&&chainStatus().next!==null?
-        '#'+fmt(chainStatus().next):'Unknown',
-        chainStatus().fresh?chainStatus().nextIn+' successful hits remaining':'Unknown')+'</div>'+
+      stat('Next chain bonus',chainStatus().fresh&&chainStatus().next!==null?
+        '#'+fmt(chainStatus().next)+' | +'+fmt(chainStatus().nextBonus)+' respect':'Unknown',
+        chainStatus().fresh?chainStatus().nextIn+' successful hits remaining, if unlocked':'Unknown')+'</div>'+
       card('My next move',cfg.blackSkulls[myId]?
         '<p><b>Status:</b> '+esc(self.kind)+'</p>'+
         '<p><b>Assigned enemy:</b> '+(chosen?infoButton(chosen.name,chosen.id)+
@@ -3166,8 +3171,9 @@
       '<div class="ws-grid">'+
       statAction('Chain',chain.fresh?'#'+fmt(chain.count):'Unknown','Official count','tab:skulls')+
       statAction('Chain time',chain.fresh?chain.remaining+'s':'Unknown','Countdown from last observation','tab:skulls')+
-      statAction('Next milestone',chain.fresh&&chain.next!==null?'#'+fmt(chain.next):'Unknown',
-        chain.fresh?fmt(chain.nextIn)+' successful hits to go':'No data','tab:skulls')+
+      statAction('Next chain bonus',chain.fresh&&chain.next!==null?
+        '#'+fmt(chain.next)+' | +'+fmt(chain.nextBonus)+' respect':'Unknown',
+        chain.fresh?fmt(chain.nextIn)+' hits away if bonus unlocked':'No data','tab:skulls')+
       statAction('Chain modifier',chain.fresh&&chain.modifier!==null?fmt(chain.modifier)+'x':'Unknown',
         'Official chain API','tab:skulls')+'</div>'+
       '<div class="ws-toolbar">'+b('TURTLE','fast-turtle')+b(own.kind==='hospital'?'HEAL TO HIT':'HIT','fast-hit')+
