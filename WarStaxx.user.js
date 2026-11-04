@@ -199,7 +199,7 @@
   const link=id=>'https://www.torn.com/profiles.php?XID='+positive(id);
   const attackLink=id=>'https://www.torn.com/loader.php?sid=attack&user2ID='+positive(id);
   const apiKeyPda=typeof window.PDA_APIKEY==='string'?window.PDA_APIKEY:'###PDA-APIKEY###';
-  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},hidden:false};
+  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,hidden:false};
   const cfg=Object.assign({},defaults,safeRead(CONFIG,{}));
   cfg.assignments=cfg.assignments&&typeof cfg.assignments==='object'?cfg.assignments:{};
   cfg.blackSkulls=cfg.blackSkulls&&typeof cfg.blackSkulls==='object'?cfg.blackSkulls:{};
@@ -723,6 +723,54 @@
     return {score:Math.min(100,score),kind,pat,hist,ready:live||ready,
       reason:live?'Currently Okay and online':ready?'Currently Okay; last action not online':kind==='hospital'?'Hospitalised; check expiry':kind==='away'?'Travelling/abroad':'Check live status'};
   }
+  const energyValue=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))&&Number(v)>=0?Number(v):null;
+  function parseOwnBars(j,at=Date.now()){
+    const source=j?.bars??j?.user?.bars??j;
+    const energy=source?.energy??source?.bars?.energy??null;
+    const current=energyValue(energy?.current??energy?.value??(typeof energy==='number'?energy:null));
+    const max=energyValue(energy?.maximum??energy?.max);
+    return {current,max,at};
+  }
+  function parseOwnCooldown(j,at=Date.now()){
+    const c=j?.cooldowns??j?.user?.cooldowns??j;
+    const medical=energyValue(c?.medical);
+    const drug=energyValue(c?.drug);
+    return {medicalUntil:medical===null?null:at+medical*1000,
+      drugUntil:drug===null?null:at+drug*1000,at};
+  }
+  async function refreshOwnReadiness(){
+    if(!effectiveKey()||!cfg.autoOwnerReadiness)return;
+    try{
+      const j=await call('/user/bars','own-bars',4*MIN);
+      if(j){const parsed=parseOwnBars(j);if(parsed.current!==null)state.data.ownerReadiness.energy=parsed;}
+    }catch(_){}
+    try{
+      const j=await call('/user/cooldowns','own-cooldowns',4*MIN);
+      if(j){const parsed=parseOwnCooldown(j);if(parsed.medicalUntil!==null)state.data.ownerReadiness.cooldown=parsed;}
+    }catch(_){}
+    state.data.ownerReadiness.ownerId=positive(state.data.meta.ownerId);
+  }
+  function manualReadinessFor(id,at=Date.now()){
+    const r=cfg.manualReadiness[String(positive(id))];
+    if(!r||!r.at||at-n(r.at)>45*MIN)return null;
+    return r;
+  }
+  function hitterReadiness(p,at=Date.now()){
+    if(!p)return {energy:null,medicalLeft:null,status:'Unknown',source:'No member'};
+    const okay=memberState(p)==='okay',owner=positive(state.data.meta.ownerId)===positive(p.id)&&positive(p.id)>0;
+    const automatic=owner&&cfg.autoOwnerReadiness!==false?state.data.ownerReadiness:null;
+    const recentEnergy=automatic?.energy?.at&&at-n(automatic.energy.at)<15*MIN?automatic.energy:null;
+    const recentMed=automatic?.cooldown?.at&&at-n(automatic.cooldown.at)<15*MIN?automatic.cooldown:null;
+    const manual=manualReadinessFor(p.id,at);
+    const energy=recentEnergy?.current??manual?.energy??null;
+    const medicalUntil=recentMed?.medicalUntil??manual?.medicalUntil??null;
+    const medLeft=medicalUntil===null?null:Math.max(0,Math.ceil((medicalUntil-at)/MIN));
+    const energyEnough=energy===null?null:energy>=25;
+    const status=!okay?'Unavailable':energyEnough===false?'Low energy':energyEnough===true?'Attack energy ready':'Energy unknown';
+    return {energy,medicalLeft:medLeft,status,energyEnough,
+      source:recentEnergy?'Own Torn API':manual?'Manual (<45m)':'Unknown',
+      medicalSource:recentMed?'Own Torn API':manual?'Manual (<45m)':'Unknown',okay};
+  }
   function matchEvidence(friend,enemy){
     const m=matchup(friend,enemy),official=lastKnownMemberScore('enemies',enemy.id);
     const enemySpy=spy(enemy.id),friendSpy=spy(friend.id);
@@ -940,6 +988,8 @@
           // Key ownership explicitly showing no faction is authoritative, unlike
           // a missing or permission-restricted faction field.
           const owner=response?.info?.user||response?.user||response?.key?.user;
+          if(source==='key-info'&&owner){const ownId=positive(owner.id||owner.user_id||owner.player_id);
+            if(ownId)state.data.meta.ownerId=ownId;}
           if(source==='key-info'&&owner&&Object.prototype.hasOwnProperty.call(owner,'faction_id')&&
              (owner.faction_id===null||Number(owner.faction_id)===0)){
             cfg.ourId=0;cfg.enemyId=0;cfg.factionVerifiedAt=Date.now();
@@ -1099,6 +1149,7 @@
       await refreshHistory(force);
       await refreshAttacks();
       await refreshFF();
+      await refreshOwnReadiness();
       state.lastRefresh=Date.now();
     }catch(e){state.error=String(e.message||e);}
     finally{state.loading=false;state.spinner='';save();publish();render();}
