@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      0.9.0
+// @version      1.0.0
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -183,10 +183,10 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='0.9.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.0.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
-  const sections=['overview','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
-  const labels={overview:'War room',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
+  const sections=['overview','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
+  const labels={overview:'War room',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
   const $=(s,root=document)=>root.querySelector(s);
   const $$=(s,root=document)=>Array.from(root.querySelectorAll(s));
   const n=v=>Number.isFinite(Number(v))?Number(v):0;
@@ -199,7 +199,7 @@
   const link=id=>'https://www.torn.com/profiles.php?XID='+positive(id);
   const attackLink=id=>'https://www.torn.com/loader.php?sid=attack&user2ID='+positive(id);
   const apiKeyPda=typeof window.PDA_APIKEY==='string'?window.PDA_APIKEY:'###PDA-APIKEY###';
-  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},controlAssignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,warStripCompact:false,hidden:false};
+  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},controlAssignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,warStripCompact:false,priorityNotifications:true,hidden:false};
   const cfg=Object.assign({},defaults,safeRead(CONFIG,{}));
   cfg.assignments=cfg.assignments&&typeof cfg.assignments==='object'?cfg.assignments:{};
   cfg.ordersByEnemy=cfg.ordersByEnemy&&typeof cfg.ordersByEnemy==='object'?cfg.ordersByEnemy:{};
@@ -215,10 +215,10 @@
   cfg.planStatus=cfg.planStatus&&typeof cfg.planStatus==='object'?cfg.planStatus:{};
   cfg.leaderNotes=cfg.leaderNotes&&typeof cfg.leaderNotes==='object'?cfg.leaderNotes:{};
   cfg.manualReadiness=cfg.manualReadiness&&typeof cfg.manualReadiness==='object'?cfg.manualReadiness:{};
-  const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},factionBasic:{},publicIntel:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},scoreTimelines:{},warTimelines:{},afterActions:{},ownerReadiness:{},sampleCount:0});
+  const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},factionBasic:{},publicIntel:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},scoreTimelines:{},warTimelines:{},afterActions:{},ownerReadiness:{},availabilityEvents:{},sampleCount:0});
   const state={data:Object.assign(freshData(),safeRead(DATA,{})),open:false,tab:'overview',showMore:false,
     filter:'all',sort:'warScore',search:'',commanderFilter:'black',controlFocus:0,loading:false,ffLoading:false,spinner:'',error:'',scanning:false,alerts:[],chosen:0,
-    lastRefresh:0,historicalRead:0,localKeyError:false,warMore:false,quickHitPending:false,warExpected:false,selectedWar:0,selectedTimeline:0,selectedPace:0,selectedDebrief:0,detailFrom:'targets',leaderFilter:'all',hitterFilter:'all'};
+    lastRefresh:0,historicalRead:0,localKeyError:false,warMore:false,quickHitPending:false,stripScrolled:false,stripExpanded:false,warExpected:false,selectedWar:0,selectedTimeline:0,selectedPace:0,selectedDebrief:0,detailFrom:'targets',leaderFilter:'all',hitterFilter:'all'};
   state.data.reports=state.data.reports||{};
   state.data.activity=state.data.activity||{};
   state.data.ffstats=state.data.ffstats||{};
@@ -231,7 +231,7 @@
   // Repair malformed legacy cached containers without wiping valid user data.
   for(const k of ['ours','enemies','ourWars','enemyWars','attacks'])
     if(!Array.isArray(state.data[k]))state.data[k]=[];
-  for(const k of ['reports','activity','factionBasic','publicIntel','ffstats','seenAttacks','updated','errors','backoff','meta','scoreTimelines','warTimelines','afterActions','ownerReadiness'])
+  for(const k of ['reports','activity','factionBasic','publicIntel','ffstats','seenAttacks','updated','errors','backoff','meta','scoreTimelines','warTimelines','afterActions','ownerReadiness','availabilityEvents'])
     if(!state.data[k]||typeof state.data[k]!=='object'||Array.isArray(state.data[k]))state.data[k]={};
   if(state.data.war&&!Array.isArray(state.data.war.factions))state.data.war=null;
   for(const [key,value] of Object.entries(state.data.reports))
@@ -1191,6 +1191,11 @@
     if(w&&(!t||Date.now()-t>5*MIN))out.push({id:'stale-roster',title:'Refresh opponent statuses',detail:'Last observed status is stale; refresh before hitting.',status:'soon',priority:75,tab:'overview'});
     // Only current, time-stamped Torn status may trigger a watched hospital alert.
     if(w&&rosterFresh('enemies')){
+      for(const x of priorityOpportunities().slice(0,3))out.push({
+        id:'enemy-available-'+x.id,title:x.name+' now available',
+        detail:'Changed from '+x.previous+' to Okay in the latest Torn roster. '+x.kind+
+          ' priority: verify matchup and current status before attacking.',
+        status:'now',priority:94,tab:'targets',targetId:x.id});
       const watched=watchedTargetIds();
       const exits=state.data.enemies.map(p=>enemyHospitalExit(p)).filter(x=>
         x&&watched.has(x.player.id)&&x.minutes<=20&&x.eta>Date.now());
@@ -1469,7 +1474,12 @@
       if(own)state.data.ours=roster(own);
       if(positive(cfg.enemyId)){
         const enemy=await call('/faction/'+cfg.enemyId+'/members','enemies',force?0:90*1000);
-        if(enemy)state.data.enemies=roster(enemy);
+        if(enemy){
+          const old=state.data.enemies.slice(),oldAt=n(state.data.updated.enemies);
+          const fresh=roster(enemy);state.data.enemies=fresh;
+          if(previousWarId&&state.data.war&&previousWarId===positive(state.data.war.id)&&
+            oldAt&&Date.now()-oldAt<5*MIN)recordAvailability(old,fresh,previousWarId);
+        }
         if(own||enemy)snapshot([...(own?['ours']:[]),...(enemy?['enemies']:[])]);
       }
       await refreshFactionBasics(force);
@@ -1858,6 +1868,85 @@
       readiness=player?hitterReadiness(player):null;
     return {id,player,fresh,kind,energy:readiness?.energy??null};
   }
+
+  // Relative ranked-war score yield: base respect * war factor * manual-spy FF.
+  // Confidence is an eligibility gate, not an invented probability of winning.
+  function efficiencyHits(friend,limit=8){
+    if(!friend||!activeWarNow()||!rosterFresh('ours')||!rosterFresh('enemies')||
+      memberState(friend)!=='okay')return [];
+    const ownBss=bsScore(spy(friend.id)),observed=cfg.enableAttacks?
+      warAttackRows(positive(state.data.war?.id)):[];
+    return state.data.enemies.filter(p=>memberState(p)==='okay').map(player=>{
+      const ev=matchEvidence(friend,player),otherBss=bsScore(spy(player.id));
+      if(!ownBss||!otherBss||ev.tier!==0||!ev.rosterVerified||
+        ev.encounters.losses>0||ev.conflict)return null;
+      const ff=ev.match?.ff;
+      if(!Number.isFinite(ff)||ff<1||ff>3)return null;
+      const base=Math.max(.25,(Math.log(Math.max(1,n(player.level)))+1)/4);
+      const modeled=base*2*ff;
+      const hits=observed.filter(a=>a.attacker===positive(friend.id)&&
+        a.defender===positive(player.id)&&a.respect!==null&&a.respect>0).slice(-3);
+      const actual=hits.length>=2?hits.reduce((sum,a)=>sum+a.respect,0)/hits.length:null;
+      const yield25=actual??modeled;
+      return {player,evidence:ev,ff,modeled,actual,sampleCount:hits.length,
+        pointsPer25:yield25,pointsPerEnergy:yield25/25,
+        source:actual!==null?'Observed partial ranked-war respect':'Estimated base respect (modifiers excluded)'};
+    }).filter(Boolean).sort((a,b)=>b.pointsPerEnergy-a.pointsPerEnergy||
+      b.evidence.score-a.evidence.score||a.player.id-b.player.id).slice(0,limit);
+  }
+  function bestEfficiencyHit(){
+    const self=ourWarReadiness();
+    return self.kind==='okay'&&self.player?efficiencyHits(self.player,1)[0]||null:null;
+  }
+  function turtleWindow(at=Date.now()){
+    const self=ourWarReadiness(),t=turtleAssessment(at),score=t.score,
+      skull=Boolean(cfg.blackSkulls[self.id]),
+      remaining=self.kind==='hospital'&&self.player?.until>at?
+        Math.ceil((self.player.until-at)/MIN):0;
+    if(!activeWarNow()||!t.ownFresh||!t.enemyFresh||!score)
+      return {minutes:null,remaining,shortfall:null,advice:'Refresh official score and both rosters.',
+        reason:'Insufficient fresh information'};
+    if(skull&&self.kind==='okay')return {minutes:null,remaining,shortfall:null,
+      advice:'Stay available for verified hits unless leadership assigns you a defensive duty.',
+      reason:'Black Skulls are designated hitters'};
+    const pace=t.pace,enemyRate=pace?.measurable&&pace.last?.at&&at-pace.last.at<10*MIN?pace.rateEnemy:null,
+      pressure=t.enemyOnline>Math.max(1,t.online)||(enemyRate!==null&&enemyRate>=60),
+      minutes=score.net>0&&t.plan.mode==='full'?120:score.net>0&&pressure?90:60;
+    return {minutes,remaining,shortfall:Math.max(0,minutes-remaining),
+      advice:score.net<0?'Defence for non-hitters only; keep proven hitters available to recover points.':
+        minutes===120?'Long coordinated defensive window. Watch revives and hospital expiry.':
+        minutes===90?'Maintain cover while the opponent is more active.':
+        'Short defensive window; reassess after the next status refresh.',
+      reason:'Suggested coverage window, not a selectable or guaranteed item duration'};
+  }
+  function availabilityTransitions(before,after,warId,at=Date.now()){
+    if(!warId||!before?.length||!after?.length)return [];
+    const old=new Map(before.map(p=>[p.id,p])),watched=watchedTargetIds();
+    const high=new Set(enemyThreatRows(warId).slice(0,8).filter(x=>
+      x.live?.scoringHits>0||x.previous?.score>0).map(x=>x.player.id));
+    return after.filter(p=>{
+      const prev=old.get(p.id),assigned=Object.values(cfg.assignments).some(id=>positive(id)===p.id);
+      return prev&&memberState(prev)!=='okay'&&memberState(p)==='okay'&&
+        (watched.has(p.id)||assigned||high.has(p.id));
+    }).map(p=>({id:p.id,name:p.name,warId,at,previous:memberState(old.get(p.id)),
+      kind:watched.has(p.id)?'watched':'scorer'}));
+  }
+  function recordAvailability(before,after,warId,at=Date.now()){
+    const db=state.data.availabilityEvents;
+    for(const [key,x] of Object.entries(db))if(!x||x.warId!==warId||
+      at-n(x.at)>10*MIN||!after.some(p=>p.id===x.id&&memberState(p)==='okay'))delete db[key];
+    const results=availabilityTransitions(before,after,warId,at);
+    for(const event of results)db[event.warId+':'+event.id]=event;
+    return results;
+  }
+  function priorityOpportunities(at=Date.now()){
+    return activeWarNow()&&rosterFresh('enemies',at)&&cfg.priorityNotifications!==false?
+      Object.values(state.data.availabilityEvents||{}).filter(x=>
+        x.warId===positive(state.data.war?.id)&&at-n(x.at)<5*MIN&&
+        state.data.enemies.some(p=>p.id===x.id&&memberState(p)==='okay'))
+        .sort((a,b)=>b.at-a.at||a.id-b.id).slice(0,4):[];
+  }
+
   function strongestVerifiedHit(){
     const self=ourWarReadiness();
     if(!activeWarNow()||self.kind!=='okay'||!rosterFresh('enemies'))return null;
@@ -1897,9 +1986,15 @@
   }
   function warQuick(action){
     const self=ourWarReadiness();
-    if(action==='compact'){cfg.warStripCompact=!cfg.warStripCompact;saveCfg();renderWarStrip(true);return;}
-    if(action==='war'){open({section:'overview'});return;}
+    if(action==='compact'){
+      if(state.stripScrolled&&!cfg.warStripCompact)state.stripExpanded=!state.stripExpanded;
+      else{cfg.warStripCompact=!cfg.warStripCompact;state.stripExpanded=false;saveCfg();}
+      renderWarStrip(true);return;
+    }
+    if(action==='war'){open({section:cfg.blackSkulls[self.id]?'skulls':'overview'});return;}
+    if(action==='skulls'){open({section:'skulls'});return;}
     if(action==='stats'){state.warMore=true;open({section:'overview'});return;}
+    if(action.startsWith('opportunity:')){focusOpportunity(positive(action.slice(12)));return;}
     if(action==='heal'){itemFlow('heal');return;}
     if(action==='turtle'){if(self.kind==='hospital')open({section:'turtle'});else itemFlow('turtle');return;}
     if(action==='clear-item'){try{sessionStorage.removeItem('warstaxx-item-intent');}catch(_){}renderWarStrip(true);return;}
@@ -1916,7 +2011,7 @@
     if(self.energy!==null&&self.energy<25){
       open({section:'overview'});state.error='Hit unavailable: last known energy is below 25 E.';render();return;
     }
-    const target=strongestVerifiedHit();
+    const target=bestEfficiencyHit();
     if(!target){
       open({section:'overview'});state.error='No verified favourable target. Open Matchups and obtain recent comparable spies; FFScouter alone cannot confirm a win.';render();return;
     }
@@ -1990,7 +2085,7 @@
       });
     }
     if(bar.parentNode!==host)host.insertBefore(bar,host.firstChild);
-    const self=ourWarReadiness(),score=warScore(),target=strongestVerifiedHit(),
+    const self=ourWarReadiness(),score=warScore(),target=bestEfficiencyHit(),
       intent=location.pathname.toLowerCase()==='/item.php'?itemIntent():'',
       sig=[state.data.war.id,score?.our,score?.enemy,self.kind,self.energy,target?.player.id,
         intent,cfg.warStripCompact,state.quickHitPending,location.pathname,Math.floor(Date.now()/MIN)].join(':');
@@ -2654,7 +2749,7 @@
   }
 
   function liveWarRoom(){
-    const w=state.data.war,score=warScore(),own=ourWarReadiness(),target=strongestVerifiedHit(),
+    const w=state.data.war,score=warScore(),own=ourWarReadiness(),target=bestEfficiencyHit(),
       enemies=sideActivity('enemies'),pace=warPace(),alerts=currentAlerts().slice(0,3),
       fresh=rosterFresh('enemies');
     let body=statusNote()+'<div class="ws-lead"><span class="ws-data-label">LIVE WAR | ACT NOW</span>'+
@@ -3307,6 +3402,7 @@
     if(action==='refresh'){refresh(true);return;}
     if(action==='war-more'){state.warMore=!state.warMore;render();return;}
     if(action==='fast-turtle'){warQuick('turtle');return;}
+    if(action==='fast-skulls'){warQuick('skulls');return;}
     if(action==='fast-hit'){warQuick('hit');return;}
     if(action==='fast-heal'){warQuick('heal');return;}
     if(action==='commander-filter'){
@@ -3398,7 +3494,7 @@
     if(action==='find'){close();event('find',{});return;}
     if(action==='more'){state.showMore=!state.showMore;render();return;}
     if(action.startsWith('tab:')){navigate(action.slice(4));event('visit',{id:ID,section:state.tab});return;}
-    if(action.startsWith('alert:')){const x=currentAlerts().find(a=>a.id===action.slice(6));navigate(x?.tab||'alerts');return;}
+    if(action.startsWith('alert:')){const x=currentAlerts().find(a=>a.id===action.slice(6));if(x?.targetId){focusOpportunity(x.targetId);return;}navigate(x?.tab||'alerts');return;}
     if(action.startsWith('tool:')){close();event('open',{id:action.slice(5)});return;}
     if(action.startsWith('player:')){state.tab='targets';state.chosen=positive(action.slice(7));state.playerOpen=true;render();$('.ws-content',root).scrollTop=0;return;}
     if(action.startsWith('spy:')){
