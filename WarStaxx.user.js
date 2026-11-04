@@ -695,6 +695,78 @@
     return {score:Math.min(100,score),kind,pat,hist,ready:live||ready,
       reason:live?'Currently Okay and online':ready?'Currently Okay; last action not online':kind==='hospital'?'Hospitalised; check expiry':kind==='away'?'Travelling/abroad':'Check live status'};
   }
+  function matchEvidence(friend,enemy){
+    const m=matchup(friend,enemy),official=lastKnownMemberScore('enemies',enemy.id);
+    const enemySpy=spy(enemy.id),friendSpy=spy(friend.id);
+    const latest=enemySpy?.observedAt||0;
+    const manuallyConfirmed=bsScore(friendSpy)!==null&&bsScore(enemySpy)!==null;
+    const freshSpies=manuallyConfirmed&&n(latest)>0&&Date.now()-latest<30*24*HOUR;
+    const externalOnly=m.known&&!manuallyConfirmed;
+    const active=memberState(enemy)==='okay';
+    const conflict=Object.entries(cfg.assignments).some(([id,target])=>
+      positive(id)!==positive(friend.id)&&positive(target)===positive(enemy.id));
+    let category='Scout',reason='Missing comparable stats',tier=3;
+    if(!active){category='Unavailable';reason=memberState(enemy)==='hospital'?'In hospital':memberState(enemy)==='away'?'Travelling / abroad':'Not Okay';tier=5;}
+    else if(m.known&&m.ratio>=1.15){category='Avoid';reason='Enemy modelled battle strength is higher';tier=4;}
+    else if(manuallyConfirmed&&m.known&&m.ratio<0.7){
+      category='Strong candidate';reason=freshSpies?'Favourable manual stats; check current buffs':'Favourable older spies; recheck';tier=0;
+    }else if(manuallyConfirmed&&m.known&&m.ratio<0.8){
+      category='Possible';reason='Moderate manual BSS margin; verify fight conditions';tier=1;
+    }else if(externalOnly&&m.known&&m.ratio<0.8){
+      category='Verify estimate';reason='FFScouter BSS model; scout before hit';tier=2;
+    }else if(m.known){category='Risky';reason='Close or unfavourable modelled battle score';tier=4;}
+    const threat=official===null?null:threatRating(enemy).score;
+    const statusBonus=isOnline(enemy)?5:0;
+    const points=official===null?0:Math.min(18,Math.round(Math.log10(official+1)*4));
+    const score=Math.max(0,100-tier*18+points+statusBonus-(conflict?12:0));
+    return {friend,enemy,match:m,category,reason,tier,score,threat,
+      official,conflict,verified:manuallyConfirmed,estimated:externalOnly,
+      ffForHitter:m.known?m.ff:null};
+  }
+  function personalShortlist(friend,limit=8){
+    if(!friend)return [];
+    return state.data.enemies.map(e=>matchEvidence(friend,e))
+      .sort((a,b)=>a.tier-b.tier||b.score-a.score||a.enemy.id-b.enemy.id)
+      .slice(0,limit);
+  }
+  function hitterPlanKey(friendId){
+    return (positive(state.data.war?.id)?'war:'+state.data.war.id:'scout:'+positive(cfg.enemyId))+
+      ':member:'+positive(friendId);
+  }
+  function hitterPlanStatus(friendId){
+    return String(cfg.planStatus[hitterPlanKey(friendId)]||'not-set');
+  }
+  function hitterPlanStatuses(){
+    return [['not-set','Unassigned status'],['ready','Ready'],['engaged','Engaged'],['monitor','Monitoring target'],
+      ['standby','Standby'],['support','Support'],['needs-spy','Need intelligence'],['complete','Complete']];
+  }
+  function leadershipSummary(){
+    const ours=state.data.ours,enemy=state.data.enemies;
+    const skulls=ours.filter(p=>Boolean(cfg.blackSkulls[p.id]));
+    const ready=ours.filter(p=>memberState(p)==='okay'),skullReady=skulls.filter(p=>memberState(p)==='okay');
+    const manual=ours.filter(p=>positive(cfg.assignments[p.id])).length;
+    const inProgress=ours.filter(p=>['engaged','monitor'].includes(hitterPlanStatus(p.id))).length;
+    const conflicts=new Map();
+    for(const member of ours){
+      const target=positive(cfg.assignments[member.id]);
+      if(target)conflicts.set(target,(conflicts.get(target)||0)+1);
+    }
+    return {members:ours.length,enemy:enemy.length,ready:ready.length,skulls:skulls.length,skullReady:skullReady.length,
+      manual,inProgress,unassigned:ours.length-manual,
+      duplicateTargets:[...conflicts].filter(([_,count])=>count>1).map(([id,count])=>({id,count})),
+      tracked:enemy.filter(p=>Boolean(cfg.watchlist[p.id])).length};
+  }
+  function suggestedDraft(){
+    const result=[],used=new Set(Object.values(cfg.assignments).map(positive).filter(Boolean));
+    const hitters=state.data.ours.filter(p=>cfg.blackSkulls[p.id]&&memberState(p)==='okay'&&!positive(cfg.assignments[p.id]));
+    for(const p of hitters){
+      const next=personalShortlist(p,state.data.enemies.length).find(x=>x.tier===0&&!used.has(x.enemy.id));
+      if(!next)continue;
+      result.push({friend:p,enemy:next.enemy,reason:next.reason});
+      used.add(next.enemy.id);
+    }
+    return result;
+  }
   function assignments(){
     const ours=state.data.ours.slice().sort((a,b)=>Number(Boolean(cfg.blackSkulls[b.id]))-Number(Boolean(cfg.blackSkulls[a.id])) || Number(isOnline(b))-Number(isOnline(a)));
     const enemies=state.data.enemies.filter(p=>evaluate(p).ready);
@@ -714,6 +786,24 @@
       if(target)used.add(target.id);
       return {friend:p,enemy:target,reason,details:target?matchup(p,target):null};
     });
+  }
+  function leadershipBrief(){
+    const plan=leadershipSummary(),pace=warPace(),time=new Date().toISOString();
+    return 'WarStaxx local leadership briefing | '+time+'\n'+
+      'War #'+(state.data.war?.id||'scouting')+' vs faction #'+(positive(cfg.enemyId)||'unknown')+'\n'+
+      'Our ready '+plan.ready+'/'+plan.members+' | Black Skulls '+plan.skullReady+'/'+plan.skulls+
+      ' | Manual assignments '+plan.manual+'/'+plan.members+'\n'+
+      (pace?'Observed last-hour score pace: ours '+(pace.rateOur===null?'unknown':pace.rateOur.toFixed(1))+
+        ' pts/h, theirs '+(pace.rateEnemy===null?'unknown':pace.rateEnemy.toFixed(1))+' pts/h ('+pace.confidence+')\n':'')+
+      state.data.ours.map(p=>{
+        const id=positive(cfg.assignments[p.id]);
+        const enemy=state.data.enemies.find(x=>x.id===id);
+        return (cfg.blackSkulls[p.id]?'[BLACK SKULL] ':'')+p.name+
+          ' ['+p.id+'] | '+p.status+' | '+hitterPlanStatus(p.id)+
+          ' | '+(enemy?'Target '+enemy.name+' ['+id+'] | '+enemy.status:'No manual target');
+      }).join('\n')+'\n'+
+      'Notes: '+(cfg.leaderNotes[positive(state.data.war?.id)||('scout-'+positive(cfg.enemyId))]||'None')+'\n'+
+      'Source: recent Torn API rosters + locally saved assignments/observations. Verify all statuses and hits manually.';
   }
   function copiedWarOrders(){
     const rows=assignments(),last=Math.max(n(state.data.updated.enemies),n(state.data.updated.ours));
