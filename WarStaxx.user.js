@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.3.0
+// @version      1.4.0
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.3.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.4.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -1196,32 +1196,77 @@
 
   // Explicit coverage inventory for the Skull Capo. An assignment is not proof
   // of a successful or even currently possible fight.
+
+  // Rank squad targets by known enemy BSS and verified historical performance.
+  // Missing per-player score is UNKNOWN, not 0 points scored.
+  function heavyTargetPriorities(bands=enemyRoleBands()){
+    const heavy=bands.ranked.filter(x=>bands.heavy.has(x.enemy.id));
+    const ledger=warHitLedger(),live=ledger.theirs.players||{},
+      last=latestFinished('enemies'),
+      prior=last?state.data.reports[String(last.id)]?.factions
+        ?.find(f=>positive(f.id)===positive(cfg.enemyId)):null,
+      past=new Map((prior?.members||[]).map(p=>[positive(p.id),p])),
+      maxBss=Math.max(1,...heavy.map(x=>x.value)),minBss=Math.min(maxBss,...heavy.map(x=>x.value)),
+      knownHistorical=heavy.map(x=>past.get(x.enemy.id)).filter(Boolean),
+      maxPast=Math.max(1,...knownHistorical.map(x=>n(x.score))),
+      maxLive=Math.max(1,...heavy.map(x=>n(live[x.enemy.id]?.respect)));
+    return new Map(heavy.map(x=>{
+      const h=past.get(x.enemy.id)||null,l=live[x.enemy.id]||null,
+        power=maxBss===minBss?1:
+          Math.max(0,Math.min(1,(Math.log10(x.value)-Math.log10(minBss))/
+            (Math.log10(maxBss)-Math.log10(minBss)))),
+        history=h?Math.max(0,Math.min(1,n(h.score)/maxPast)):null,
+        recent=l&&n(l.scoringHits)>0?
+          Math.max(0,Math.min(1,n(l.respect)/maxLive)):null;
+      const score=60*power+(history===null?0:25*history)+
+        (recent===null?0:15*recent);
+      return [x.enemy.id,{score,historyPoints:h?officialNumber(h.score):null,
+        historyAttacks:h?officialNumber(h.attacks):null,historyWarId:h?last.id:null,
+        liveRespect:recent===null?null:n(l.respect),
+        source:history===null?'No official per-player historical score loaded':
+          'Official last completed war #'+last.id,
+        confidence:history===null?'BSS-only priority':'BSS + official historical war score'}];
+    }));
+  }
   function blackSkullsCoverage(at=Date.now()){
     const bands=enemyRoleBands(),skulls=state.data.ours.filter(p=>cfg.blackSkulls[p.id]),
-      teamReady=rosterFresh('ours',at),enemiesReady=rosterFresh('enemies',at);
+      teamReady=rosterFresh('ours',at),enemiesReady=rosterFresh('enemies',at),
+      rankedPriorities=heavyTargetPriorities(bands);
     const targets=bands.ranked.filter(x=>bands.heavy.has(x.enemy.id)).map(x=>{
       const assigned=skulls.filter(p=>positive(cfg.assignments[p.id])===positive(x.enemy.id));
       const viable=teamReady&&enemiesReady&&memberState(x.enemy)==='okay'?
         skulls.map(player=>({player,evidence:roleMatch(player,x.enemy,bands)}))
           .filter(z=>z.evidence).sort((a,b)=>a.evidence.match.ratio-b.evidence.match.ratio||
             b.evidence.score-a.evidence.score):[];
-      const free=viable.filter(z=>!positive(cfg.assignments[z.player.id]));
+      const free=viable.filter(z=>!positive(cfg.assignments[z.player.id])&&
+        hitterReadiness(z.player,at).energyEnough!==false);
       const covered=assigned.length>0,verified=assigned.some(p=>
-        viable.some(v=>v.player.id===p.id));
+        viable.some(v=>v.player.id===p.id&&
+          hitterReadiness(p,at).energyEnough!==false));
+      const blocked=covered&&assigned.every(p=>memberState(p)!=='okay'||
+        hitterReadiness(p,at).energyEnough===false||
+        !viable.some(v=>v.player.id===p.id));
+      const replacement=blocked&&assigned.length===1&&free.length&&
+        memberState(x.enemy)==='okay'?free[0]:null;
+      const priority=rankedPriorities.get(x.enemy.id)||null;
       const reason=!teamReady||!enemiesReady?'Roster stale - refresh':
         memberState(x.enemy)!=='okay'?'Enemy not available at this moment':
         covered?verified?'Assigned Black Skull has favourable verified evidence':
-          'Assigned, but matchup needs verification or current availability':
+          replacement?'Assigned hitter unavailable / unsuitable; verified replacement suggested':
+          'Assigned, but matchup or hitter readiness needs verification':
         free.length?'Unassigned - eligible Black Skull available':
         viable.length?'Unassigned - verified hitters already have other orders':
           'Unassigned - no verified favourable Black Skull matchup';
       return {enemy:x.enemy,bss:x.value,source:x.source,assigned,viable,free,
-        covered,verified,reason,needsAssignment:!covered};
-    }).sort((a,b)=>Number(b.needsAssignment)-Number(a.needsAssignment)||
-      b.bss-a.bss||a.enemy.id-b.enemy.id);
+        covered,verified,blocked,replacement,priority,reason,needsAssignment:!covered};
+    }).sort((a,b)=>Number(b.needsAssignment||b.blocked)-
+      Number(a.needsAssignment||a.blocked)||
+      n(b.priority?.score)-n(a.priority?.score)||b.bss-a.bss||a.enemy.id-b.enemy.id);
     return {bands,skulls,targets,unassigned:targets.filter(x=>x.needsAssignment).length,
       assigned:targets.filter(x=>x.covered).length,
       verifiedAssigned:targets.filter(x=>x.verified).length,
+      blocked:targets.filter(x=>x.blocked).length,
+      replacements:targets.filter(x=>x.replacement).length,
       missingEvidence:targets.filter(x=>!x.covered&&!x.viable.length).length};
   }
   function blackSkullsCoverageCard(maxItems=30){
