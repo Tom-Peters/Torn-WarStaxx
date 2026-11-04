@@ -1,4 +1,24 @@
-> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v0.3.0). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v0.4.0). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+
+## v0.4.0 - Fair Fight and ranked-war targeting intelligence (4 November 2026)
+
+**Same permanent Torn PDA installer:** https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js
+
+### FFScouter connection repair
+- Select **WarStaxx > Settings** and explicitly enable FFScouter and agree to its data policy. A registered FFScouter API key is required. You may leave the optional separate FFScouter key empty to use **your own Torn PDA API key** if already registered with FFScouter. Consent remains mandatory; nothing is sent to FFScouter without it. To switch keys, use **Use PDA key for FF** in Settings.
+- The lookup now checks `/api/v1/check-key` and uses native single-argument `PDA_httpGet(url)` on Torn PDA rather than the less reliable `GM_xmlhttpRequest` there. Desktop userscript environments still use GM. Requests go directly to `ffscouter.com`, not to the TornStaxx hub.
+- A configurable key is **never automatically registered** with FFScouter. The UI shows registration, key-not-registered errors, current source age, last successful fetch and member coverage. `Refresh FF` and `Check registered key` are explicit buttons; estimates are rate-limited to a 10-minute interval with exponential failure backoff.
+- Source-normalised response fields: `fair_fight`, `bss_public`, `bs_estimate`, `bs_estimate_human`, `source` and `last_updated`. A missing or unavailable FF stays **unknown**, never 0 or 1.00. Estimates older than 90 days at source, or local fetches older than 24 hours, are clearly **stale**. Changing the key clears only old per-key FF estimates and registration metadata, retaining manual spies, orders, reports and activity.
+- FF values are displayed **beside opponent names** in Players, Enemy Intel, detailed war reports, Matchups, Strategy, Activity, Orders and player dossiers. Player list supports FF sorting and the `Has FF` filter. When enabled, badges open the dossier for evidence details. The War Room displays live coverage and a shortlist of currently Okay, high-FF opponents *for review only*.
+- **Important:** a FFScouter value is estimated for the registered API-key owner, **not** necessarily a Black Skulls member. The Matchups/Orders view calculates an *individual hitter's modelled FF* only when comparable battle stat scores are known. Actual FF from past faction attacks is a separate labelled source, never treated as the player's personal prediction.
+
+### Additional intelligence and interaction
+- Opponent historical threat index (based on known previous war score and foreground activity, **not** hidden battle strength); sort/filter searchable roster; watch/stop watching individual targets and inspect them from a priority watchlist.
+- Last opponent war now includes individual scoring participation, number of contributors, top-three share of all reported player points and faction score per reported attack, with direct access to the full official report.
+- Player dossiers show previous encounters retrieved from authorised Torn faction attack records, with recorded attacker, outcome, actual FF and respect. This is read-only; attack-page links remain manual.
+- WarStaxx preserves the existing independent startup probe, single hub launcher, automatic own-faction detection, Torn PDA ASCII/quote-safe source, Black Skulls local assignments, consent policy and original raw installer URL.
+
+**Verification:** `tests/ffscouter.test.mjs` covers response parsing, missing FF, source handling, native PDA request preference, HTTP failure, key fallback and source/badge safety. `tests/pda-quote-safety.test.mjs` and existing war-intelligence tests remain part of `npm test`. Source-level tests cannot establish actual results without a registered user key and a running Torn PDA device.
 
 ## v0.3.0 - Opponent intelligence overhaul (4 November 2026)
 
