@@ -387,20 +387,27 @@
   function learnedYield(friend,player,model,entries){
     const clean=(entries||[]).filter(a=>a.attacker===positive(friend.id)&&
       a.defender===positive(player.id)&&officialNumber(a.respect)!==null&&n(a.respect)>0&&
-      !chainMilestones.includes(n(a.chain))&&
-      !(a.chainBonus!==null&&a.chainBonus>1)&&!a.specialBonus&&
+      !chainMilestones.includes(n(a.chain))&&!/mugged/i.test(String(a.result||''))&&
+      !a.specialBonus&&
       (!a.modifierWar||a.modifierWar===2)&&
       (!a.modifierRetaliation||a.modifierRetaliation===1)&&
       (!a.modifierOverseas||a.modifierOverseas===1)&&
       (!a.modifierGroup||a.modifierGroup===1))
       .sort((a,b)=>b.at-a.at).slice(0,8);
     if(clean.length<2)return {pointsPer25:model,actual:null,samples:clean.length,confidence:'Model only'};
-    const count=clean.length,values=clean.map(x=>n(x.respect)),mean=values.reduce((a,b)=>a+b,0)/count;
+    const count=clean.length,values=clean.map(x=>{
+      // Ordinary chain scale is not a fixed milestone award.
+      // Use the API modifier when available; otherwise the official chain-scale formula.
+      const chain=n(x.chain),apiScale=n(x.chainBonus);
+      const scale=chain>=10?
+        (apiScale>=1&&apiScale<=2.1?apiScale:Math.max(1,.25*Math.log10(chain)+.75)):1;
+      return n(x.respect)/scale;
+    }),mean=values.reduce((a,b)=>a+b,0)/count;
     const med=values.slice().sort((a,b)=>a-b)[Math.floor(values.length/2)],
       capped=Math.min(Math.max(mean,model*0.25),model*3),
       stable=Math.min(capped,med*1.6),weight=count>=5?0.7:count>=3?0.55:0.35;
     return {pointsPer25:model*(1-weight)+stable*weight,actual:mean,samples:count,
-      confidence:count>=5?'Observed + model (higher sample)':'Observed + model (limited sample)'};
+      confidence:count>=5?'Chain-adjusted observed + model (higher sample)':'Chain-adjusted observed + model (limited sample)'};
   }
   function warAttackInsights(id){
     const rows=warAttackRows(id).filter(a=>a.side==='ours'),
