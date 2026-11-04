@@ -1341,6 +1341,17 @@
     if(w&&(!t||Date.now()-t>5*MIN))out.push({id:'stale-roster',title:'Refresh opponent statuses',detail:'Last observed status is stale; refresh before hitting.',status:'soon',priority:75,tab:'overview'});
     // Only current, time-stamped Torn status may trigger a watched hospital alert.
     if(w&&rosterFresh('enemies')){
+      if(activeWarNow()){
+        const bands=enemyRoleBands(),wrong=state.data.ours.filter(p=>{
+          const target=state.data.enemies.find(e=>e.id===positive(cfg.assignments[p.id]));
+          return target&&!roleAllows(p,target,bands);
+        });
+        if(wrong.length)out.push({id:'role-target-conflict',
+          title:wrong.length+' assigned hitter(s) in the wrong enemy BSS bracket',
+          detail:'Black Skulls must receive top-BSS enemies; regular members take the lower bracket. '+
+            'Unclassified enemies require scouting. Review saved manual orders.',
+          status:'now',priority:93,tab:'leader'});
+      }
       for(const x of priorityOpportunities().slice(0,3))out.push({
         id:'enemy-available-'+x.id,title:x.name+' now available',
         detail:'Changed from '+x.previous+' to Okay in the latest Torn roster. '+x.kind+
@@ -3496,7 +3507,7 @@
   }
   function blackSkullsRoom(){
     const self=ourWarReadiness(),skulls=state.data.ours.filter(p=>cfg.blackSkulls[p.id]),
-      personal=bestEfficiencyHit(),myId=positive(self.id),
+      bands=enemyRoleBands(),personal=bestEfficiencyHit(),myId=positive(self.id),
       chosen=state.data.enemies.find(p=>p.id===positive(cfg.assignments[myId])),
       duty=turtlePlan().members[myId]||'not assigned',
       control=cfg.controlAssignments[currentPlanKey()]||{},
@@ -3528,7 +3539,29 @@
           b('My matchups','hitter:'+myId)+b('Defend','tab:turtle')+'</div>':
         '<p>You are not marked as a Black Skull on this device. Use Leadership to set membership.</p>'+
         b('Leadership','tab:command'))+
-      bonusTargetCard()+blackSkullsPerformanceCard()+
+      bonusTargetCard()+
+      card('Black Skulls priority targets | toughest known BSS',
+        '<p>Only the top relative BSS bracket is available for Black Skulls automatic target suggestions. '+
+        'Opponent strength combines verified manual spies and fresh FFScouter estimates; '+
+        'the latter are NOT guaranteed outcomes. Members must still have favourable comparable spy evidence.</p>'+
+        (bands.ranked.filter(x=>bands.heavy.has(x.enemy.id)).length?
+          '<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr>'+
+          '<th>Opponent</th><th>Public/manual BSS</th><th>Current status</th>'+
+          '<th>Verified Black Skull matchup</th><th>Action</th></tr></thead><tbody>'+
+          bands.ranked.filter(x=>bands.heavy.has(x.enemy.id)).slice(0,15).map(x=>{
+            const matches=skulls.map(hitter=>({hitter,evidence:roleMatch(hitter,x.enemy,bands)}))
+              .filter(entry=>entry.evidence).sort((a,b)=>a.evidence.match.ratio-b.evidence.match.ratio);
+            return '<tr><td>'+infoButton(x.enemy.name,x.enemy.id)+' '+ffBadge(x.enemy.id)+
+              '<br><small>Lv '+fmt(x.enemy.level)+'</small></td>'+
+              '<td>'+fmt(x.value)+'<br><small>'+esc(x.source)+'</small></td>'+
+              '<td>'+esc(x.enemy.status)+'</td>'+
+              '<td>'+(matches.length?matches.slice(0,2).map(k=>
+                infoButton(k.hitter.name,k.hitter.id)+' (ratio '+fmt(k.evidence.match.ratio)+')').join(', '):
+                'No verified favourable hitter; scout')+'</td>'+
+              '<td>'+infoButton('Inspect',x.enemy.id)+'</td></tr>';
+          }).join('')+'</tbody></table></div>':
+          empty('No comparable enemy BSS estimates; fetch FFScouter or enter manual spies.')))+
+      blackSkullsPerformanceCard()+
       card('My hospital-control assignments',watched.length?watched.map(p=>{
         const expiry=memberState(p)==='hospital'&&p.until>Date.now()?
           ' | approximate hospital expiry '+flightCountdown(p.until):'';
