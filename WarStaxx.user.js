@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      0.2.1
+// @version      0.2.2
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -66,7 +66,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='0.2.1';
+  const id='war', version='0.2.2';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -74,19 +74,23 @@
   function runtimeMarker(){
     try {
       localStorage.setItem('tornstaxx-war-runtime-v1',JSON.stringify({
-        id,version,at:Date.now(),path:location.pathname,phase:window.__warStaxxReady?'ready':'loader'
+        id,version,at:Date.now(),path:location.pathname,
+        phase:window.__warStaxxReady?'ready':window.__warStaxxStartError?'error':'loader'
       }));
     }catch(_){} // Storage can be blocked in Torn PDA; DOM bridge still works.
   }
   function register() {
     runtimeMarker();
-    // Independent registration transport for Torn PDA userscript sandboxes.
-    // Only a static module identity is transmitted: no API key or gameplay data.
-    try {
-      window.postMessage({__tornstaxxBridge:bridge,kind:'register',id},location.origin);
-    }catch(_){}
+    // A running loader is not proof that the full War UI has started.
+    if(!window.__warStaxxReady){
+      emit('diagnostics',{id,version,api:'unknown',storage:'unknown',ui:'missing',
+        detail:window.__warStaxxStartError?'War module startup failed':'War loader detected; waiting for panel'});
+      return;
+    }
+    // Identity-only registration fallback for Torn PDA isolated script contexts.
+    try {window.postMessage({__tornstaxxBridge:bridge,kind:'register',id},location.origin);}catch(_){}
     emit('register',{id,label:'War-TornStaxx',icon:'WS',
-      desc:window.__warStaxxReady?'Ranked war command centre':'Ranked war intelligence · checking startup',
+      desc:'Ranked war command centre',
       sections:[{id:'overview',label:'Command'},{id:'targets',label:'Targets'},
         {id:'matchups',label:'Matchups'},{id:'strategy',label:'Strategy'},
         {id:'assignments',label:'Orders'},{id:'settings',label:'Settings'}]});
@@ -112,7 +116,9 @@
       const message=document.createElement('p');
       message.textContent='The lightweight launcher is active, but the full WarStaxx interface has not completed startup. Reload Torn; if this persists, share the status below (no API keys are included).';
       const status=document.createElement('p');
-      status.textContent='Version '+version+' · App entered: '+(window.__warStaxxBooted?'yes':'no')+' · App ready: '+(window.__warStaxxReady?'yes':'no');
+      status.textContent='Version '+version+' · App entered: '+(window.__warStaxxBooted?'yes':'no')+
+        ' · App ready: '+(window.__warStaxxReady?'yes':'no')+
+        (window.__warStaxxStartError?' · Failure: '+window.__warStaxxStartError:'');
       const copy=document.createElement('button');copy.type='button';copy.textContent='Copy startup status';
       copy.style.cssText='padding:9px 12px;background:#19547a;color:#fff;border:1px solid #67c6ed;border-radius:8px;margin-right:8px;';
       copy.addEventListener('click',()=>{
@@ -130,7 +136,7 @@
   }
   document.addEventListener('staxx:ping',register);
   window.addEventListener('message',e=>{
-    if(e.source!==window||e.origin!==location.origin)return;
+    if((e.source&&e.source!==window)||e.origin!==location.origin)return;
     const d=e.data;
     if(d?.__tornstaxxBridge!==bridge||d.kind!=='open'||d.id!==id)return;
     if(!window.__warStaxxReady)openFallback();
@@ -152,7 +158,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='0.2.1', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='0.2.2', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','targets','matchups','strategy','activity','history','assignments','alerts','settings','diagnostics'];
   const labels={overview:'Command',targets:'Targets',matchups:'Matchups',strategy:'Strategy',activity:'Activity',history:'History',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -185,7 +191,15 @@
   state.data.errors=state.data.errors||{};
   state.data.backoff=state.data.backoff||{};
   state.data.seenAttacks=state.data.seenAttacks||{};
-  const effectiveKey=()=>cfg.key.trim()||(apiKeyPda.includes('PDA-APIKEY')?'':apiKeyPda);
+  // Repair malformed legacy cached containers without wiping valid user data.
+  for(const k of ['ours','enemies','ourWars','enemyWars','attacks'])
+    if(!Array.isArray(state.data[k]))state.data[k]=[];
+  for(const k of ['reports','activity','ffstats','seenAttacks','updated','errors','backoff','meta'])
+    if(!state.data[k]||typeof state.data[k]!=='object'||Array.isArray(state.data[k]))state.data[k]={};
+  if(state.data.war&&!Array.isArray(state.data.war.factions))state.data.war=null;
+  for(const [key,value] of Object.entries(state.data.reports))
+    if(!value||typeof value!=='object'||!Array.isArray(value.factions))delete state.data.reports[key];
+  const effectiveKey=()=>String(cfg.key||'').trim()||(apiKeyPda.includes('PDA-APIKEY')?'':apiKeyPda);
   const saveCfg=()=>{try{localStorage.setItem(CONFIG,JSON.stringify(cfg));return true;}catch(_){state.localKeyError=true;return false;}};
   const save=()=>{try{localStorage.setItem(DATA,JSON.stringify(state.data));return true;}catch(_){
     // Discard only oldest evidence on quota exhaustion; never purge config, spies or notes.
@@ -809,11 +823,25 @@
     if(focus)setTimeout(()=>$('#ws-alert-'+focus,root)?.scrollIntoView({block:'center'}),100);
   }
   function open(detail={}){
-    event('panel',{id:ID,open:true});
-    state.open=true;
-    if(detail.alertId){const alert=currentAlerts().find(a=>a.id===detail.alertId);navigate(alert?.tab||'alerts',detail.alertId);}
-    else navigate(sections.includes(detail.section)?detail.section:state.tab);
-    if(effectiveKey() && !state.loading && Date.now()-state.lastRefresh>90*1000)refresh(false);
+    try{
+      if(!root.isConnected)document.body.appendChild(root);
+      state.open=true;
+      root.style.display='block';
+      root.style.visibility='visible';
+      root.style.pointerEvents='auto';
+      if(detail.alertId){const alert=currentAlerts().find(a=>a.id===detail.alertId);navigate(alert?.tab||'alerts',detail.alertId);}
+      else navigate(sections.includes(detail.section)?detail.section:state.tab);
+      // Announce opening only after mounting the real visible UI.
+      event('panel',{id:ID,open:true});
+      if(effectiveKey() && !state.loading && Date.now()-state.lastRefresh>90*1000)refresh(false);
+    }catch(err){
+      window.__warStaxxStartError='Panel could not open ('+(err?.name||'Error')+')';
+      state.open=true;root.style.display='block';
+      const area=$('.ws-content',root);
+      if(area)area.textContent='War-TornStaxx could not render its panel. '+
+        window.__warStaxxStartError+'. Reload Torn and review TornStaxx diagnostics. Saved data was not deleted.';
+      event('panel',{id:ID,open:true});
+    }
   }
   function close(){state.open=false;render();event('panel',{id:ID,open:false});}
   function handle(action){
@@ -891,7 +919,7 @@
   });
   document.addEventListener('staxx:open',e=>{if(e.detail?.id===ID)open(e.detail);});
   window.addEventListener('message',e=>{
-    if(e.source!==window||e.origin!==location.origin)return;
+    if((e.source&&e.source!==window)||e.origin!==location.origin)return;
     const d=e.data;
     if(d?.__tornstaxxBridge==='tornstaxx-war-v1'&&d.kind==='open'&&d.id===ID)
       open({section:d.section||'overview',alertId:d.alertId||null});
@@ -929,11 +957,12 @@
     styleSheet();document.body.appendChild(root);
     // Show a low-profile, on-page fallback on faction routes; never create another floating FAB.
     mountFactionShortcut();
-    publish();
+    if(!root.querySelector('.ws-panel')||!root.querySelector('.ws-tabs')||
+       !root.querySelector('.ws-content')||!root.querySelector('.ws-sync'))
+       throw new Error('War panel elements are missing');
     window.__warStaxxReady=true;
-    // Re-publish ready state through both bridges; no credentials in the marker.
-    document.dispatchEvent(new CustomEvent('staxx:ping'));
-    // Torn PDA can load userscripts in any order. Re-announce after the Hub has mounted.
+    window.__warStaxxStartError='';
+    publish();
     document.dispatchEvent(new CustomEvent('staxx:ping'));
     setTimeout(announce,2500);
     setTimeout(announce,9000);
@@ -945,5 +974,9 @@
     if(!document.hidden&&effectiveKey()&&!state.loading&&Date.now()-state.lastRefresh>cfg.refreshSeconds*1000)refresh(false);
   },30000);
   window.addEventListener('beforeunload',()=>{clearInterval(refreshTimer);clearInterval(registrationTimer);},{once:true});
-  boot();
+  try{boot();}catch(err){
+    window.__warStaxxReady=false;
+    window.__warStaxxStartError='Startup failed ('+(err?.name||'Error')+')';
+    try{document.dispatchEvent(new CustomEvent('staxx:ping'));}catch(_){}
+  }
 })();
