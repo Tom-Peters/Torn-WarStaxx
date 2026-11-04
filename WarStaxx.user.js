@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      0.4.0
+// @version      0.5.0
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='0.4.0';
+  const id='war', version='0.5.0';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,10 +183,10 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='0.4.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='0.5.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
-  const sections=['overview','intel','targets','history','activity','matchups','strategy','assignments','alerts','settings','diagnostics'];
-  const labels={overview:'War room',intel:'Enemy intel',targets:'Players',matchups:'Matchups',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
+  const sections=['overview','command','pace','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
+  const labels={overview:'War room',command:'Leadership',pace:'War pace',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
   const $=(s,root=document)=>root.querySelector(s);
   const $$=(s,root=document)=>Array.from(root.querySelectorAll(s));
   const n=v=>Number.isFinite(Number(v))?Number(v):0;
@@ -199,17 +199,19 @@
   const link=id=>'https://www.torn.com/profiles.php?XID='+positive(id);
   const attackLink=id=>'https://www.torn.com/loader.php?sid=attack&user2ID='+positive(id);
   const apiKeyPda=typeof window.PDA_APIKEY==='string'?window.PDA_APIKEY:'###PDA-APIKEY###';
-  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},hidden:false};
+  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},hidden:false};
   const cfg=Object.assign({},defaults,safeRead(CONFIG,{}));
   cfg.assignments=cfg.assignments&&typeof cfg.assignments==='object'?cfg.assignments:{};
   cfg.blackSkulls=cfg.blackSkulls&&typeof cfg.blackSkulls==='object'?cfg.blackSkulls:{};
   cfg.spies=cfg.spies&&typeof cfg.spies==='object'?cfg.spies:{};
   cfg.notes=cfg.notes&&typeof cfg.notes==='object'?cfg.notes:{};
   cfg.watchlist=cfg.watchlist&&typeof cfg.watchlist==='object'?cfg.watchlist:{};
-  const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},factionBasic:{},publicIntel:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},sampleCount:0});
+  cfg.planStatus=cfg.planStatus&&typeof cfg.planStatus==='object'?cfg.planStatus:{};
+  cfg.leaderNotes=cfg.leaderNotes&&typeof cfg.leaderNotes==='object'?cfg.leaderNotes:{};
+  const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},factionBasic:{},publicIntel:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},scoreTimelines:{},warTimelines:{},sampleCount:0});
   const state={data:Object.assign(freshData(),safeRead(DATA,{})),open:false,tab:'overview',showMore:false,
     filter:'all',sort:'warScore',search:'',loading:false,ffLoading:false,spinner:'',error:'',scanning:false,alerts:[],chosen:0,
-    lastRefresh:0,historicalRead:0,localKeyError:false,warExpected:false,selectedWar:0,detailFrom:'targets'};
+    lastRefresh:0,historicalRead:0,localKeyError:false,warExpected:false,selectedWar:0,selectedTimeline:0,detailFrom:'targets',leaderFilter:'black',hitterFilter:'all'};
   state.data.reports=state.data.reports||{};
   state.data.activity=state.data.activity||{};
   state.data.ffstats=state.data.ffstats||{};
@@ -222,7 +224,7 @@
   // Repair malformed legacy cached containers without wiping valid user data.
   for(const k of ['ours','enemies','ourWars','enemyWars','attacks'])
     if(!Array.isArray(state.data[k]))state.data[k]=[];
-  for(const k of ['reports','activity','factionBasic','publicIntel','ffstats','seenAttacks','updated','errors','backoff','meta'])
+  for(const k of ['reports','activity','factionBasic','publicIntel','ffstats','seenAttacks','updated','errors','backoff','meta','scoreTimelines','warTimelines'])
     if(!state.data[k]||typeof state.data[k]!=='object'||Array.isArray(state.data[k]))state.data[k]={};
   if(state.data.war&&!Array.isArray(state.data.war.factions))state.data.war=null;
   for(const [key,value] of Object.entries(state.data.reports))
@@ -1627,11 +1629,11 @@
     root.style.display=state.open?'block':'none';
     if(!state.open)return;
     const simple=(()=>{try{return JSON.parse(localStorage.getItem('staxx-hub-mode-v1'))!=='advanced';}catch(_){return true;}})();
-    const basics=['overview','intel','targets','history','activity','matchups','strategy','assignments','alerts'];
+    const basics=['overview','command','pace','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts'];
     const displayed=simple&&!state.showMore?sections.filter(s=>basics.includes(s)||s===state.tab):sections;
     $('.ws-tabs',root).innerHTML=displayed.map(s=>'<button type="button" class="'+(s===state.tab?'on':'')+'" data-tab="'+s+'">'+esc(labels[s])+'</button>').join('')+
       (simple?'<button type="button" data-action="more">'+(state.showMore?'Less':'More')+'</button>':'');
-    const pages={overview,intel,targets,matchups,strategy,activity,history,assignments:orders,alerts:alertView,settings,diagnostics};
+    const pages={overview,command,pace,intel,targets,matchups,timeline,strategy,activity,history,assignments:orders,alerts:alertView,settings,diagnostics};
     const content=$('.ws-content',root);
     const scroll=content.scrollTop;
     const form=state.tab==='settings'?Array.from(content.querySelectorAll('input,select,textarea')).map(x=>({id:x.id,checked:x.checked,value:x.value,type:x.type})):null;
