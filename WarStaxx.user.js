@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      0.2.7
+// @version      0.3.0
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -183,10 +183,10 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='0.2.7', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='0.3.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
-  const sections=['overview','targets','matchups','strategy','activity','history','assignments','alerts','settings','diagnostics'];
-  const labels={overview:'Command',targets:'Targets',matchups:'Matchups',strategy:'Strategy',activity:'Activity',history:'History',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
+  const sections=['overview','intel','targets','history','activity','matchups','strategy','assignments','alerts','settings','diagnostics'];
+  const labels={overview:'War room',intel:'Enemy intel',targets:'Players',matchups:'Matchups',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
   const $=(s,root=document)=>root.querySelector(s);
   const $$=(s,root=document)=>Array.from(root.querySelectorAll(s));
   const n=v=>Number.isFinite(Number(v))?Number(v):0;
@@ -199,7 +199,7 @@
   const link=id=>'https://www.torn.com/profiles.php?XID='+positive(id);
   const attackLink=id=>'https://www.torn.com/loader.php?sid=attack&user2ID='+positive(id);
   const apiKeyPda=typeof window.PDA_APIKEY==='string'?window.PDA_APIKEY:'###PDA-APIKEY###';
-  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:8,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},blackSkulls:{},spies:{},notes:{},hidden:false};
+  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},blackSkulls:{},spies:{},notes:{},hidden:false};
   const cfg=Object.assign({},defaults,safeRead(CONFIG,{}));
   cfg.assignments=cfg.assignments&&typeof cfg.assignments==='object'?cfg.assignments:{};
   cfg.blackSkulls=cfg.blackSkulls&&typeof cfg.blackSkulls==='object'?cfg.blackSkulls:{};
@@ -207,8 +207,8 @@
   cfg.notes=cfg.notes&&typeof cfg.notes==='object'?cfg.notes:{};
   const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},sampleCount:0});
   const state={data:Object.assign(freshData(),safeRead(DATA,{})),open:false,tab:'overview',showMore:false,
-    filter:'all',search:'',loading:false,spinner:'',error:'',scanning:false,alerts:[],chosen:0,
-    lastRefresh:0,historicalRead:0,localKeyError:false,warExpected:false};
+    filter:'all',sort:'warScore',search:'',loading:false,spinner:'',error:'',scanning:false,alerts:[],chosen:0,
+    lastRefresh:0,historicalRead:0,localKeyError:false,warExpected:false,selectedWar:0,detailFrom:'targets'};
   state.data.reports=state.data.reports||{};
   state.data.activity=state.data.activity||{};
   state.data.ffstats=state.data.ffstats||{};
@@ -238,8 +238,12 @@
     const list=parseArray(unpack(j,'members'));
     return list.map(p=>({
       id:positive(p.id||p.user_id||p.player_id),name:String(p.name||('Player '+p.id)),level:n(p.level),
-      position:String(p.position||''),status:String(p.status?.state||p.status||'Unknown'),
-      statusText:String(p.status?.description||''),until:n(p.status?.until)*1000,
+      position:String(p.position||''),daysInFaction:n(p.days_in_faction),
+      revivable:p.is_revivable===true,onWall:p.is_on_wall===true,inOc:p.is_in_oc===true,
+      earlyDischarge:p.has_early_discharge===true,
+      status:String(p.status?.state||p.status||'Unknown'),
+      statusText:String(p.status?.description||''),statusDetails:String(p.status?.details||''),
+      until:n(p.status?.until)*1000,
       lastAction:String(p.last_action?.status||'Unknown'),lastAt:n(p.last_action?.timestamp)*1000,
       updated:Date.now()
     })).filter(p=>p.id);
@@ -269,10 +273,17 @@
       start:positive(w.start||w.started),status:String(w.status||'active'),observed:Date.now()};
   }
   function report(j,warId){
-    const r=unpack(j,'rankedwarreport');const f=parseArray(r.factions||r.participants);
-    return {id:warId,war:r.war||{},factions:f.map(side=>({
+    const r=unpack(j,'rankedwarreport');
+    const f=parseArray(r?.factions||r?.participants);
+    const w=r?.war&&typeof r.war==='object'?r.war:r||{};
+    return {id:warId,war:{start:positive(w.start),end:positive(w.end),winner:positive(w.winner),
+      forfeit:Boolean(w.forfeit),target:n(w.target)},factions:f.map(side=>({
       id:positive(side.id||side.faction_id),name:String(side.name||''),score:n(side.score),attacks:n(side.attacks),
-      members:parseArray(side.members||{}).map(p=>({id:positive(p.id||p.user_id),name:String(p.name||''),score:n(p.score),attacks:n(p.attacks),level:n(p.level)})).filter(p=>p.id)
+      rankBefore:String(side.rank?.before||side.rank_before||''),rankAfter:String(side.rank?.after||side.rank_after||''),
+      rewards:{respect:n(side.rewards?.respect),points:n(side.rewards?.points),
+        items:parseArray(side.rewards?.items).map(p=>({id:positive(p.id),name:String(p.name||''),quantity:n(p.quantity)}))},
+      members:parseArray(side.members||{}).map(p=>({id:positive(p.id||p.user_id),name:String(p.name||''),
+        score:n(p.score),attacks:n(p.attacks),level:n(p.level)})).filter(p=>p.id)
     })),retrieved:Date.now()};
   }
   function attacks(j){
@@ -330,9 +341,10 @@
     return 'unknown';
   }
   function isOnline(p){return p.lastAction.toLowerCase()==='online';}
-  function snapshot(){
+  function snapshot(sides=['ours','enemies']){
     const hour=Math.floor(Date.now()/HOUR);
-    for(const [side,players] of [['ours',state.data.ours],['enemies',state.data.enemies]]){
+    for(const side of sides){
+      const players=state.data[side]||[];
       for(const p of players){
         const id=side+':'+p.id;
         const item=state.data.activity[id]||(state.data.activity[id]={hours:{},count:0});
@@ -374,6 +386,64 @@
     const total=records.reduce((s,m)=>s+n(m.score),0);
     return {wars:records.length,score:total,avg:records.length?total/records.length:null,
       attacks:records.reduce((s,m)=>s+n(m.attacks),0)};
+  }
+  function recentWarRecords(side,id){
+    const fid=positive(side==='ours'?cfg.ourId:cfg.enemyId);
+    const wars=(side==='ours'?state.data.ourWars:state.data.enemyWars)
+      .filter(w=>w.end&&w.factions.includes(fid)).slice().sort((a,b)=>(b.end||b.start)-(a.end||a.start));
+    return wars.map(w=>{
+      const r=state.data.reports[w.id];
+      const member=r?.factions?.find(f=>f.id===fid)?.members?.find(p=>p.id===id);
+      return {war:w,member:member||null,covered:Boolean(r),score:member?n(member.score):null,
+        attacks:member?n(member.attacks):null};
+    });
+  }
+  function latestFinished(side){
+    return (side==='ours'?state.data.ourWars:state.data.enemyWars)
+      .filter(w=>w.end).slice().sort((a,b)=>(b.end||b.start)-(a.end||a.start))[0]||null;
+  }
+  function factionWarMetrics(side){
+    const id=positive(side==='ours'?cfg.ourId:cfg.enemyId);
+    const wars=(side==='ours'?state.data.ourWars:state.data.enemyWars).filter(w=>w.end).slice()
+      .sort((a,b)=>(b.end||b.start)-(a.end||a.start));
+    const known=wars.filter(w=>w.winner);
+    const scores=wars.map(w=>w.scores.find(f=>f.id===id)?.score).filter(v=>Number.isFinite(v));
+    const last=wars[0]||null,ours=last?.scores?.find(f=>f.id===id);
+    const opposite=last?.scores?.find(f=>f.id!==id);
+    return {wars:wars.length,wins:known.filter(w=>w.winner===id).length,decided:known.length,
+      scoreAvg:scores.length?scores.reduce((a,b)=>a+b,0)/scores.length:null,
+      last,lastScore:ours?ours.score:null,lastAgainst:opposite?opposite.score:null};
+  }
+  function sideActivity(side){
+    const roster=state.data[side]||[],time=Date.now();
+    return {total:roster.length,online:roster.filter(isOnline).length,
+      active24:roster.filter(p=>p.lastAt&&time-p.lastAt<=24*HOUR).length,
+      active7:roster.filter(p=>p.lastAt&&time-p.lastAt<=7*24*HOUR).length,
+      okay:roster.filter(p=>memberState(p)==='okay').length,
+      away:roster.filter(p=>memberState(p)==='away').length,
+      hospital:roster.filter(p=>memberState(p)==='hospital').length,
+      last:n(state.data.updated[side]),fresh:time-n(state.data.updated[side])<5*MIN};
+  }
+  function hourlyEvidence(side){
+    const slots=Array.from({length:24},(_,hour)=>({hour,samples:0,online:0,travel:0}));
+    for(const p of state.data[side]||[]){
+      const rec=state.data.activity[side+':'+p.id];
+      for(const [h,v] of Object.entries(rec?.hours||{})){
+        if(Number(h)<Math.floor(Date.now()/HOUR)-24*14)continue;
+        const slot=slots[((Number(h)%24)+24)%24];
+        slot.samples+=n(v.count);slot.online+=n(v.online);slot.travel+=n(v.travel);
+      }
+    }
+    return slots.map(p=>({...p,pct:p.samples?Math.round(100*p.online/p.samples):null}));
+  }
+  function strongHours(){
+    const ours=hourlyEvidence('ours'),them=hourlyEvidence('enemies');
+    return ours.map((p,i)=>({hour:i,ours:p,theirs:them[i],
+      advantage:p.samples>=3&&them[i].samples>=3?p.pct-them[i].pct:null}))
+      .filter(x=>x.advantage!==null).sort((a,b)=>b.advantage-a.advantage);
+  }
+  function lastKnownMemberScore(side,id){
+    return recentWarRecords(side,id).find(x=>x.covered)?.score??null;
   }
   function spy(id){const s=cfg.spies[String(id)];return s&&typeof s==='object'?s:null;}
   function bsScore(s){
@@ -574,10 +644,10 @@
       try{const j=await call('/faction/'+fid+'/rankedwars?limit='+limit,name,30*MIN);
         if(j)state.data[name]=warHistory(j);}catch(e){state.error=String(e.message||e);}
     }
-    const ids=[...new Set([...state.data.ourWars.slice(0,limit),...state.data.enemyWars.slice(0,limit)]
+    const ids=[...new Set([...state.data.enemyWars.slice(0,limit),...state.data.ourWars.slice(0,limit)]
       .map(w=>w.id).filter(Boolean))].filter(id=>!state.data.reports[id]);
     // Bounded incremental backfill: at most 3 report calls per refresh.
-    for(const id of ids.slice(0,3)){
+    for(const id of ids.slice(0,4)){
       try{const j=await call('/faction/'+id+'/rankedwarreport','report-'+id);
         if(j)state.data.reports[id]=report(j,id);}catch(e){state.data.errors['report-'+id]=String(e.message||e);}
     }
@@ -640,7 +710,7 @@
       if(positive(cfg.enemyId)){
         const enemy=await call('/faction/'+cfg.enemyId+'/members','enemies',force?0:90*1000);
         if(enemy)state.data.enemies=roster(enemy);
-        if(own||enemy)snapshot();
+        if(own||enemy)snapshot([...(own?['ours']:[]),...(enemy?['enemies']:[])]);
       }
       await refreshHistory();
       await refreshAttacks();
