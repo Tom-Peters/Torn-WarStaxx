@@ -2308,6 +2308,7 @@
         [id,{mode:hitterRisk(id).mode}])),
       controlAssignments:{...(cfg.controlAssignments[currentPlanKey()]||{})},
       turtlePlan:{mode:plan.mode,members:{...plan.members}},
+      heavyPolicy:heavyRule(),
       leaderDuties:Object.fromEntries(members.filter(p=>
         hitterPlanStatus(p.id)!=='not-set').map(p=>[p.id,hitterPlanStatus(p.id)]))};
   }
@@ -2316,6 +2317,7 @@
       Object.values(cfg.blackSkulls).some(Boolean)||Object.keys(cfg.hitterRisk).length||
       Object.keys(cfg.controlAssignments[currentPlanKey()]||{}).length||
       Object.keys(turtlePlan().members).length||
+      heavyRule().mode!=='percent'||heavyRule().percent!==40||heavyRule().minBss!==0||
       state.data.ours.some(p=>hitterPlanStatus(p.id)!=='not-set'));
   }
   function sharedResetScope(){
@@ -2352,9 +2354,15 @@
     const turtle=data.turtlePlan;
     if(!turtle||typeof turtle!=='object'||!['balanced','defensive','full'].includes(turtle.mode)||
       !turtle.members||typeof turtle.members!=='object'||Array.isArray(turtle.members))return false;
+    const incomingHeavy=data.heavyPolicy||{mode:'percent',percent:40,minBss:0};
+    if(!['percent','min-bss'].includes(incomingHeavy.mode)||
+      !Number.isInteger(incomingHeavy.percent)||incomingHeavy.percent<5||
+      incomingHeavy.percent>100||!Number.isFinite(incomingHeavy.minBss)||
+      incomingHeavy.minBss<0||incomingHeavy.minBss>1e15)return false;
     // Only share allowed namespaces; protect against prototype-pollution keys.
     const positiveMap=value=>Object.fromEntries(Object.entries(value)
       .filter(([id])=>/^[1-9][0-9]{0,9}$/.test(id)));
+    cfg.heavyPolicy=heavyRule(incomingHeavy);
     cfg.assignments=Object.fromEntries(Object.entries(positiveMap(data.assignments))
       .map(([k,v])=>[k,positive(v)]).filter(([,v])=>v>0));
     if(positive(cfg.enemyId))cfg.ordersByEnemy[String(cfg.enemyId)]={...cfg.assignments};
@@ -4384,7 +4392,7 @@
       card('Local intelligence controls','<p>War histories, observations and spy reports stay in this device browser storage. Only selected role/order fields sync to an explicitly configured Worker.</p>'+
       b('Reset activity samples only','reset-activity')+' '+b('Clear this opponents orders','reset-orders'))+
       card('Shared faction war orders | opt-in synchronisation',
-        '<p>Requires your own deployed WarStaxx Cloudflare Worker and D1 database. Share ONLY assignments, Black Skull tags, per-hitter risk profiles, hospital watchers, defensive duties and leadership statuses. Torn API keys and manual spies stay on this device.</p>'+
+        '<p>Requires your own deployed WarStaxx Cloudflare Worker and D1 database. Share ONLY assignments, Black Skull tags, per-hitter risk profiles, hospital watchers, defensive duties, leadership statuses and the agreed heavy-target strength cutoff. Torn API keys and manual spies stay on this device.</p>'+
         '<p><b>State:</b> '+(cfg.shared.enabled?'Enabled':'Off')+
         ' | <b>Revision:</b> '+fmt(cfg.shared.revision||0)+
         ' | <b>Local changes:</b> '+(cfg.shared.localDirty?'Not published':'None')+
