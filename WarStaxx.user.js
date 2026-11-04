@@ -220,12 +220,13 @@
     cfg.heavyPolicy&&typeof cfg.heavyPolicy==='object'?cfg.heavyPolicy:{});
   cfg.shared=Object.assign({enabled:false,endpoint:'',token:'',canWrite:false},
     cfg.shared&&typeof cfg.shared==='object'?cfg.shared:{});
-  const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},factionBasic:{},publicIntel:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},scoreTimelines:{},warTimelines:{},afterActions:{},ownerReadiness:{},availabilityEvents:{},chain:{},squadSnapshots:{},sampleCount:0});
+  const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},factionBasic:{},publicIntel:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},scoreTimelines:{},warTimelines:{},afterActions:{},ownerReadiness:{},availabilityEvents:{},chain:{},squadSnapshots:{},attackBssSnapshots:{},sampleCount:0});
   const state={data:Object.assign(freshData(),safeRead(DATA,{})),open:false,tab:'overview',showMore:false,
     filter:'all',sort:'warScore',search:'',commanderFilter:'black',controlFocus:0,loading:false,ffLoading:false,spinner:'',error:'',scanning:false,alerts:[],chosen:0,
     lastRefresh:0,historicalRead:0,localKeyError:false,sharedBusy:false,sharedDirty:false,sharedRevision:0,sharedSyncAt:0,sharedEditVersion:0,sharedError:'',warMore:false,quickHitPending:false,stripScrolled:false,stripExpanded:false,warExpected:false,selectedWar:0,selectedTimeline:0,selectedPace:0,selectedDebrief:0,detailFrom:'targets',leaderFilter:'all',hitterFilter:'all'};
   state.data.reports=state.data.reports||{};
   state.data.squadSnapshots=state.data.squadSnapshots||{};
+  state.data.attackBssSnapshots=state.data.attackBssSnapshots||{};
   state.data.activity=state.data.activity||{};
   state.data.ffstats=state.data.ffstats||{};
   state.data.publicIntel=state.data.publicIntel||{};
@@ -1860,6 +1861,7 @@
         if(chain){const snapshot=chainSnapshot(chain);if(snapshot)state.data.chain=snapshot;}
       }catch(e){state.data.errors.chain=String(e.message||e).slice(0,150);}
       await refreshFF();
+      captureAttackBssObservations();
       await refreshOwnReadiness();
       if(sharedEndpoint()&&sharedScope())sharedPull(false);
       state.lastRefresh=Date.now();
@@ -3499,6 +3501,89 @@
         received:inbound.known?inbound.byMember[p.id]?.enemyScore||0:null,
         incomingHits:inbound.known?inbound.byMember[p.id]?.scoringAttacks||0:null
       }))};
+  }
+
+  // Only capture opponent BSS near the attack, while both rosters are fresh.
+  // Do not reconstruct old enemy strength using today's stats.
+  function captureAttackBssObservations(at=Date.now()){
+    if(!activeWarNow()||!rosterFresh('ours',at)||!rosterFresh('enemies',at))return 0;
+    const id=positive(state.data.war?.id),db=state.data.attackBssSnapshots||
+      (state.data.attackBssSnapshots={}),enemyById=new Map(
+        state.data.enemies.map(p=>[p.id,p])),ourIds=new Set(
+        state.data.ours.map(p=>p.id));
+    let added=0;
+    for(const a of warAttackRows(id)){
+      if(a.side!=='ours'||!positive(a.id)||db[String(a.id)]||
+        !ourIds.has(a.attacker)||!enemyById.has(a.defender)||
+        !n(a.at)||a.at>at||at-a.at>6*HOUR||
+        officialNumber(a.respect)===null)continue;
+      const estimate=enemyBattleEstimate(enemyById.get(a.defender));
+      if(estimate.value===null||estimate.value<=0)continue;
+      db[String(a.id)]={id:a.id,warId:id,hitterId:a.attacker,targetId:a.defender,
+        targetBss:estimate.value,source:estimate.source,
+        respect:Math.max(0,n(a.respect)),chain:n(a.chain),
+        chainBonus:officialNumber(a.chainBonus),
+        specialBonus:Boolean(a.specialBonus),
+        modifierWar:officialNumber(a.modifierWar),
+        modifierRetaliation:officialNumber(a.modifierRetaliation),
+        modifierGroup:officialNumber(a.modifierGroup),
+        modifierOverseas:officialNumber(a.modifierOverseas),
+        attackAt:n(a.at),observedAt:at};
+      added++;
+    }
+    for(const [key] of Object.entries(db).sort((a,b)=>n(b[1].observedAt)-n(a[1].observedAt)).slice(900))
+      delete db[key];
+    return added;
+  }
+  function normalizedSimilarHit(sample){
+    if(!sample||!Number.isFinite(Number(sample.targetBss))||n(sample.targetBss)<=0||
+      !Number.isFinite(Number(sample.respect))||n(sample.respect)<0||
+      sample.specialBonus||chainMilestones.includes(n(sample.chain))||
+      sample.modifierRetaliation!==null&&sample.modifierRetaliation!==undefined&&
+        sample.modifierRetaliation!==1||
+      sample.modifierGroup!==null&&sample.modifierGroup!==undefined&&
+        sample.modifierGroup!==1||
+      sample.modifierOverseas!==null&&sample.modifierOverseas!==undefined&&
+        sample.modifierOverseas!==1||
+      sample.modifierWar!==null&&sample.modifierWar!==undefined&&
+        sample.modifierWar!==2)return null;
+    const chain=n(sample.chain),apiScale=n(sample.chainBonus),
+      scale=chain>=10?(apiScale>=1&&apiScale<=2.1?apiScale:
+        Math.max(1,.25*Math.log10(chain)+.75)):1;
+    return {bss:n(sample.targetBss),respect:n(sample.respect)/scale,
+      warId:positive(sample.warId),source:String(sample.source||'BSS recorded near attack')};
+  }
+  function similarStrengthPerformance(memberId,warId=positive(state.data.war?.id)){
+    const id=positive(memberId),currentWar=positive(warId),
+      all=Object.values(state.data.attackBssSnapshots||{})
+        .filter(x=>positive(x.hitterId)===id&&
+          positive(x.warId)>0&&n(x.attackAt)>0&&
+          n(x.observedAt)>=n(x.attackAt)&&
+          n(x.observedAt)-n(x.attackAt)<=6*HOUR)
+        .map(normalizedSimilarHit).filter(Boolean),
+      current=all.filter(x=>x.warId===currentWar).sort((a,b)=>a.bss-b.bss),
+      priorIds=new Set((state.data.ourWars||[])
+        .filter(w=>n(w.end)>0&&positive(w.id)!==currentWar)
+        .sort((a,b)=>n(b.end)-n(a.end)).slice(0,3).map(w=>positive(w.id))),
+      baseline=all.filter(x=>priorIds.has(x.warId));
+    const reference=current.length?current[Math.floor(current.length/2)].bss:null;
+    const comparable=x=>reference!==null&&x.bss>=reference*0.75&&
+      x.bss<=reference*1.25,
+      now=current.filter(comparable),before=baseline.filter(comparable),
+      priorWars=new Set(before.map(x=>x.warId)).size,
+      mean=a=>a.length?a.reduce((z,x)=>z+x.respect,0)/a.length:null,
+      actual=mean(now),historical=mean(before),
+      enough=now.length>=3&&before.length>=3&&priorWars>=2&&historical>0,
+      ratio=enough?actual/historical:null,
+      label=reference===null?'No time-stamped current target BSS evidence':
+        !enough?'Not enough comparable attacks across two previous wars':
+        ratio<0.70?'Below similar-strength historical pace':
+        ratio>=1.15?'Above similar-strength historical pace':'Similar to previous comparable fights';
+    return {memberId:id,warId:currentWar,referenceBss:reference,currentSamples:now.length,
+      historicalSamples:before.length,priorWars,actual,historical,ratio,
+      flag:ratio!==null&&ratio<0.7,label,
+      source:'Captured attacks matched to opponent BSS observed within 6h; +/-25% BSS band',
+      metric:'Chain-normalised captured respect per recorded attack, not official war score'};
   }
   function ownHistoricalEfficiency(memberId,excludeWar=0){
     const list=state.data.ourWars.filter(w=>w.end&&positive(w.id)!==positive(excludeWar))
