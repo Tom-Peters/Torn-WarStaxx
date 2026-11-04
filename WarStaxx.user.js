@@ -2353,6 +2353,7 @@
     if(action==='war'){open({section:cfg.blackSkulls[self.id]?'skulls':'overview'});return;}
     if(action==='skulls'){open({section:'skulls'});return;}
     if(action==='stats'){open({section:'reports'});return;}
+    if(action==='enemy'){open({section:'enemy'});return;}
     if(action.startsWith('opportunity:')){focusOpportunity(positive(action.slice(12)));return;}
     if(action==='heal'){itemFlow('heal');return;}
     if(action==='turtle'){
@@ -2436,7 +2437,6 @@
   function renderWarStrip(force=false){
     let host=document.querySelector('#mainContent,#main-content,#mainContainer,#mainWrapper,main,[role="main"]')||document.body;
     let bar=document.getElementById('warstaxx-live-strip');
-    if(!activeWarNow()){if(bar)bar.remove();return;}
     if(!host||host.closest('#warstaxx-root,#staxx-hub-root'))return;
     document.getElementById('warstaxx-faction-open')?.remove();
     if(!document.getElementById('warstaxx-live-style')){
@@ -2453,6 +2453,11 @@
         '#warstaxx-live-strip .wsw-item-controls small{display:block;width:100%;color:#c6ddeb}'+
         '#warstaxx-live-strip .wsw-opportunities{display:flex;align-items:center;gap:6px;flex-wrap:wrap;color:#ffdaa1;margin-top:7px;font-size:11px}'+
         '#warstaxx-live-strip .wsw-opportunities button{min-height:31px;background:#394365;border-color:#849adc}'+
+        '#warstaxx-live-strip.wsw-standby{padding:4px 8px;border-color:#28415a;'+
+        'background:#0b2036;box-shadow:none}'+
+        '#warstaxx-live-strip.wsw-standby .wsw-top strong{font-size:11px;font-weight:650}'+
+        '#warstaxx-live-strip .wsw-standby-actions{margin-left:auto;display:flex;gap:5px;align-items:center}'+
+        '#warstaxx-live-strip .wsw-standby-actions button{min-height:31px;padding:4px 8px;font-size:10px}'+
         '@media(max-width:600px){#warstaxx-live-strip{margin:6px 2px;padding:8px}#warstaxx-live-strip .wsw-actions{grid-template-columns:repeat(3,minmax(0,1fr))}#warstaxx-live-strip button{font-size:11px;min-height:44px}}';
       document.head.appendChild(style);
     }
@@ -2465,6 +2470,21 @@
       });
     }
     if(bar.parentNode!==host)host.insertBefore(bar,host.firstChild);
+    const btn=(name,action)=>'<button type="button" data-ws-quick="'+esc(action)+'">'+esc(name)+'</button>';
+    // The strip is always available, including between ranked wars.
+    // It shrinks to a quiet navigation shortcut rather than falsely showing a live score.
+    if(!activeWarNow()){
+      const signature=['standby',cfg.enemyId,state.lastRefresh>0,Math.floor(Date.now()/MIN)].join(':');
+      if(!force&&bar.dataset.signature===signature)return;
+      bar.dataset.signature=signature;
+      bar.classList.add('wsw-standby');
+      bar.innerHTML='<div class="wsw-top"><span class="wsw-kicker">WARSTAXX | STANDBY</span>'+
+        '<strong>'+esc(positive(cfg.enemyId)?'Scouting faction #'+cfg.enemyId:'Ready for the next ranked war')+'</strong>'+
+        '<div class="wsw-standby-actions">'+btn('ACT NOW','war')+
+          btn('OPPONENT','enemy')+btn('REPORTS','stats')+'</div></div>';
+      return;
+    }
+    bar.classList.remove('wsw-standby');
     const self=ourWarReadiness(),score=warScore(),target=bestEfficiencyHit(),
       opportunities=priorityOpportunities(),defence=turtleWindow(),chain=chainStatus(),
       compact=Boolean(cfg.warStripCompact||(state.stripScrolled&&!state.stripExpanded)),
@@ -2473,7 +2493,6 @@
         intent,compact,opportunities.map(x=>x.id+':'+x.at).join(','),state.quickHitPending,location.pathname,Math.floor(Date.now()/MIN)].join(':');
     if(!force&&bar.dataset.signature===sig)return;
     bar.dataset.signature=sig;
-    const btn=(name,action)=>'<button type="button" data-ws-quick="'+esc(action)+'">'+esc(name)+'</button>';
     bar.innerHTML='<div class="wsw-top"><span class="wsw-kicker">RANKED WAR LIVE</span>'+
       '<strong>Us '+(score?fmt(score.our):'?')+' / Them '+(score?fmt(score.enemy):'?')+'</strong>'+
       '<strong>Net '+(score?(score.net>=0?'+':'')+fmt(score.net):'?')+'</strong>'+
@@ -4536,7 +4555,8 @@
       (/^\/page\.php$/i.test(location.pathname) && /^(rankedwar|factionwar|war)$/i.test(new URLSearchParams(location.search).get('sid')||''));
   }
   function mountFactionShortcut(){
-    if(activeWarNow()){document.getElementById('warstaxx-faction-open')?.remove();return;}
+    // The persistent native strip now replaces the old faction-only shortcut.
+    document.getElementById('warstaxx-faction-open')?.remove();return;
     if(!factionRoute() || document.getElementById('warstaxx-faction-open'))return;
     const host=document.querySelector('#mainContainer, #mainWrapper, #mainContent, #main-content, main, [role="main"]');
     if(!host || host.closest('#staxx-hub-root, #warstaxx-root'))return;
