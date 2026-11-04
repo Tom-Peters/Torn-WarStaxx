@@ -91,6 +91,29 @@ test('invalid turtle roles and leadership statuses are rejected',async()=>{
   const wrongStatus={...data,leaderDuties:{'4':'secret-admin'}};
   assert.equal((await worker.fetch(request('PUT',WRITE,1234,0,wrongStatus),e)).status,400);
 });
+test('custom Black Skulls BSS cutoff is stored as part of the same revisioned shared plan',async()=>{
+  const e=env(),updated={...data,heavyPolicy:{mode:'min-bss',percent:40,minBss:12345}};
+  const create=await worker.fetch(request('PUT',WRITE,1234,0,updated),e);
+  assert.equal(create.status,200);
+  const pulled=await worker.fetch(request('GET',READ),e);
+  assert.equal((await pulled.json()).data.heavyPolicy.minBss,12345);
+});
+test('invalid BSS cutoff values and unknown remote fields cannot be published',async()=>{
+  const e=env();
+  for(const heavyPolicy of [
+    {mode:'min-bss',percent:40,minBss:-1},
+    {mode:'percent',percent:0,minBss:0},
+    {mode:'percent',percent:101,minBss:0},
+    {mode:'no-rules',percent:40,minBss:0},
+    {mode:'min-bss',percent:40,minBss:'invalid'}
+  ]){
+    const response=await worker.fetch(request('PUT',WRITE,1234,0,{...data,heavyPolicy}),e);
+    assert.equal(response.status,400);
+  }
+  const extra=await worker.fetch(request('PUT',WRITE,1234,0,
+    {...data,heavyPolicy:{mode:'percent',percent:40,minBss:0},spyData:{1:9999}}),e);
+  assert.equal(extra.status,400);
+});
 test('normal browser CORS preflight is accepted only for Torn origins',async()=>{
   const e=env();
   const ok=await worker.fetch(new Request('https://shared.example/v1/factions/1234/wars/123/orders',{
