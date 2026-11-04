@@ -1735,6 +1735,7 @@
     if(action==='reset-activity'){state.data.activity={};state.data.sampleCount=0;save();render();return;}
     if(action==='reset-orders'){cfg.assignments={};saveCfg();render();return;}
     if(action==='save-settings'){
+      const priorFFKey=ffApiKey();
       const supplied=$('#ws-key',root)?.value?.trim();if(supplied&&supplied!==cfg.key){cfg.key=supplied;delete state.data.meta.ffRegistration;state.data.updated.ffscouter=0;state.data.ffstats={};}
       const ffSupplied=$('#ws-ffkey',root)?.value?.trim();if(ffSupplied&&ffSupplied!==cfg.ffKey){cfg.ffKey=ffSupplied;delete state.data.meta.ffRegistration;state.data.updated.ffscouter=0;state.data.ffstats={};}
       cfg.ffConsent=Boolean($('#ws-ff-consent',root)?.checked);
@@ -1753,6 +1754,11 @@
       cfg.refreshSeconds=Math.max(90,Math.min(300,positive($('#ws-interval',root)?.value)||120));
       cfg.historyLimit=Math.max(2,Math.min(20,positive($('#ws-limit',root)?.value)||8));
       cfg.enableAttacks=Boolean($('#ws-attacks',root)?.checked);
+      if(priorFFKey!==ffApiKey()){
+        state.data.ffstats={};state.data.updated.ffscouter=0;
+        delete state.data.meta.ffRegistration;
+        delete state.data.backoff.ffscouter;
+      }
       // Force official Torn refresh without bypassing FFScouter's ten-minute
       // refresh window or its temporary error backoff.
       const ffStamp=n(state.data.updated.ffscouter);
