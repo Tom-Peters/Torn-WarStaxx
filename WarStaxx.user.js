@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      0.2.0
+// @version      0.2.1
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -66,11 +66,25 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='0.2.0';
+  const id='war', version='0.2.1';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
+  const bridge='tornstaxx-war-v1';
+  function runtimeMarker(){
+    try {
+      localStorage.setItem('tornstaxx-war-runtime-v1',JSON.stringify({
+        id,version,at:Date.now(),path:location.pathname,phase:window.__warStaxxReady?'ready':'loader'
+      }));
+    }catch(_){} // Storage can be blocked in Torn PDA; DOM bridge still works.
+  }
   function register() {
+    runtimeMarker();
+    // Independent registration transport for Torn PDA userscript sandboxes.
+    // Only a static module identity is transmitted: no API key or gameplay data.
+    try {
+      window.postMessage({__tornstaxxBridge:bridge,kind:'register',id},location.origin);
+    }catch(_){}
     emit('register',{id,label:'War-TornStaxx',icon:'WS',
       desc:window.__warStaxxReady?'Ranked war command centre':'Ranked war intelligence · checking startup',
       sections:[{id:'overview',label:'Command'},{id:'targets',label:'Targets'},
@@ -115,6 +129,12 @@
     emit('panel',{id,open:true});
   }
   document.addEventListener('staxx:ping',register);
+  window.addEventListener('message',e=>{
+    if(e.source!==window||e.origin!==location.origin)return;
+    const d=e.data;
+    if(d?.__tornstaxxBridge!==bridge||d.kind!=='open'||d.id!==id)return;
+    if(!window.__warStaxxReady)openFallback();
+  });
   document.addEventListener('staxx:open',e=>{
     if(e.detail?.id===id&&!window.__warStaxxReady)openFallback();
   });
@@ -132,7 +152,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='0.2.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='0.2.1', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','targets','matchups','strategy','activity','history','assignments','alerts','settings','diagnostics'];
   const labels={overview:'Command',targets:'Targets',matchups:'Matchups',strategy:'Strategy',activity:'Activity',history:'History',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -870,6 +890,12 @@
     }
   });
   document.addEventListener('staxx:open',e=>{if(e.detail?.id===ID)open(e.detail);});
+  window.addEventListener('message',e=>{
+    if(e.source!==window||e.origin!==location.origin)return;
+    const d=e.data;
+    if(d?.__tornstaxxBridge==='tornstaxx-war-v1'&&d.kind==='open'&&d.id===ID)
+      open({section:d.section||'overview',alertId:d.alertId||null});
+  });
   document.addEventListener('staxx:closeall',()=>{if(state.open)close();});
   document.addEventListener('staxx:ping',publish);
   document.addEventListener('staxx:mode',render);
@@ -905,6 +931,8 @@
     mountFactionShortcut();
     publish();
     window.__warStaxxReady=true;
+    // Re-publish ready state through both bridges; no credentials in the marker.
+    document.dispatchEvent(new CustomEvent('staxx:ping'));
     // Torn PDA can load userscripts in any order. Re-announce after the Hub has mounted.
     document.dispatchEvent(new CustomEvent('staxx:ping'));
     setTimeout(announce,2500);
