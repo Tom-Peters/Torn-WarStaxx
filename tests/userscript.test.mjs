@@ -52,8 +52,8 @@ test('installable userscript starts at byte zero with a complete metadata header
 });
 
 
-test('v0.2.6 sideband is restricted to War-TornStaxx and keeps credentials private',()=>{
- assert.match(code,/\/\/ @version\s+0\.2\.6/);
+test('v0.2.7 sideband is restricted to War-TornStaxx and keeps credentials private',()=>{
+ assert.match(code,/\/\/ @version\s+0\.2\.7/);
  assert.match(code,/tornstaxx-war-runtime-v1/);
  assert.match(code,/__tornstaxxBridge:bridge/);
  assert.match(code,/e\.source&&e\.source!==window/);
@@ -87,4 +87,15 @@ test('War 0.2.5 writes cross-world DOM startup marker and repairs emergency laun
  assert.match(code,/const safeMount=\(\)=>/);
  assert.match(code,/__TornStaxxFallbackError/);
  assert.doesNotMatch(code,/GM_setValue\(['\"]tornstaxx-war-execution-probe/);
+});
+
+
+test('own faction is discovered automatically using authenticated Torn profile',()=>{
+ assert.match(code,/\['\/user\/profile','identity-profile','user-profile'\]/);
+ assert.match(code,/\['\/user\/faction','identity-faction','user-faction'\]/);
+ assert.match(code,/if\(!result\?\.id\)continue/);
+ assert.match(code,/const id=positive\(v\)/);
+ assert.match(code,/cfg\.ourId=result\.id/);
+ assert.match(code,/state\.data\.errors\.identity/);
+ assert.match(code,/Automatically detect my faction from the Torn API/);
 });
