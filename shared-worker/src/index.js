@@ -28,18 +28,26 @@ function validMap(m,kind){
 }
 function clean(input){
   if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>
-    !['assignments','blackSkulls','hitterRisk','controlAssignments','turtlePlan','leaderDuties'].includes(k)))return null;
-  const rawPlan=input.turtlePlan||{};
+    !['assignments','blackSkulls','hitterRisk','controlAssignments','turtlePlan','leaderDuties','heavyPolicy'].includes(k)))return null;
+  const rawPlan=input.turtlePlan||{},rawHeavy=input.heavyPolicy||{};
   const data={assignments:input.assignments||{},blackSkulls:input.blackSkulls||{},
     hitterRisk:Object.fromEntries(Object.entries(input.hitterRisk||{}).map(([id,x])=>
       [id,{mode:x?.mode}])),controlAssignments:input.controlAssignments||{},
     turtlePlan:{mode:rawPlan.mode||'balanced',members:rawPlan.members||{}},
-    leaderDuties:input.leaderDuties||{}};
+    leaderDuties:input.leaderDuties||{},
+    heavyPolicy:{mode:rawHeavy.mode||'percent',
+      percent:rawHeavy.percent===undefined?40:rawHeavy.percent,
+      minBss:rawHeavy.minBss===undefined?0:rawHeavy.minBss}};
   return validMap(data.assignments,'assign')&&validMap(data.blackSkulls,'black')&&
     validMap(data.hitterRisk,'risk')&&validMap(data.controlAssignments,'control')&&
     ['balanced','defensive','full'].includes(data.turtlePlan.mode)&&
     validMap(data.turtlePlan.members,'turtle')&&
-    validMap(data.leaderDuties,'duty')?data:null;
+    validMap(data.leaderDuties,'duty')&&
+    ['percent','min-bss'].includes(data.heavyPolicy.mode)&&
+    Number.isInteger(data.heavyPolicy.percent)&&
+    data.heavyPolicy.percent>=5&&data.heavyPolicy.percent<=100&&
+    Number.isFinite(data.heavyPolicy.minBss)&&
+    data.heavyPolicy.minBss>=0&&data.heavyPolicy.minBss<=1e15?data:null;
 }
 export default {async fetch(request,env){
   const origin=request.headers.get('Origin')||'';
