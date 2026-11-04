@@ -199,9 +199,13 @@
   const link=id=>'https://www.torn.com/profiles.php?XID='+positive(id);
   const attackLink=id=>'https://www.torn.com/loader.php?sid=attack&user2ID='+positive(id);
   const apiKeyPda=typeof window.PDA_APIKEY==='string'?window.PDA_APIKEY:'###PDA-APIKEY###';
-  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,hidden:false};
+  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,hidden:false};
   const cfg=Object.assign({},defaults,safeRead(CONFIG,{}));
   cfg.assignments=cfg.assignments&&typeof cfg.assignments==='object'?cfg.assignments:{};
+  cfg.ordersByEnemy=cfg.ordersByEnemy&&typeof cfg.ordersByEnemy==='object'?cfg.ordersByEnemy:{};
+  // Treat existing local orders as belonging to the currently configured opponent.
+  if(positive(cfg.enemyId)&&!Object.prototype.hasOwnProperty.call(cfg.ordersByEnemy,String(cfg.enemyId))&&
+     Object.keys(cfg.assignments).length)cfg.ordersByEnemy[String(cfg.enemyId)]={...cfg.assignments};
   cfg.blackSkulls=cfg.blackSkulls&&typeof cfg.blackSkulls==='object'?cfg.blackSkulls:{};
   cfg.spies=cfg.spies&&typeof cfg.spies==='object'?cfg.spies:{};
   cfg.notes=cfg.notes&&typeof cfg.notes==='object'?cfg.notes:{};
@@ -557,15 +561,18 @@
     });
   }
   function setOpponent(id){
-    const next=positive(id);
-    if(next===positive(cfg.enemyId))return false;
+    const next=positive(id),previous=positive(cfg.enemyId);
+    if(next===previous)return false;
+    // Preserve each opponents local assignments separately; never show old
+    // target orders as if they applied to a newly detected enemy faction.
+    if(previous)cfg.ordersByEnemy[String(previous)]={...cfg.assignments};
     cfg.enemyId=next;
+    cfg.assignments=next?{...(cfg.ordersByEnemy[String(next)]||{})}:{};
     state.data.enemies=[];
     state.data.enemyWars=[];
     state.data.updated.enemies=0;
     state.data.updated.enemyWars=0;
-    // Preserve verified history, spies, local notes and saved user orders.
-    // Never present a previous enemy roster as belonging to a new opponent.
+    // Historical war reports, spies, local notes and saved opponents orders survive.
     saveCfg();
     return true;
   }
@@ -2763,7 +2770,7 @@
       return;
     }
     if(action==='reset-activity'){state.data.activity={};state.data.sampleCount=0;save();render();return;}
-    if(action==='reset-orders'){cfg.assignments={};saveCfg();render();return;}
+    if(action==='reset-orders'){cfg.assignments={};if(positive(cfg.enemyId))cfg.ordersByEnemy[String(positive(cfg.enemyId))]={};saveCfg();render();return;}
     if(action==='save-settings'){
       const priorFFKey=ffApiKey();
       const previousOwnerKey=effectiveKey();
