@@ -2205,16 +2205,22 @@
     }catch(_){return '';}
   }
   function sharedPayload(){
+    const plan=turtlePlan(),members=state.data.ours;
     return {assignments:{...cfg.assignments},blackSkulls:Object.fromEntries(
       Object.entries(cfg.blackSkulls).filter(([,yes])=>yes===true)),
       hitterRisk:Object.fromEntries(Object.entries(cfg.hitterRisk).map(([id,x])=>
         [id,{mode:hitterRisk(id).mode}])),
-      controlAssignments:{...(cfg.controlAssignments[currentPlanKey()]||{})}};
+      controlAssignments:{...(cfg.controlAssignments[currentPlanKey()]||{})},
+      turtlePlan:{mode:plan.mode,members:{...plan.members}},
+      leaderDuties:Object.fromEntries(members.filter(p=>
+        hitterPlanStatus(p.id)!=='not-set').map(p=>[p.id,hitterPlanStatus(p.id)]))};
   }
   function sharedHasLocalOrders(){
     return Boolean(Object.keys(cfg.assignments).length||
       Object.values(cfg.blackSkulls).some(Boolean)||Object.keys(cfg.hitterRisk).length||
-      Object.keys(cfg.controlAssignments[currentPlanKey()]||{}).length);
+      Object.keys(cfg.controlAssignments[currentPlanKey()]||{}).length||
+      Object.keys(turtlePlan().members).length||
+      state.data.ours.some(p=>hitterPlanStatus(p.id)!=='not-set'));
   }
   function sharedResetScope(){
     const scope=sharedScope();if(!scope)return;
@@ -2245,8 +2251,11 @@
   }
   function applySharedOrders(data){
     if(!data||typeof data!=='object')return false;
-    const maps=['assignments','blackSkulls','hitterRisk','controlAssignments'];
+    const maps=['assignments','blackSkulls','hitterRisk','controlAssignments','leaderDuties'];
     if(maps.some(k=>!data[k]||typeof data[k]!=='object'||Array.isArray(data[k])))return false;
+    const turtle=data.turtlePlan;
+    if(!turtle||typeof turtle!=='object'||!['balanced','defensive','full'].includes(turtle.mode)||
+      !turtle.members||typeof turtle.members!=='object'||Array.isArray(turtle.members))return false;
     // Only share allowed namespaces; protect against prototype-pollution keys.
     const positiveMap=value=>Object.fromEntries(Object.entries(value)
       .filter(([id])=>/^[1-9][0-9]{0,9}$/.test(id)));
@@ -2261,6 +2270,14 @@
     cfg.controlAssignments[currentPlanKey()]=Object.fromEntries(
       Object.entries(positiveMap(data.controlAssignments)).map(([k,v])=>[k,positive(v)])
         .filter(([,v])=>v>0));
+    cfg.turtlePlans[currentPlanKey()]={mode:turtle.mode,members:Object.fromEntries(
+      Object.entries(positiveMap(turtle.members)).filter(([,role])=>
+        ['auto','strike','turtle','reserve'].includes(role))),updated:Date.now()};
+    const prefix='war:'+positive(state.data.war?.id)+':member:';
+    for(const key of Object.keys(cfg.planStatus))if(key.startsWith(prefix))delete cfg.planStatus[key];
+    for(const [id,status] of Object.entries(positiveMap(data.leaderDuties)))
+      if(['ready','engaged','monitor','standby','support','needs-spy','complete'].includes(status))
+        cfg.planStatus[prefix+id]=status;
     saveCfg();return true;
   }
   async function sharedPull(discardLocal=false){
@@ -3985,7 +4002,7 @@
       card('Local intelligence controls','<p>War histories, observations, manual spy reports and assignments remain in this browser storage. No central database or cross-device sync is active.</p>'+
       b('Reset activity samples only','reset-activity')+' '+b('Clear this opponents orders','reset-orders'))+
       card('Shared faction war orders | opt-in synchronisation',
-        '<p>Requires your own deployed WarStaxx Cloudflare Worker and D1 database. Share ONLY assignments, Black Skull tags, per-hitter risk profiles and hospital watchers. Torn API keys and manual spies stay on this device.</p>'+
+        '<p>Requires your own deployed WarStaxx Cloudflare Worker and D1 database. Share ONLY assignments, Black Skull tags, per-hitter risk profiles, hospital watchers, defensive duties and leadership statuses. Torn API keys and manual spies stay on this device.</p>'+
         '<p><b>State:</b> '+(cfg.shared.enabled?'Enabled':'Off')+
         ' | <b>Revision:</b> '+fmt(cfg.shared.revision||0)+
         ' | <b>Local changes:</b> '+(cfg.shared.localDirty?'Not published':'None')+
@@ -4115,7 +4132,7 @@
       if(!['balanced','defensive','full'].includes(mode))return;
       const key=currentPlanKey(),prior=turtlePlan();
       cfg.turtlePlans[key]={mode,members:{...prior.members},updated:Date.now()};
-      saveCfg();state.error='Local defensive posture saved. No travel, medical or attack action occurred.';render();return;
+      saveCfg();markSharedDirty();state.error='Local defensive posture saved. No travel, medical or attack action occurred.';render();return;
     }
     if(action==='copy-ops'){
       const content=operationalBrief();
@@ -4337,7 +4354,7 @@
       const key=currentPlanKey(),plan=turtlePlan();
       if(value==='auto')delete plan.members[id];else plan.members[id]=value;
       cfg.turtlePlans[key]={mode:plan.mode,members:plan.members,updated:Date.now()};
-      saveCfg();state.error='Defensive duty saved locally. Torn player status is unchanged.';render();return;
+      saveCfg();markSharedDirty();state.error='Defensive duty saved locally. Torn player status is unchanged.';render();return;
     }
     const target=e.target.closest('[data-leader-target]');
     if(target){const ourId=positive(target.dataset.leaderTarget),enemyId=positive(target.value);
@@ -4358,7 +4375,7 @@
     if(duty){const id=positive(duty.dataset.leaderDuty),value=String(duty.value);
       if(!state.data.ours.some(p=>p.id===id)||!hitterPlanStatuses().some(x=>x[0]===value))return;
       if(value==='not-set')delete cfg.planStatus[hitterPlanKey(id)];else cfg.planStatus[hitterPlanKey(id)]=value;
-      saveCfg();state.error='Manual duty updated locally; this is not a verified Torn action.';render();return;
+      saveCfg();markSharedDirty();state.error='Manual duty updated locally; this is not a verified Torn action.';render();return;
     }
     if(e.target.id==='ws-leader-filter'){state.leaderFilter=e.target.value;render();return;}
     if(e.target.id==='ws-hitter-filter'){state.hitterFilter=e.target.value;render();return;}
