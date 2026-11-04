@@ -1453,13 +1453,56 @@
       top3Share:sum?Math.round(100*top3.reduce((total,p)=>total+p.score,0)/sum):null,
       avgPerAttack:side.attacks?side.score/side.attacks:null,leaders:top3};
   }
+  function flightWatchPanel(){
+    const arrivals=inboundReturns(),fresh=Date.now()-n(state.data.updated.enemies)<5*MIN;
+    return card('Inbound enemy flights | Torn roster status',
+      '<p>Return times appear only when Torn explicitly identifies an inbound flight and publishes a usable status expiry. This is an ETA to verify, not permission to attack a player still travelling.</p>'+
+      (arrivals.length?arrivals.slice(0,15).map(({player:p,flight:x})=>
+        '<div class="ws-row"><span>'+infoButton(p.name,p.id)+' '+ffBadge(p.id)+
+        '<br><small>'+esc(x.statusText||p.status)+' | '+(x.eta?'Torn return ETA '+esc(stamp(x.eta)):'No official return ETA')+
+        ' | Roster '+esc(age(state.data.updated.enemies))+'</small></span>'+
+        '<span>'+(x.eta?pill(flightCountdown(x.eta),fresh?'good':''):'ETA unknown')+
+        ' '+b(cfg.watchlist[p.id]?'Unwatch':'Watch','watch:'+p.id)+'</span></div>').join(''):
+        empty('No explicitly inbound opponents in the latest roster. Outbound flights and players merely abroad are intentionally excluded.'))+
+      (fresh?'':'<p class="ws-note ws-warn">Roster stale: refresh before relying on an inbound ETA.</p>')+
+      '<div class="ws-toolbar">'+b('Refresh status','refresh')+b('Open enemy activity','tab:activity')+'</div>');
+  }
+  function readinessPanel(){
+    const skulls=state.data.ours.filter(p=>Boolean(cfg.blackSkulls[p.id]));
+    const ownerId=positive(state.data.meta.ownerId),now=Date.now();
+    return card('Black Skulls attack readiness | energy and medical',
+      '<p><b>Energy:</b> a standard Torn attack costs 25 E. <b>Medical cooldown:</b> shows ability to use medical items, not whether an attack is possible. The registered key owner may be read from their own API; other members require a local, time-stamped entry and are not assumed ready.</p>'+
+      '<div class="ws-toolbar">'+b('Refresh own energy/cooldown','refresh-readiness')+b('Open personal hitter lists','tab:matchups')+'</div>'+
+      (skulls.length?'<div class="ws-table-wrap"><table class="ws-leader-table"><thead><tr><th>Black Skull</th><th>Status</th><th>Energy / source</th><th>Medical cooldown</th><th>Local update (optional)</th></tr></thead><tbody>'+
+      skulls.sort((a,b)=>Number(isOnline(b))-Number(isOnline(a))).map(p=>{
+        const r=hitterReadiness(p,now),manual=manualReadinessFor(p.id,now),
+          canManual=positive(p.id)!==ownerId||r.source!=='Own Torn API';
+        return '<tr><td data-label="Black Skull">'+infoButton(p.name,p.id)+'</td>'+
+          '<td data-label="Readiness">'+pill(r.status,r.status==='Attack energy ready'?'good':r.status==='Low energy'?'bad':'')+
+          '<br><small>'+esc(p.status)+'</small></td>'+
+          '<td data-label="Energy">'+(r.energy===null?'Unknown':fmt(r.energy)+' E')+
+          '<br><small>'+esc(r.source)+'</small></td>'+
+          '<td data-label="Medical cooldown">'+(r.medicalLeft===null?'Unknown':r.medicalLeft+'m remaining')+
+          '<br><small>'+esc(r.medicalSource)+'</small></td>'+
+          '<td data-label="Local update">'+
+          (canManual?'<input inputmode="numeric" type="number" min="0" max="1000" data-ready-energy="'+p.id+
+            '" aria-label="Known energy '+esc(p.name)+'" placeholder="Energy E" value="'+(manual?.energy??'')+'">'+
+            '<input inputmode="numeric" type="number" min="0" max="720" data-ready-medical="'+p.id+
+            '" aria-label="Medical minutes '+esc(p.name)+'" placeholder="Med minutes" value="'+(manual?.medicalUntil?Math.max(0,Math.ceil((manual.medicalUntil-now)/MIN)):'')+'">'+
+            b('Save local reading','save-readiness:'+p.id):
+            '<small>Own key auto-read. Refresh for current values.</small>')+'</td></tr>';
+      }).join('')+'</tbody></table></div>':
+      empty('No Black Skulls tagged yet. Mark your hitters in the Leadership command member table.'))+
+      '<p class="ws-small">Manual readings expire after 45 minutes; own API readings after 15 minutes. Unknown energy never becomes \"ready\" by assumption. Neither route shares personal bars with other faction members.</p>');
+  }
   function watchlistPanel(){
     const watched=state.data.enemies.filter(p=>Boolean(cfg.watchlist[p.id]));
     return card('Priority watchlist | '+watched.length+' opponents',
       watched.length?watched.sort((a,b)=>threatRating(b).score-threatRating(a).score).slice(0,12)
         .map(p=>'<div class="ws-row"><span>'+infoButton(p.name,p.id)+' '+ffBadge(p.id)+
           '<br><small>'+esc(p.status)+' | '+esc(p.lastAction)+' | Last score '+scoreLabel(lastKnownMemberScore('enemies',p.id))+
-          ' | Threat '+threatRating(p).score+'</small></span>'+
+          ' | Threat '+threatRating(p).score+
+          (flightEvidence(p).kind==='returning'?' | Inbound '+(flightEvidence(p).eta?flightCountdown(flightEvidence(p).eta):'ETA unknown'):'')+'</small></span>'+
           '<span>'+b('Unwatch','watch:'+p.id)+' '+a('Attack',attackLink(p.id))+'</span></div>').join('')+
           '<div class="ws-toolbar">'+b('See all watched','watched-list')+'</div>':
         empty('Tap Watch beside any enemy to pin them here across refreshes and return to their dossier quickly.'));
@@ -1642,6 +1685,7 @@
       .filter(x=>state.leaderFilter==='all'||state.leaderFilter==='black'&&cfg.blackSkulls[x.id]||
         state.leaderFilter==='ready'&&memberState(x)==='okay');
     const draft=suggestedDraft(),busy=['engaged','monitor'];
+    const readyE=state.data.ours.filter(p=>cfg.blackSkulls[p.id]&&hitterReadiness(p).energyEnough===true&&memberState(p)==='okay').length;
     let html=statusNote()+'<div class="ws-lead"><span class="ws-data-label">LEADERSHIP COMMAND | LOCAL TACTICAL BOARD</span>'+
       '<h2>Ranked war command centre</h2>'+
       '<p>Manage Black Skulls, set individual targets and monitor live Torn roster statuses alongside locally assigned duties. Nothing is automatically posted to faction chat or executed.</p>'+
@@ -1649,11 +1693,13 @@
       b('View war pace','tab:pace')+b('Player shortlists','tab:matchups')+b('War timelines','tab:timeline')+'</div></div>'+
       '<div class="ws-grid">'+
       stat('Black Skulls ready',plan.skullReady+' / '+plan.skulls,'Current Okay status / tagged Black Skulls')+
+      stat('Known attack energy',readyE+' / '+plan.skulls,'25+ E known, fresh owner or manual reading')+
       stat('Manual target coverage',plan.manual+' / '+plan.members,'Members with locally saved manual assignments')+
       stat('Leadership duties active',fmt(plan.inProgress),'Engaged or monitoring, manually marked')+
       stat('Enemy Okay',state.data.enemies.filter(x=>memberState(x)==='okay').length+' / '+plan.enemy,'Last official roster snapshot')+
       stat('Scoring momentum',p?.netRate===null||!p?'\u2014':(p.netRate>=0?'+':'')+fmt(p.netRate)+'/h','Recent observed net score pace')+
       stat('Current score',score?fmt(score.our)+' / '+fmt(score.enemy):'\u2014','Our faction / enemy official snapshot')+'</div>';
+    html+=readinessPanel()+flightWatchPanel();
     html+=card('Operational checks',
       (plan.duplicateTargets.length?'<div class="ws-note ws-warn"><b>Overlapping manual targets:</b> '+
       plan.duplicateTargets.map(x=>'#'+x.id+' assigned '+x.count+' times').join(', ')+
@@ -1870,6 +1916,7 @@
       if(filter==='ready'&&!ev.ready)return false;
       if(filter==='online'&&!isOnline(p))return false;
       if(filter==='away'&&ev.kind!=='away')return false;
+      if(filter==='returning'&&flightEvidence(p).kind!=='returning')return false;
       if(filter==='hospital'&&ev.kind!=='hospital')return false;
       if(filter==='scorers'&&lastKnownMemberScore('enemies',p.id)===null)return false;
       if(filter==='watched'&&!cfg.watchlist[p.id])return false;
@@ -1887,9 +1934,9 @@
   }
   function targets(){
     const row=targetRows(),total=state.data.enemies.length;
-    const chips=['all','ready','online','hospital','away','scorers','ff','watched'].map(f=>
+    const chips=['all','ready','online','hospital','away','returning','scorers','ff','watched'].map(f=>
       '<button class="ws-btn '+(state.filter===f?'':'secondary')+'" data-filter="'+f+'">'+
-      esc(f==='ready'?'Okay':f==='scorers'?'War scorers':f==='ff'?'Has FF':f==='watched'?'Watched':f)+'</button>').join('');
+      esc(f==='ready'?'Okay':f==='scorers'?'War scorers':f==='ff'?'Has FF':f==='watched'?'Watched':f==='returning'?'Inbound flights':f)+'</button>').join('');
     let html=statusNote()+
       '<div class="ws-lead"><span class="ws-data-label">ENEMY PLAYERS | OPEN ANY NAME FOR FULL INTELLIGENCE</span>'+
       '<h2>'+row.length+' shown / '+total+' current enemies</h2>'+
@@ -1911,6 +1958,7 @@
           '<td><b>'+scoreLabel(score)+'</b><br><small>'+ev.hist.wars+' report(s) | avg '+scoreLabel(ev.hist.avg)+'</small></td>'+ 
           '<td>'+pill('Threat '+threatRating(p).score+'/100')+'<br><small>'+esc(threatRating(p).reason)+'</small></td>'+
           '<td><small>In-war travel: '+(pat.warTravel===null?'No samples':pat.warTravel+'% away')+
+          (flightEvidence(p).kind==='returning'?'<br>Inbound '+(flightEvidence(p).eta?esc(stamp(flightEvidence(p).eta))+' ('+esc(flightCountdown(flightEvidence(p).eta))+')':'ETA unknown'):'')+
           '<br>Recorded team FF: '+(ff.avg===null?'No hits':ff.avg.toFixed(2)+'x / '+ff.count+' hits')+
           (third?.bss?'<br>Estimated BSS: '+fmt(third.bss):'')+'</small></td>'+
           '<td>'+b(cfg.watchlist[p.id]?'Unwatch':'Watch','watch:'+p.id)+' '+infoButton('Full intel',p.id)+' '+a('Attack',attackLink(p.id))+' '+a('Profile',link(p.id))+'</td></tr>';
