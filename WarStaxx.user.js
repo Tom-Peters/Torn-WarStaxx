@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='0.2.7';
+  const id='war', version='0.3.0';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -638,7 +638,7 @@
   }
   async function refreshHistory(){
     if(!positive(cfg.ourId))return;
-    const limit=Math.max(2,Math.min(20,positive(cfg.historyLimit)||8));
+    const limit=Math.max(2,Math.min(20,positive(cfg.historyLimit)||12));
     const sides=[['ourWars',cfg.ourId],['enemyWars',cfg.enemyId]];
     for(const [name,fid] of sides){
       if(!positive(fid))continue;
@@ -646,7 +646,7 @@
         if(j)state.data[name]=warHistory(j);}catch(e){state.error=String(e.message||e);}
     }
     const ids=[...new Set([...state.data.enemyWars.slice(0,limit),...state.data.ourWars.slice(0,limit)]
-      .map(w=>w.id).filter(Boolean))].filter(id=>!state.data.reports[id]);
+      .map(w=>w.id).filter(Boolean))].filter(id=>!state.data.reports[id]||!n(state.data.reports[id]?.war?.end));
     // Bounded incremental backfill: at most 3 report calls per refresh.
     for(const id of ids.slice(0,4)){
       try{const j=await call('/faction/'+id+'/rankedwarreport','report-'+id);
@@ -869,7 +869,7 @@
     state.loading=true;state.error='';render();
     try{
       const data=await call('/faction/'+id+'/rankedwarreport','report-'+id);
-      if(data)state.data.reports[id]=report(data,id);
+      if(data){state.data.reports[id]=report(data,id);state.selectedWar=id;state.tab='intel';}
       else if(!state.data.reports[id])state.error='War report not available yet. Check Diagnostics for endpoint errors.';
     }catch(e){state.error='Cannot load official report: '+String(e.message||e);}
     finally{state.loading=false;save();render();}
@@ -1334,7 +1334,7 @@
   }
   function navigate(tab,focus){
     if(!sections.includes(tab))tab='overview';
-    state.tab=tab;state.open=true;state.playerOpen=false;if(tab!=='intel')state.selectedWar=0;
+    state.tab=tab;state.open=true;state.playerOpen=false;state.selectedWar=0;
     root.style.display='block';render();
     $('.ws-content',root).scrollTop=0;
     if(focus)setTimeout(()=>$('#ws-alert-'+focus,root)?.scrollIntoView({block:'center'}),100);
