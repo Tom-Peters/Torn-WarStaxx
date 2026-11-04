@@ -1448,6 +1448,40 @@
       'Notes: '+(cfg.leaderNotes[positive(state.data.war?.id)||('scout-'+positive(cfg.enemyId))]||'None')+'\n'+
       'Source: recent Torn API rosters + locally saved assignments/observations. Verify all statuses and hits manually.';
   }
+
+  function skullChatBrief(){
+    const war=state.data.war,cover=blackSkullsCoverage(),score=warScore(),
+      chain=chainStatus(),fresh=rosterFresh('ours')&&rosterFresh('enemies'),
+      heavy=cover.targets.slice().sort((a,b)=>
+        n(b.priority?.score)-n(a.priority?.score)||b.bss-a.bss);
+    const role=cover.bands.rule,cutoff=role.mode==='percent'?
+      'top '+role.percent+'% of known enemy BSS':'estimated BSS >= '+fmt(role.minBss);
+    const header=['BLACK SKULLS | SKULL CAPO',
+      'War #'+(positive(war?.id)||'scouting')+' vs '+(war?.opponentName||('Faction #'+positive(cfg.enemyId))),
+      'Score '+(score?fmt(score.our)+'-'+fmt(score.enemy)+' (net '+fmt(score.net)+')':'not observed')+
+        ' | Chain '+(chain.fresh?'#'+chain.count+' / '+chain.remaining+'s':'unknown'),
+      'Cutoff: '+cutoff+' | Heavy coverage '+cover.assigned+'/'+cover.targets.length+
+        ' assigned, '+cover.verifiedAssigned+' matchup-verified',
+      'Roster: '+(fresh?'fresh':'STALE - refresh before acting')];
+    const team=cover.skulls.slice().sort((a,b)=>a.name.localeCompare(b.name))
+      .map(p=>{
+        const enemy=state.data.enemies.find(x=>x.id===positive(cfg.assignments[p.id])),
+          ready=hitterReadiness(p);
+        return p.name+' ['+p.id+'] | '+memberState(p)+
+          ' | '+(enemy?'Target '+enemy.name+' ['+enemy.id+']':'No target')+
+          ' | E '+(ready.energy===null?'unknown':fmt(ready.energy));
+      });
+    const pending=heavy.filter(x=>x.needsAssignment||x.blocked).slice(0,7).map(x=>
+      x.enemy.name+' ['+x.enemy.id+'] BSS '+fmt(x.bss)+
+      ' | last war '+(x.priority?.historyPoints===null?'unknown':fmt(x.priority.historyPoints)+' pts')+
+      ' | '+(x.replacement?'Suggest '+x.replacement.player.name+' for '+x.assigned[0].name:
+        !x.covered&&x.free.length?'Suggest '+x.free[0].player.name:
+          'Need verified free hitter'));
+    return [...header,'ORDERS:',...(team.length?team:['No tagged Black Skulls']),
+      'HEAVY TARGETS NEEDING COVERAGE:',...(pending.length?pending:['None identified']),
+      'Check live status and individual spies before any manual attack. Orders are suggestions, not automatic actions.'
+    ].join('\n').slice(0,3200);
+  }
   function copiedWarOrders(){
     const rows=assignments(),last=Math.max(n(state.data.updated.enemies),n(state.data.updated.ours));
     return 'WarStaxx \u00b7 '+(state.data.war?.opponentName||('Opponent faction '+(positive(cfg.enemyId)||'unknown')))+'\n'+
@@ -4710,6 +4744,48 @@
       const key=positive(state.data.war?.id)||('scout-'+positive(cfg.enemyId));
       cfg.leaderNotes[key]=String($('#ws-leader-note',root)?.value||'').slice(0,1800);
       saveCfg();state.error='Local leadership notes saved.';render();return;
+    }
+    if(action==='copy-skull-chat'){
+      const value=skullChatBrief();
+      const success=()=>{state.error='Black Skulls briefing copied. Paste it manually into Torn faction chat.';render();};
+      const failure=()=>{state.error='Could not copy the briefing; no message was sent.';render();};
+      if(navigator.clipboard?.writeText)navigator.clipboard.writeText(value).then(success).catch(failure);
+      else{const area=document.createElement('textarea');area.value=value;
+        area.style.cssText='position:fixed;left:-9999px';
+        document.body.appendChild(area);area.select();
+        let copied=false;try{copied=document.execCommand('copy');}catch(_){}
+        area.remove();if(copied)success();else failure();}
+      return;
+    }
+    if(action.startsWith('skull-replace:')){
+      const [oldId,newId,enemyId]=action.slice(14).split(':').map(positive),
+        target=state.data.enemies.find(x=>x.id===enemyId),
+        old=state.data.ours.find(x=>x.id===oldId),
+        replacement=state.data.ours.find(x=>x.id===newId),
+        current=blackSkullsCoverage().targets.find(x=>x.enemy.id===enemyId);
+      // Reconfirm everything because a roster refresh or another local order
+      // may have changed after the button was drawn.
+      if(!target||!old||!replacement||oldId===newId||
+        !cfg.blackSkulls[oldId]||!cfg.blackSkulls[newId]||
+        positive(cfg.assignments[oldId])!==enemyId||
+        positive(cfg.assignments[newId])||
+        !current?.replacement||current.assigned.length!==1||
+        current.assigned[0].id!==oldId||
+        current.replacement.player.id!==newId||
+        !rosterFresh('ours')||!rosterFresh('enemies')||
+        hitterReadiness(replacement).energyEnough===false||
+        Object.entries(cfg.assignments).some(([h,t])=>
+          positive(h)!==oldId&&positive(t)===enemyId)||
+        !roleMatch(replacement,target)){
+        state.error='Replacement not saved. Refresh and re-check verified roles, matchup and existing orders.';
+        render();return;
+      }
+      delete cfg.assignments[oldId];cfg.assignments[newId]=enemyId;
+      if(positive(cfg.enemyId))cfg.ordersByEnemy[String(cfg.enemyId)]={...cfg.assignments};
+      saveCfg();markSharedDirty();
+      state.error='Moved this local heavy-target order from '+old.name+' to '+replacement.name+
+        '. Verify the order with your squad; no Torn action was performed.';
+      render();return;
     }
     if(action==='copy-leader-brief'){
       const content=leadershipBrief();
