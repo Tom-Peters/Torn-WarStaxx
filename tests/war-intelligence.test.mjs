@@ -47,9 +47,9 @@ test('public faction basic comparison retains respect, rank, winning history, le
 
 test('deep scan and opponent-switch safeguards remain wired',()=>{
   assert.match(source,/action==='deep-scan'/);
-  assert.match(source,/function setOpponent\\(/);
-  assert.match(source,/state\\.data\\.enemies=\\[\\]/);
-  assert.match(source,/function refreshFactionBasics\\(/);
+  assert.ok(source.includes('function setOpponent('));
+  assert.ok(source.includes('state.data.enemies=[]'));
+  assert.ok(source.includes('function refreshFactionBasics('));
 });
 
 test('source remains ASCII and parses after smart-quote conversion',()=>{
