@@ -61,7 +61,6 @@ test('risk-aware recommendations require verified comparable manual spies',()=>{
     "const memberState=p=>p.status.toLowerCase();",
     "const friend={id:7,status:'Okay'},state={data:{war:{id:5},enemies:[{id:88,status:'Okay',level:40}]}};",
     "const cfg={enableAttacks:false,blackSkulls:{}},warAttackRows=()=>[];",
-    'const enemyRoleBands=()=>({}),roleAllows=()=>true;',
     'let mode="safe",ratio=0.5,wins=0,verified=true;',
     'const hitterRisk=()=>({mode,maxRatio:mode==="safe"?.55:mode==="aggressive"?.78:.70,minWins:mode==="safe"?1:0});',
     'const matchEvidence=()=>({verified,rosterVerified:true,tier:ratio>=.7?1:0,conflict:false,'+
