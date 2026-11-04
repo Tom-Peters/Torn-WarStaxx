@@ -355,18 +355,20 @@
     const w=warAttackWindow(id),rows=warAttackRows(id),roster=state.data.ours;
     const known=Boolean(state.data.updated.attacks&&state.data.attacks.length);
     const summarise=(side)=>rows.filter(a=>a.side===side).reduce((acc,a)=>{
-      acc.hits++;acc.respect+=Math.max(0,officialNumber(a.respect)??0);
+      acc.hits++;acc.scoringHits+=Number((officialNumber(a.respect)??0)>0);
+      acc.respect+=Math.max(0,officialNumber(a.respect)??0);
       if(/hospitaliz|hospitalis/i.test(a.result))acc.hospitalised++;
       if(/mugged/i.test(a.result))acc.mugged++;
       acc.lastAt=Math.max(acc.lastAt,a.at);
       const id=a.attacker,member=acc.players[id]||(acc.players[id]={id,name:a.attackerName||
         [...state.data.ours,...state.data.enemies].find(p=>p.id===id)?.name||('Player '+id),
-        hits:0,respect:0,hospitalised:0,lastAt:0});
-      member.hits++;member.respect+=Math.max(0,officialNumber(a.respect)??0);
+        hits:0,scoringHits:0,respect:0,hospitalised:0,lastAt:0});
+      member.hits++;member.scoringHits+=Number((officialNumber(a.respect)??0)>0);
+      member.respect+=Math.max(0,officialNumber(a.respect)??0);
       member.hospitalised+=Number(/hospitaliz|hospitalis/i.test(a.result));
       member.lastAt=Math.max(member.lastAt,a.at);
       return acc;
-    },{hits:0,respect:0,hospitalised:0,mugged:0,lastAt:0,players:{}});
+    },{hits:0,scoringHits:0,respect:0,hospitalised:0,mugged:0,lastAt:0,players:{}});
     const ours=summarise('ours'),theirs=summarise('enemies');
     const lastFetch=n(state.data.updated.attacks);
     return {id:positive(id),window:w,rows,ours,theirs,known,
@@ -935,21 +937,23 @@
     const lastReport=last?state.data.reports[last.id]?.factions?.find(x=>x.id===positive(cfg.enemyId)):null;
     const officialPrev=new Map((lastReport?.members||[]).map(p=>[p.id,p]));
     return state.data.enemies.map(player=>{
-      const live=ledger.theirs.players[player.id]||null,previous=officialPrev.get(player.id)||null;
-      const threat=live?live.respect*1.8+live.hits*12:previous?Math.min(150,n(previous.score)/10):0;
-      const label=live?'Recorded ranked-war attacks in our faction access':
-        previous?'Previous official completed-war score':'No usable scoring evidence';
+      const attempted=ledger.theirs.players[player.id]||null;
+      const live=attempted&&attempted.scoringHits>0?attempted:null;
+      const previous=officialPrev.get(player.id)||null;
+      const threat=live?live.respect*1.8+live.scoringHits*12:previous?Math.min(150,n(previous.score)/10):0;
+      const label=live?'Recorded scoring ranked-war attacks':
+        previous?'Previous official completed-war score':attempted?'Recorded non-scoring attempts':'No usable scoring evidence';
       const status=memberState(player);
-      return {player,live,previous,score:threat,label,status,
-        source:live?'Recorded API hits':previous?'Prior war report':'Unknown',
-        confidence:live?'Observed partial ledger':previous?'Historical only':'Unknown'};
+      return {player,live,attempted,previous,score:threat,label,status,
+        source:live?'Recorded scoring attacks':previous?'Prior war report':attempted?'Non-scoring attempts':'Unknown',
+        confidence:live?'Observed partial ledger':previous?'Historical only':attempted?'Attempts only':'Unknown'};
     }).sort((a,b)=>b.score-a.score||a.player.id-b.player.id);
   }
   function blackSkullScorecards(warId){
     const id=positive(warId),r=state.data.reports[id],side=r?.factions?.find(x=>x.id===positive(cfg.ourId));
     const reportNames=new Map((side?.members||[]).map(x=>[x.id,x]));
     const roster=new Map(state.data.ours.map(p=>[p.id,p]));
-    const records=[];
+    const records=[],observedHits=warHitLedger(id).ours.players;
     for(const [sid,yes] of Object.entries(cfg.blackSkulls)){
       if(!yes)continue;
       const playerId=positive(sid),report=reportNames.get(playerId);
@@ -958,7 +962,7 @@
           ?.find(x=>x.id===positive(cfg.ourId))?.members?.find(x=>x.id===playerId))
         .filter(Boolean).slice(0,3);
       const prev=historical.length?historical.reduce((z,p)=>z+n(p.score),0)/historical.length:null;
-      const observed=warHitLedger(id).ours.players[playerId]||null;
+      const observed=observedHits[playerId]||null;
       records.push({id:playerId,name:String(report?.name||roster.get(playerId)?.name||('Player '+playerId)),
         score:report?officialNumber(report.score):null,
         hits:report?officialNumber(report.attacks):null,
@@ -1196,10 +1200,10 @@
     }
     if(w&&cfg.enableAttacks&&Date.now()-n(state.data.updated.attacks)<5*MIN){
       const ledger=warHitLedger(w.id),leaders=ledger.enemyPlayers.filter(p=>
-        p.hits>=2&&Date.now()-n(p.lastAt)<10*MIN);
+        p.scoringHits>=2&&Date.now()-n(p.lastAt)<10*MIN);
       if(leaders.length)out.push({id:'enemy-hitters-active',
         title:leaders.length+' enemy scorer(s) with recent recorded attacks',
-        detail:leaders.slice(0,3).map(p=>p.name+' ('+p.hits+' captured hits)').join(', ')+
+        detail:leaders.slice(0,3).map(p=>p.name+' ('+p.scoringHits+' scoring attacks captured)').join(', ')+
           '. Partial attack feed; check hospital control and status.',
         status:'review',priority:83,tab:'threats'});
     }
@@ -2304,7 +2308,8 @@
       stat('Roster',fresh?'Fresh':'Stale','Current status requires fresh official roster')+'</div>';
     let body=rows.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Enemy</th><th>Recorded hits / respect</th><th>Previous-war score</th><th>Evidence</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+
       rows.slice(0,40).map(x=>'<tr><td>'+infoButton(x.player.name,x.player.id)+' '+ffBadge(x.player.id)+'</td>'+
-        '<td>'+(x.live?fmt(x.live.hits)+' / '+fmt(x.live.respect):'Not observed')+'</td>'+
+        '<td>'+(x.live?fmt(x.live.scoringHits)+' scoring / '+fmt(x.live.respect):
+         x.attempted?fmt(x.attempted.hits)+' attempts, no scored hits':'No scored hits observed')+'</td>'+
         '<td>'+scoreLabel(x.previous?.score)+'</td><td>'+pill(x.confidence)+'</td><td>'+
         pill(x.player.status,fresh&&x.status==='okay'?'good':'')+'</td><td>'+
         b('Hospital control','control-target:'+x.player.id)+' '+
