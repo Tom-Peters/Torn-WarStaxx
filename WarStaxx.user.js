@@ -221,7 +221,7 @@
   const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},factionBasic:{},publicIntel:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},scoreTimelines:{},warTimelines:{},afterActions:{},ownerReadiness:{},availabilityEvents:{},chain:{},sampleCount:0});
   const state={data:Object.assign(freshData(),safeRead(DATA,{})),open:false,tab:'overview',showMore:false,
     filter:'all',sort:'warScore',search:'',commanderFilter:'black',controlFocus:0,loading:false,ffLoading:false,spinner:'',error:'',scanning:false,alerts:[],chosen:0,
-    lastRefresh:0,historicalRead:0,localKeyError:false,sharedBusy:false,sharedDirty:false,sharedRevision:0,sharedSyncAt:0,sharedError:'',warMore:false,quickHitPending:false,stripScrolled:false,stripExpanded:false,warExpected:false,selectedWar:0,selectedTimeline:0,selectedPace:0,selectedDebrief:0,detailFrom:'targets',leaderFilter:'all',hitterFilter:'all'};
+    lastRefresh:0,historicalRead:0,localKeyError:false,sharedBusy:false,sharedDirty:false,sharedRevision:0,sharedSyncAt:0,sharedEditVersion:0,sharedError:'',warMore:false,quickHitPending:false,stripScrolled:false,stripExpanded:false,warExpected:false,selectedWar:0,selectedTimeline:0,selectedPace:0,selectedDebrief:0,detailFrom:'targets',leaderFilter:'all',hitterFilter:'all'};
   state.data.reports=state.data.reports||{};
   state.data.activity=state.data.activity||{};
   state.data.ffstats=state.data.ffstats||{};
@@ -1286,6 +1286,11 @@
           detail:'Official chain #'+chain.count+' | '+(chain.nextIn??'unknown')+
             ' hits to next milestone. Coordinate manually; verify in Torn.',
           status:'now',priority:96,tab:'skulls'});
+      if(chain.fresh&&chain.count>=10&&chain.nextIn!==null&&chain.nextIn<=2&&
+         chain.remaining!==null&&chain.remaining>0)
+        out.push({id:'chain-milestone',title:chain.nextIn+' hits until chain #'+chain.next,
+          detail:'Torn chain milestone approaching. Coordinate a verified manual attack; the bonus is not guaranteed.',
+          status:'review',priority:88,tab:'skulls'});
     }
     if(w&&rosterFresh('ours')){
       const defence=turtleAssessment();
@@ -2142,10 +2147,15 @@
     if(method==='PUT'){headers['Content-Type']='application/json';
       headers['If-Match']=String(revision);}
     // Deliberately uses CORS fetch: never sends the Torn API key or credentials.
-    const response=await fetch(url,{method,mode:'cors',credentials:'omit',cache:'no-store',
-      headers,...(method==='PUT'?{body:JSON.stringify({data:payload})}:{})});
-    let result;try{result=await response.json();}catch(_){result={error:'Invalid server response'};}
-    return {ok:response.ok,status:response.status,result};
+    const controller=typeof AbortController==='function'?new AbortController():null;
+    const timer=setTimeout(()=>controller?.abort(),12000);
+    try{
+      const response=await fetch(url,{method,mode:'cors',credentials:'omit',cache:'no-store',
+        headers,...(controller?{signal:controller.signal}:{}),
+        ...(method==='PUT'?{body:JSON.stringify({data:payload})}:{})});
+      let result;try{result=await response.json();}catch(_){result={error:'Invalid server response'};}
+      return {ok:response.ok,status:response.status,result};
+    }finally{clearTimeout(timer);}
   }
   function applySharedOrders(data){
     if(!data||typeof data!=='object')return false;
@@ -2200,7 +2210,7 @@
       document.hidden)return;
     sharedResetScope();state.sharedBusy=true;
     try{
-      const scope=sharedScope(),before=sharedPayload(),
+      const scope=sharedScope(),before=sharedPayload(),editVersion=state.sharedEditVersion,
         response=await sharedRequest('PUT',n(cfg.shared.revision),before);
       if(response.status===409){
         state.sharedError='CONFLICT: a newer shared plan exists. Review before discarding or reapplying local changes.';
@@ -2209,15 +2219,23 @@
       if(!response.ok)throw new Error('Shared PUT '+response.status+': '+String(response.result.error||'denied'));
       if(response.result.faction!==scope.faction||response.result.war!==scope.war)
         throw new Error('Shared response scope mismatch');
-      cfg.shared.revision=positive(response.result.revision);cfg.shared.localDirty=false;
-      state.sharedRevision=cfg.shared.revision;state.sharedSyncAt=Date.now();state.sharedError='';
+      cfg.shared.revision=positive(response.result.revision);
+      cfg.shared.localDirty=state.sharedEditVersion!==editVersion;
+      state.sharedRevision=cfg.shared.revision;state.sharedSyncAt=Date.now();
+      state.sharedError=cfg.shared.localDirty?'Newer local edits are queued for the next publish.':'';
       saveCfg();publish();render();
+      if(cfg.shared.localDirty&&cfg.shared.canWrite)
+        setTimeout(()=>{if(!document.hidden)sharedPush();},1000);
     }catch(e){state.sharedError=String(e.message||e).slice(0,160);render();}
     finally{state.sharedBusy=false;}
   }
   function markSharedDirty(){
-    if(!cfg.shared?.enabled||!cfg.shared?.canWrite)return;
-    cfg.shared.localDirty=true;saveCfg();
+    if(!cfg.shared?.enabled)return;
+    cfg.shared.localDirty=true;state.sharedEditVersion++;saveCfg();
+    if(!cfg.shared.canWrite){
+      state.sharedError='Read-only shared mode: local edits are not published. Discard local to restore official shared orders.';
+      return;
+    }
     if(state.sharedPushTimer)clearTimeout(state.sharedPushTimer);
     state.sharedPushTimer=setTimeout(()=>{if(!document.hidden)sharedPush();},1500);
   }
