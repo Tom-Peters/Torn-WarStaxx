@@ -108,5 +108,5 @@ test('every major intel view has navigation and manual-player controls',()=>{
   for(const action of ['player:','war:','load-report:','public:','hour:','tab:assignments']){
     assert.ok(source.includes(action),'Missing routed action '+action);
   }
-  assert.ok(source.includes("const sections=['overview','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets'"));
+  assert.ok(source.includes("const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets'"));
 });
