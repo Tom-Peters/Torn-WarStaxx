@@ -66,6 +66,7 @@ test('turtling exposure follows fresh observed states, not manual duty labels',(
     'const MIN=60000,HOUR=3600000;',
     'const n=v=>Number.isFinite(Number(v))?Number(v):0;',
     'const positive=v=>Number(v)||0;',
+    'const epochMs=v=>v>1e12?v:v>1e9?v*1000:0;',
     "const cfg={enemyId:20,turtlePlans:{'500':{mode:'full',members:{1:'turtle'}}}};",
     "const state={data:{war:{id:500},ours:[{id:1,status:'Okay',lastAction:'Online'},"+
       "{id:2,status:'Hospital',until:Date.now()+10*60000,revivable:true,lastAction:'Idle'},"+
