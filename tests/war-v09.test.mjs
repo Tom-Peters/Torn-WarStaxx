@@ -77,6 +77,39 @@ test('hospital hit opens manual medical page; ready hit opens attack link only',
   x.status='unknown';x.warQuick('hit');
   assert.equal(x.opened,'overview');
 });
+test('pressing HIT after manual heal rechecks Torn before attacking',async()=>{
+  const setup=[
+    "let current='Hospital',route='',calls=0,opened='';",
+    'const MIN=60000;',
+    'const n=v=>Number(v)||0,positive=v=>Number(v)||0;',
+    "const cfg={ourId:10,enemyId:20,warStripCompact:false};",
+    "const state={data:{ours:[],enemies:[]},quickHitPending:false,error:''};",
+    'const render=()=>{},renderWarStrip=()=>{},save=()=>{};',
+    'const open=d=>{opened=d.section};',
+    'const roster=j=>j.members;',
+    "const memberState=p=>p.status.toLowerCase();",
+    "const location={pathname:'/item.php',assign(v){route=v}};",
+    "const sessionStorage={getItem:()=>JSON.stringify({mode:'heal',at:Date.now()}),removeItem(){},setItem(){}};",
+    "const ourWarReadiness=()=>({kind:current.toLowerCase(),fresh:true,energy:75});",
+    "const strongestVerifiedHit=()=>({player:{id:77}});",
+    'const rosterFresh=()=>true;',
+    "const attackLink=id=>'https://www.torn.com/loader.php?sid=attack&user2ID='+id;",
+    "const effectiveKey=()=> 'test-key';",
+    "const call=async()=>{calls++;return {members:[{id:1,status:current}]}};"
+  ].join('\n');
+  const x=runInNewContext(setup+part('  function itemIntent(){','  function statusNote(){')+
+    '; ({warQuick,verifyHealedThenHit,state,get route(){return route},get calls(){return calls},set current(x){current=x},get opened(){return opened}})');
+  x.warQuick('hit');
+  await Promise.resolve();await Promise.resolve();await Promise.resolve();await Promise.resolve();
+  assert.equal(x.calls,1);
+  assert.equal(x.route,'','Still hospitalised must never open attack page');
+  x.current='Okay';
+  x.warQuick('hit');
+  await Promise.resolve();await Promise.resolve();await Promise.resolve();await Promise.resolve();
+  assert.equal(x.calls,2);
+  assert.equal(x.route,'https://www.torn.com/loader.php?sid=attack&user2ID=77');
+  assert.equal(x.state.quickHitPending,false);
+});
 test('command strip and item shortcuts are manual, PDA parser safe',()=>{
   for(const token of ['function renderWarStrip(','function liveWarRoom(',
     "btn('TURTLE','turtle')","btn('HEAL','heal')",
@@ -90,5 +123,10 @@ test('command strip and item shortcuts are manual, PDA parser safe',()=>{
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
   const actionPart=part('  function itemIntent(){','  function statusNote(){');
+  assert.match(actionPart,/async function verifyHealedThenHit\\(/);
+  assert.ok(actionPart.includes("await call('/faction/'+cfg.ourId+'/members','ours',0)"),
+    'Post-heal HIT must read a fresh official own roster');
+  assert.ok(actionPart.includes('state.quickHitPending=true'),
+    'The post-heal flow must block duplicate HIT taps');
   assert.doesNotMatch(actionPart,/\.click\(\)|GM_xmlhttpRequest|PDA_httpGet|\bfetch\(/);
 });
