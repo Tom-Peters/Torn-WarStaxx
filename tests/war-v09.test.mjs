@@ -97,7 +97,7 @@ test('pressing HIT after manual heal rechecks Torn before attacking',async()=>{
     "const effectiveKey=()=> 'test-key';",
     "const call=async()=>{calls++;return {members:[{id:1,status:current}]}};"
   ].join('\n');
-  const x=runInNewContext(setup+part('  function itemIntent(){','  function statusNote(){')+
+  const x=runInNewContext(setup+part('  function itemIntent(){','  function renderWarStrip(force=false){')+
     '; ({warQuick,verifyHealedThenHit,state,get route(){return route},get calls(){return calls},set current(x){current=x},get opened(){return opened}})');
   x.warQuick('hit');
   await Promise.resolve();await Promise.resolve();await Promise.resolve();await Promise.resolve();
