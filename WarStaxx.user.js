@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      0.2.4
+// @version      0.2.5
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -15,7 +15,7 @@
 // @updateURL    https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js
 // @downloadURL  https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js
 // ==/UserScript==
-/* TornStaxx 4.0 module fallback — compact, local-only and no remote dependencies. */
+/* TornStaxx 4.0 module fallback \u2014 compact, local-only and no remote dependencies. */
 (function(){
   'use strict';
   if(typeof window==='undefined'||typeof document==='undefined'||typeof location==='undefined'||window.top!==window.self||
@@ -32,7 +32,7 @@
     button.style.cssText='width:42px;height:48px;border-radius:0 12px 12px 0;border:1px solid #55d7fa;background:#0a4d76;color:#c9f5ff;font-size:22px;font-weight:900;';
     menu.hidden=true;
     menu.style.cssText='position:absolute;top:0;left:49px;width:min(246px,calc(100vw - 62px));padding:12px;background:#08192d;border:1px solid #396e93;border-radius:12px;box-shadow:0 10px 24px #0009;max-height:65vh;overflow:auto;';
-    const title=document.createElement('strong');title.textContent='TornStaxx · module mode';title.style.color='#65d9ff';menu.append(title);
+    const title=document.createElement('strong');title.textContent='TornStaxx \u00b7 module mode';title.style.color='#65d9ff';menu.append(title);
     const note=document.createElement('p');note.textContent='Install the separate TornStaxx script for the full dashboard and shared alerts.';note.style.cssText='font-size:11px;color:#b6d0e6;line-height:1.4';menu.append(note);
     const links=document.createElement('div');menu.append(links);
     function draw(){
@@ -63,14 +63,14 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',safeMount,{once:true});else safeMount();
 })();
 
-/* WarStaxx loader probe · independent of the optional API and full WarStaxx UI */
+/* WarStaxx loader probe \u00b7 independent of the optional API and full WarStaxx UI */
 (function () {
   'use strict';
   if (typeof document === 'undefined' || typeof window === 'undefined' ||
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='0.2.4';
+  const id='war', version='0.2.5';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -141,13 +141,13 @@
       const message=document.createElement('p');
       message.textContent='The lightweight launcher is active, but the full WarStaxx interface has not completed startup. Reload Torn; if this persists, share the status below (no API keys are included).';
       const status=document.createElement('p');
-      status.textContent='Version '+version+' · App entered: '+(window.__warStaxxBooted?'yes':'no')+
-        ' · App ready: '+(window.__warStaxxReady?'yes':'no')+
-        (window.__warStaxxStartError?' · Failure: '+window.__warStaxxStartError:'');
+      status.textContent='Version '+version+' \u00b7 App entered: '+(window.__warStaxxBooted?'yes':'no')+
+        ' \u00b7 App ready: '+(window.__warStaxxReady?'yes':'no')+
+        (window.__warStaxxStartError?' \u00b7 Failure: '+window.__warStaxxStartError:'');
       const copy=document.createElement('button');copy.type='button';copy.textContent='Copy startup status';
       copy.style.cssText='padding:9px 12px;background:#19547a;color:#fff;border:1px solid #67c6ed;border-radius:8px;margin-right:8px;';
       copy.addEventListener('click',()=>{
-        const t='WarStaxx '+version+' · main-entry='+!!window.__warStaxxBooted+' · ready='+!!window.__warStaxxReady+' · page='+location.pathname;
+        const t='WarStaxx '+version+' \u00b7 main-entry='+!!window.__warStaxxBooted+' \u00b7 ready='+!!window.__warStaxxReady+' \u00b7 page='+location.pathname;
         if(navigator.clipboard?.writeText)navigator.clipboard.writeText(t).catch(()=>{status.textContent=t;});
         else status.textContent=t;
       });
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='0.2.4', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='0.2.5', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','targets','matchups','strategy','activity','history','assignments','alerts','settings','diagnostics'];
   const labels={overview:'Command',targets:'Targets',matchups:'Matchups',strategy:'Strategy',activity:'Activity',history:'History',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -191,7 +191,7 @@
   const $$=(s,root=document)=>Array.from(root.querySelectorAll(s));
   const n=v=>Number.isFinite(Number(v))?Number(v):0;
   const positive=v=>Number.isSafeInteger(Number(v)) && Number(v)>0 ? Number(v):0;
-  const fmt=v=>Number.isFinite(Number(v))?new Intl.NumberFormat('en-GB',{maximumFractionDigits:1}).format(Number(v)):'—';
+  const fmt=v=>Number.isFinite(Number(v))?new Intl.NumberFormat('en-GB',{maximumFractionDigits:1}).format(Number(v)):'\u2014';
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const safeRead=(k,def)=>{try{return JSON.parse(localStorage.getItem(k))||def;}catch(_){return def;}};
   const stamp=t=>t?new Date(t).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'UTC'})+' TCT':'Not recorded';
@@ -420,7 +420,7 @@
     const ranked=enemies.slice().sort((a,b)=>evaluate(b).score-evaluate(a).score);
     const used=new Set();
     return ours.map(p=>{
-      if(memberState(p)!=='okay')return {friend:p,enemy:null,reason:memberState(p)==='hospital'?'Recover / monitor hospital expiry':memberState(p)==='away'?'Travelling · return and prepare':'Unavailable · standby and support',details:null};
+      if(memberState(p)!=='okay')return {friend:p,enemy:null,reason:memberState(p)==='hospital'?'Recover / monitor hospital expiry':memberState(p)==='away'?'Travelling \u00b7 return and prepare':'Unavailable \u00b7 standby and support',details:null};
       const fixed=positive(cfg.assignments[p.id]);
       let target=ranked.find(e=>e.id===fixed);
       let reason=target?'Your saved manual order':'';
@@ -436,10 +436,10 @@
   }
   function copiedWarOrders(){
     const rows=assignments(),last=Math.max(n(state.data.updated.enemies),n(state.data.updated.ours));
-    return 'WarStaxx · '+(state.data.war?.opponentName||('Opponent faction '+(positive(cfg.enemyId)||'unknown')))+'\n'+
-      'Generated '+new Date().toISOString()+' · roster '+age(last)+'\n'+
-      rows.map(x=>(cfg.blackSkulls[x.friend.id]?'[BLACK SKULL] ':'')+x.friend.name+' ['+x.friend.id+'] → '+
-        (x.enemy?x.enemy.name+' ['+x.enemy.id+']':'Scout / Support / Standby')+' — '+x.reason+
+    return 'WarStaxx \u00b7 '+(state.data.war?.opponentName||('Opponent faction '+(positive(cfg.enemyId)||'unknown')))+'\n'+
+      'Generated '+new Date().toISOString()+' \u00b7 roster '+age(last)+'\n'+
+      rows.map(x=>(cfg.blackSkulls[x.friend.id]?'[BLACK SKULL] ':'')+x.friend.name+' ['+x.friend.id+'] \u2192 '+
+        (x.enemy?x.enemy.name+' ['+x.enemy.id+']':'Scout / Support / Standby')+' \u2014 '+x.reason+
         (x.details?.known?'; FF approx. '+x.details.ff.toFixed(2)+'x':'')).join('\n')+'\n'+
       'Review live Torn status & verify targets before attacking. No orders were executed.';
   }
@@ -463,7 +463,7 @@
   }
   function event(name,detail){document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}
   function announce(){
-    event('register',{id:ID,label:'War-TornStaxx',icon:'WS',desc:'Ranked wars · Live targets · Matchups',trendMetric:'Hittable enemies',freshnessMs:300000,sections:sections.map(id=>({id,label:labels[id]}))});
+    event('register',{id:ID,label:'War-TornStaxx',icon:'WS',desc:'Ranked wars \u00b7 Live targets \u00b7 Matchups',trendMetric:'Hittable enemies',freshnessMs:300000,sections:sections.map(id=>({id,label:labels[id]}))});
   }
   function publish(){
     const a=currentAlerts();state.alerts=a;
@@ -591,8 +591,8 @@
     alertId:domBridge.dataset.alertId||null
   }));
   root.innerHTML='<div class="ws-veil" data-close></div><section class="ws-panel" role="dialog" aria-label="WarStaxx command centre" aria-modal="true">'+
-    '<header class="ws-head"><div><strong>War<span>Staxx</span></strong><small>RANKED WAR INTELLIGENCE · v'+VER+'</small></div>'+
-    '<div class="ws-head-buttons"><button type="button" data-action="refresh">↻ Refresh</button><button type="button" data-action="find">⌕</button><button type="button" data-close aria-label="Close">×</button></div></header>'+
+    '<header class="ws-head"><div><strong>War<span>Staxx</span></strong><small>RANKED WAR INTELLIGENCE \u00b7 v'+VER+'</small></div>'+
+    '<div class="ws-head-buttons"><button type="button" data-action="refresh">\u21bb Refresh</button><button type="button" data-action="find">\u2315</button><button type="button" data-close aria-label="Close">\u00d7</button></div></header>'+
     '<nav class="ws-tabs" aria-label="WarStaxx sections"></nav><main class="ws-content"></main>'+
     '<footer class="ws-footer"><span class="ws-sync"></span><span>Observations, not automated attacks</span></footer></section>';
   root.appendChild(domBridge);
@@ -645,8 +645,8 @@
     const latest=Math.max(n(state.data.updated.enemies),n(state.data.updated.ours));
     const fresh=latest&&Date.now()-latest<5*MIN;
     return '<div class="ws-note'+(fresh?'':' ws-warn')+'">'+
-      (state.loading?'Refreshing official data… ':fresh?'Live roster sampled '+esc(age(latest))+'. ':'Status may be stale. Latest roster: '+esc(age(latest))+'. ')+
-      'Travel, online and hospital data are observed snapshots—not a continuous historical log. '+'<span class="ws-small">Times shown in TCT (UTC).</span></div>'+
+      (state.loading?'Refreshing official data\u2026 ':fresh?'Live roster sampled '+esc(age(latest))+'. ':'Status may be stale. Latest roster: '+esc(age(latest))+'. ')+
+      'Travel, online and hospital data are observed snapshots\u2014not a continuous historical log. '+'<span class="ws-small">Times shown in TCT (UTC).</span></div>'+
       (state.error?'<div class="ws-note ws-warn">'+esc(state.error)+'</div>':'');
   }
   function overview(){
@@ -655,9 +655,9 @@
     const ready=state.data.enemies.filter(p=>evaluate(p).ready).length;
     let html=statusNote()+'<div class="ws-grid">'+
       stat('War status',w?'ACTIVE':'Scouting',w?'vs '+(w.opponentName||('Faction '+w.opponentId)):'No active ranked war confirmed')+
-      stat('Net war score',score?fmt(score.net):'—',score&&score.target?'Target '+fmt(score.target):'Current score requires verified war data')+
-      stat('Enemy Okay',state.data.enemies.length?fmt(ready):'—','Based on latest roster snapshot')+
-      stat('Enemy online',state.data.enemies.length?fmt(online):'—','Current online flag, not a prediction')+
+      stat('Net war score',score?fmt(score.net):'\u2014',score&&score.target?'Target '+fmt(score.target):'Current score requires verified war data')+
+      stat('Enemy Okay',state.data.enemies.length?fmt(ready):'\u2014','Based on latest roster snapshot')+
+      stat('Enemy online',state.data.enemies.length?fmt(online):'\u2014','Current online flag, not a prediction')+
       stat('War reports',fmt(Object.keys(state.data.reports).length),'Incremental official report backfill')+
       stat('Activity snapshots',fmt(state.data.sampleCount),'Accumulated on this device')+'</div>';
     if(score&&score.target){
@@ -668,7 +668,7 @@
       ' '+b('Compare past wars','tab:history')+'</div>'+
       (currentAlerts().length?currentAlerts().map(x=>'<div class="ws-row"><span>'+esc(x.title)+'<br><small>'+esc(x.detail)+'</small></span>'+b('Review','alert:'+x.id)+'</div>').join(''):empty('No verified urgent war tasks.')))+
       card('Other Staxx tools','<p>Use the same StaxxHub launcher and jump between tools without duplicating panels.</p>'+
-      '<div class="ws-toolbar">'+b('Happy Jump · energy','tool:happy')+b('ProfitStaxx · supplies','tool:profit')+b('Company Helper','tool:company')+'</div>');
+      '<div class="ws-toolbar">'+b('Happy Jump \u00b7 energy','tool:happy')+b('ProfitStaxx \u00b7 supplies','tool:profit')+b('Company Helper','tool:company')+'</div>');
     return html;
   }
   function targetRows(){
@@ -691,10 +691,10 @@
     if(!row.length)return html+empty('No opponent records match. Set an enemy faction in Settings or refresh the current war.');
     return html+'<div class="ws-table-wrap"><table><thead><tr><th>Opponent</th><th>State</th><th>Activity</th><th>Previous wars</th><th>Travel pattern</th><th>Action</th></tr></thead><tbody>'+
       row.map(p=>{const ev=evaluate(p),pat=ev.pat,ff=ffObserved(p.id);
-        return '<tr><td><a href="'+link(p.id)+'">'+esc(p.name)+'</a><small> ['+p.id+'] · L'+fmt(p.level)+'</small><br>'+pill(ev.reason,ev.ready?'good':ev.kind==='hospital'?'bad':'')+'</td>'+
+        return '<tr><td><a href="'+link(p.id)+'">'+esc(p.name)+'</a><small> ['+p.id+'] \u00b7 L'+fmt(p.level)+'</small><br>'+pill(ev.reason,ev.ready?'good':ev.kind==='hospital'?'bad':'')+'</td>'+
           '<td>'+pill(p.status,ev.ready?'good':'')+'<br><small>'+esc(p.statusText)+'</small></td>'+
           '<td>'+pill(p.lastAction,isOnline(p)?'good':'')+'<br><small>'+esc(age(p.lastAt))+'</small></td>'+
-          '<td>'+fmt(ev.hist.wars)+' wars'+(ev.hist.avg===null?'':' · avg '+fmt(ev.hist.avg)+' points')+
+          '<td>'+fmt(ev.hist.wars)+' wars'+(ev.hist.avg===null?'':' \u00b7 avg '+fmt(ev.hist.avg)+' points')+
           '<br><small>Observed FF '+(ff.avg===null?'unknown':ff.avg.toFixed(2)+'x ('+ff.count+')')+'</small><br><small>FFScouter '+(ffscouter(p.id)?.ff!==null&&ffscouter(p.id)?.ff!==undefined?ffscouter(p.id).ff.toFixed(2)+'x estimated':'unavailable')+'</small></td>'+
           '<td>'+esc(pat.warSamples?pat.warTravel+'% in observed wars ('+pat.warSamples+' checks)':'No in-war samples')+'<br><small>'+esc(pat.reliability)+'</small></td>'+
           '<td>'+a('Profile',link(p.id))+' '+a('Attack',attackLink(p.id))+' '+b('Intel','player:'+p.id)+'</td></tr>';
@@ -707,14 +707,14 @@
     const pat=pattern(side,id),hist=pastPerformance(id,side),s=spy(id);
     const myFf=ffObserved(id),third=ffscouter(id);
     return card(p.name+' ['+id+']','<div class="ws-grid">'+
-      '<div><h3>Live observation</h3><p>'+pill(p.status)+' · '+pill(p.lastAction)+'</p><p>'+esc(p.statusText)+'</p>'+
+      '<div><h3>Live observation</h3><p>'+pill(p.status)+' \u00b7 '+pill(p.lastAction)+'</p><p>'+esc(p.statusText)+'</p>'+
       '<small>Last action '+esc(age(p.lastAt))+'; snapshot '+esc(age(p.updated))+'</small></div>'+
-      '<div><h3>Historical output</h3><p>'+hist.wars+' official war reports</p><p>'+fmt(hist.score)+' total score · '+fmt(hist.attacks)+' attacks</p>'+
+      '<div><h3>Historical output</h3><p>'+hist.wars+' official war reports</p><p>'+fmt(hist.score)+' total score \u00b7 '+fmt(hist.attacks)+' attacks</p>'+
       '<small>Same member ID, no assumption about changed faction membership</small></div>'+
-      '<div><h3>Travel/activity sampling</h3><p>'+pat.count+' checks · '+pat.travel+'% away · '+pat.online+'% online</p>'+
+      '<div><h3>Travel/activity sampling</h3><p>'+pat.count+' checks \u00b7 '+pat.travel+'% away \u00b7 '+pat.online+'% online</p>'+
       '<small>Coverage '+esc(pat.reliability)+(pat.peak===null?'':'; peak sampled '+pat.peak+':00 TCT')+'</small><br><small>In-war: '+esc(pat.warSamples?pat.warTravel+'% travelling/abroad in '+pat.warSamples+' checks':'No in-war samples')+'</small></div>'+
       '<div><h3>Fair fight</h3><p>'+esc(myFf.avg===null?'No observed FF':myFf.avg.toFixed(2)+'x observed')+'</p>'+
-      '<small>'+myFf.count+' recorded encounters from faction attacks</small><br><small>FFScouter (your key): '+esc(third&&third.ff!==null?third.ff.toFixed(2)+'x estimated':'Unavailable')+' · public BSS '+esc(third&&third.bss?fmt(third.bss):'unknown')+'</small></div></div>'+
+      '<small>'+myFf.count+' recorded encounters from faction attacks</small><br><small>FFScouter (your key): '+esc(third&&third.ff!==null?third.ff.toFixed(2)+'x estimated':'Unavailable')+' \u00b7 public BSS '+esc(third&&third.bss?fmt(third.bss):'unknown')+'</small></div></div>'+
       '<h3>Manual spy or verified battle stats</h3>'+
       '<p>Enter all four stats only if known. Predictions use the weighted battle-stat score, and remain estimates; they do not guarantee a hit.</p>'+
       ['strength','speed','defense','dexterity'].map(k=>'<label>'+esc(k)+'<input type="number" min="0" step="1" data-spy="'+esc(k)+'" value="'+esc(s&&s[k]!==undefined?s[k]:'')+'"></label>').join('')+
@@ -737,7 +737,7 @@
       rows.map(x=>'<tr><td>'+esc(x.e.name)+'<br><small>L'+fmt(x.e.level)+'</small></td>'+
         '<td>'+pill(x.m.verdict,x.m.known&&x.m.ratio<0.8?'good':'')+'<br><small>'+esc(x.m.confidence)+'</small></td>'+
         '<td>'+esc(x.m.ff===null?'Unknown':x.m.ff.toFixed(2)+'x modelled')+'</td>'+
-        '<td>'+esc(x.ff.avg===null?'Not observed':x.ff.avg.toFixed(2)+'x · '+x.ff.count+' recorded')+'</td>'+
+        '<td>'+esc(x.ff.avg===null?'Not observed':x.ff.avg.toFixed(2)+'x \u00b7 '+x.ff.count+' recorded')+'</td>'+
         '<td>'+b('Set manual order','assign:'+friend.id+':'+x.e.id)+' '+b('Spy','player:'+x.e.id)+' '+a('Attack',attackLink(x.e.id))+'</td></tr>').join('')+
       '</tbody></table></div>';
   }
@@ -755,12 +755,12 @@
         ' 3. Update orders as roster statuses change; every attack remains a deliberate Torn action.</p>'+
         '<div class="ws-toolbar">'+b('View personalised orders','tab:assignments')+b('Review opponent activity','tab:activity')+'</div>')+
       card('Tactical recommendations',[
-        'Compare both factions’ actual online coverage before committing energy. Current online counts are snapshots, not guaranteed future availability.',
+        'Compare observed online coverage for both factions before committing energy. Current online counts are snapshots, not guaranteed future availability.',
         'Focus on opponents your members can actually beat; a high fair-fight multiplier is useful only when the battle is winnable.',
         'Monitor enemy hospital expiry and travel returns, then manually coordinate strikes using confirmed live statuses.',
         'Use past war reports to identify consistently high scorers; score alone is not proof of battle-stat strength.',
         'Keep reserve hitters and energy available for counterattacks. Open Happy Jump to review energy and training preparation.'
-      ].map(s=>'<p>• '+esc(s)+'</p>').join('')+
+      ].map(s=>'<p>\u2022 '+esc(s)+'</p>').join('')+
       '<div class="ws-toolbar">'+b('Happy Jump','tool:happy')+b('War targets','tab:targets')+'</div>');
   }
   function activity(){
@@ -770,13 +770,13 @@
       '<p>Moderate confidence requires at least 60 observations across 12 distinct UTC hours. No past-war travel history can be reconstructed from official war reports alone.</p>'+
       '<div class="ws-table-wrap"><table><thead><tr><th>Enemy</th><th>Samples</th><th>Online checks</th><th>Travelling/abroad</th><th>Observed peak TCT</th><th>Confidence</th></tr></thead><tbody>'+
       summary.map(x=>'<tr><td>'+esc(x.p.name)+'</td><td>'+fmt(x.pat.count)+'</td><td>'+fmt(x.pat.online)+'%</td>'+
-        '<td>'+fmt(x.pat.travel)+'% overall / '+esc(x.pat.warTravel===null?'no war samples':x.pat.warTravel+'% during war')+'</td><td>'+esc(x.pat.peak===null?'—':x.pat.peak+':00')+'</td><td>'+pill(x.pat.reliability)+'</td></tr>').join('')+
+        '<td>'+fmt(x.pat.travel)+'% overall / '+esc(x.pat.warTravel===null?'no war samples':x.pat.warTravel+'% during war')+'</td><td>'+esc(x.pat.peak===null?'\u2014':x.pat.peak+':00')+'</td><td>'+pill(x.pat.reliability)+'</td></tr>').join('')+
       '</tbody></table></div>')+
-      card('Next development of intelligence','<p>Coverage improves with foreground checks across multiple days and war windows. This version does not claim to identify an individual’s sleep schedule from a handful of polls.</p>');
+      card('Next development of intelligence','<p>Coverage improves with foreground checks across multiple days and war windows. This version does not claim to identify individual player sleep schedules from a handful of polls.</p>');
   }
   function history(){
     const ours=state.data.ourWars,enemies=state.data.enemyWars,all=[['Our faction',ours,cfg.ourId],['Opponent faction',enemies,cfg.enemyId]];
-    return statusNote()+'<div class="ws-grid">'+all.map(([label,wars,faction])=>card(label,'<p>'+fmt(wars.length)+' ranked wars loaded · '+fmt(wars.filter(w=>w.winner===positive(faction)).length)+' wins recorded</p>'+
+    return statusNote()+'<div class="ws-grid">'+all.map(([label,wars,faction])=>card(label,'<p>'+fmt(wars.length)+' ranked wars loaded \u00b7 '+fmt(wars.filter(w=>w.winner===positive(faction)).length)+' wins recorded</p>'+
       (wars.length?'<div class="ws-table-wrap"><table><thead><tr><th>War ID / Start</th><th>Outcome</th><th>Scores</th><th>Details</th></tr></thead><tbody>'+
         wars.slice(0,20).map(w=>'<tr><td>#'+w.id+'<br><small>'+esc(stamp(w.start*1000))+'</small></td>'+
           '<td>'+pill(w.end?(w.winner===positive(faction)?'Won':'Lost'):'Ongoing')+'</td>'+
@@ -785,7 +785,7 @@
       card('Player score leaders','<div class="ws-grid">'+
         [['Our highest recorded',state.data.ours,'ours'],['Enemy highest recorded',state.data.enemies,'enemies']].map(([title,roster,side])=>
           '<div><h3>'+esc(title)+'</h3>'+roster.map(p=>({p,h:pastPerformance(p.id,side)})).filter(x=>x.h.wars).sort((a,b)=>b.h.score-a.h.score).slice(0,8)
-          .map(x=>'<p>'+esc(x.p.name)+' · '+fmt(x.h.score)+' total points / '+x.h.wars+' report(s)</p>').join('')+'</div>').join('')+'</div>');
+          .map(x=>'<p>'+esc(x.p.name)+' \u00b7 '+fmt(x.h.score)+' total points / '+x.h.wars+' report(s)</p>').join('')+'</div>').join('')+'</div>');
   }
   function orders(){
     const rows=assignments();
@@ -806,14 +806,14 @@
   }
   function settings(){
     return card('Torn API connection','<p>Use your Torn PDA API placeholder when supported, or save a personal key on this device. The key is sent only to the official api.torn.com endpoint. Do not export it.</p>'+
-      '<label>API key (saved locally, never displayed on diagnostics)<input id="ws-key" type="password" autocomplete="off" placeholder="'+(effectiveKey()?'Key available · leave blank to keep':'Enter custom-scoped Torn API key')+'"></label>'+
+      '<label>API key (saved locally, never displayed on diagnostics)<input id="ws-key" type="password" autocomplete="off" placeholder="'+(effectiveKey()?'Key available \u00b7 leave blank to keep':'Enter custom-scoped Torn API key')+'"></label>'+
       '<label>Your faction ID<input type="number" id="ws-our" min="1" value="'+(positive(cfg.ourId)||'')+'"></label>'+
       '<label>Opponent faction ID (auto-updated if a ranked war is detected)<input type="number" id="ws-enemy" min="1" value="'+(positive(cfg.enemyId)||'')+'"></label>'+
       '<label>Automatic refresh<select id="ws-interval">'+[90,120,180,300].map(s=>'<option value="'+s+'" '+(cfg.refreshSeconds===s?'selected':'')+'>'+s+' seconds while visible</option>').join('')+'</select></label>'+
       '<label>Historical wars per side<select id="ws-limit">'+[3,5,8,12,20].map(s=>'<option value="'+s+'" '+(cfg.historyLimit===s?'selected':'')+'>'+s+' wars</option>').join('')+'</select></label>'+
       '<label><input type="checkbox" id="ws-attacks" '+(cfg.enableAttacks?'checked':'')+'> Read my faction attacks for observed fair-fight data (extra API permission)</label>'+ 
-      '<h3>FFScouter · optional, independent service</h3><p>Enter your own Torn API key that you have registered with FFScouter. This sends that key and selected opponent IDs to FFScouter; unlike the standard Torn API requests, this is a third-party service. Read the <a href="https://ffscouter.com/#data-policy" target="_blank" rel="noopener noreferrer">FFScouter data policy</a> and consider their premium plans if useful.</p>'+ 
-      '<label>Registered FFScouter API key<input id="ws-ffkey" type="password" autocomplete="off" placeholder="'+(cfg.ffKey?'Key saved · leave blank to keep':'Torn key registered with FFScouter')+'"></label>'+ 
+      '<h3>FFScouter \u00b7 optional, independent service</h3><p>Enter your own Torn API key that you have registered with FFScouter. This sends that key and selected opponent IDs to FFScouter; unlike the standard Torn API requests, this is a third-party service. Read the <a href="https://ffscouter.com/#data-policy" target="_blank" rel="noopener noreferrer">FFScouter data policy</a> and consider their premium plans if useful.</p>'+ 
+      '<label>Registered FFScouter API key<input id="ws-ffkey" type="password" autocomplete="off" placeholder="'+(cfg.ffKey?'Key saved \u00b7 leave blank to keep':'Torn key registered with FFScouter')+'"></label>'+ 
       '<label><input type="checkbox" id="ws-ff-consent" '+(cfg.ffConsent?'checked':'')+'> I have read the FFScouter data policy and knowingly enable this third-party lookup.</label>'+ 
       '<label><input type="checkbox" id="ws-ff-enable" '+(cfg.ffEnabled?'checked':'')+'> Fetch FFScouter estimates using my registered key, no more than once per 10 minutes.</label>'+
       '<div class="ws-toolbar">'+b('Save settings','save-settings')+b('Refresh all now','refresh')+b('Clear stored API key','clear-key')+'</div>'+
@@ -824,13 +824,13 @@
   }
   function diagnostics(){
     const d=state.data;
-    return card('Safe diagnostics','<p>Version '+VER+' · API key '+(effectiveKey()?'available':'missing')+' · local storage '+(state.localKeyError?'problem':'available')+'</p>'+
-      '<p>Own ID: '+(positive(cfg.ourId)?'configured':'missing')+' · Opponent ID: '+(positive(cfg.enemyId)?'configured':'missing')+'</p>'+
+    return card('Safe diagnostics','<p>Version '+VER+' \u00b7 API key '+(effectiveKey()?'available':'missing')+' \u00b7 local storage '+(state.localKeyError?'problem':'available')+'</p>'+
+      '<p>Own ID: '+(positive(cfg.ourId)?'configured':'missing')+' \u00b7 Opponent ID: '+(positive(cfg.enemyId)?'configured':'missing')+'</p>'+
       '<p>Last known roster: '+esc(age(Math.max(n(d.updated.enemies),n(d.updated.ours))))+'</p>'+
       '<h3>Source freshness and API errors</h3>'+
       '<div class="ws-table-wrap"><table><thead><tr><th>Endpoint</th><th>Last success</th><th>Last error</th></tr></thead><tbody>'+
       [...new Set([...Object.keys(d.updated),...Object.keys(d.errors)])].slice(0,60).map(k=>
-        '<tr><td>'+esc(k)+'</td><td>'+esc(age(d.updated[k]))+'</td><td>'+esc(d.errors[k]||'—')+'</td></tr>').join('')+
+        '<tr><td>'+esc(k)+'</td><td>'+esc(age(d.updated[k]))+'</td><td>'+esc(d.errors[k]||'\u2014')+'</td></tr>').join('')+
       '</tbody></table></div><p class="ws-small">This diagnostic screen deliberately excludes keys, imported spy values, saved notes and individual activity samples.</p>');
   }
   function render(){
@@ -850,7 +850,7 @@
     if(form)for(const prior of form){if(!prior.id)continue;const field=content.querySelector('#'+prior.id);
       if(!field)continue;if(prior.type==='checkbox')field.checked=prior.checked;else field.value=prior.value;}
     content.scrollTop=scroll;
-    $('.ws-sync',root).textContent=state.loading?'Checking Torn…':Math.max(n(state.data.updated.enemies),n(state.data.updated.ours))?'Last observation '+age(Math.max(n(state.data.updated.enemies),n(state.data.updated.ours))):'Not connected yet';
+    $('.ws-sync',root).textContent=state.loading?'Checking Torn\u2026':Math.max(n(state.data.updated.enemies),n(state.data.updated.ours))?'Last observation '+age(Math.max(n(state.data.updated.enemies),n(state.data.updated.ours))):'Not connected yet';
     $('.ws-head [data-action="refresh"]',root).disabled=state.loading;
   }
   function navigate(tab,focus){
@@ -983,7 +983,7 @@
     bar.id='warstaxx-faction-open';
     bar.style.cssText='display:flex;justify-content:flex-end;align-items:center;gap:6px;margin:8px 0;padding:4px 0;clear:both;';
     const button=document.createElement('button');
-    button.type='button';button.textContent='⚔ Open WarStaxx';
+    button.type='button';button.textContent='\u2694 Open WarStaxx';
     button.setAttribute('aria-label','Open WarStaxx ranked-war intelligence');
     button.style.cssText='border:1px solid #54d7fa;border-radius:9px;background:#103b60;color:#ddf8ff;padding:8px 12px;font:600 12px/1.3 system-ui,sans-serif;cursor:pointer;min-height:38px;';
     button.addEventListener('click',()=>{open({section:'overview'});});
