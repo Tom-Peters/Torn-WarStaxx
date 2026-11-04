@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      0.3.0
+// @version      0.4.0
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='0.3.0';
+  const id='war', version='0.4.0';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='0.3.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='0.4.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','intel','targets','history','activity','matchups','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'War room',intel:'Enemy intel',targets:'Players',matchups:'Matchups',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -199,15 +199,16 @@
   const link=id=>'https://www.torn.com/profiles.php?XID='+positive(id);
   const attackLink=id=>'https://www.torn.com/loader.php?sid=attack&user2ID='+positive(id);
   const apiKeyPda=typeof window.PDA_APIKEY==='string'?window.PDA_APIKEY:'###PDA-APIKEY###';
-  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},blackSkulls:{},spies:{},notes:{},hidden:false};
+  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},hidden:false};
   const cfg=Object.assign({},defaults,safeRead(CONFIG,{}));
   cfg.assignments=cfg.assignments&&typeof cfg.assignments==='object'?cfg.assignments:{};
   cfg.blackSkulls=cfg.blackSkulls&&typeof cfg.blackSkulls==='object'?cfg.blackSkulls:{};
   cfg.spies=cfg.spies&&typeof cfg.spies==='object'?cfg.spies:{};
   cfg.notes=cfg.notes&&typeof cfg.notes==='object'?cfg.notes:{};
+  cfg.watchlist=cfg.watchlist&&typeof cfg.watchlist==='object'?cfg.watchlist:{};
   const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},factionBasic:{},publicIntel:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},sampleCount:0});
   const state={data:Object.assign(freshData(),safeRead(DATA,{})),open:false,tab:'overview',showMore:false,
-    filter:'all',sort:'warScore',search:'',loading:false,spinner:'',error:'',scanning:false,alerts:[],chosen:0,
+    filter:'all',sort:'warScore',search:'',loading:false,ffLoading:false,spinner:'',error:'',scanning:false,alerts:[],chosen:0,
     lastRefresh:0,historicalRead:0,localKeyError:false,warExpected:false,selectedWar:0,detailFrom:'targets'};
   state.data.reports=state.data.reports||{};
   state.data.activity=state.data.activity||{};
@@ -290,7 +291,7 @@
   }
   function attacks(j){
     return parseArray(unpack(j,'attacks')).map(a=>({
-      id:positive(a.id||a.attack_id),at:positive(a.started||a.timestamp||a.start)*1000,
+      id:positive(a.id||a.attack_id),at:positive(a.started||a.timestamp_started||a.timestamp||a.start)*1000,
       attacker:positive(a.attacker?.id||a.attacker_id),defender:positive(a.defender?.id||a.defender_id),
       ff:Number(a.modifiers?.fair_fight??a.modifiers?.fairfight??a.fair_fight),result:String(a.result||''),
       respect:n(a.respect_gain||a.respect),code:'api'
@@ -512,20 +513,86 @@
     const score=keys.reduce((sum,k)=>sum+Math.sqrt(Number(s[k])),0);
     return score>0?score:null;
   }
+  // Fair Fight from FFScouter uses the API-key owner's battle stats, not a
+  // selected teammate's. A true per-hitter figure needs both BSS inputs.
+  const ffApiKey=()=>String(cfg.ffKey||'').trim()||effectiveKey();
+  const validFF=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))&&Number(v)>=1&&Number(v)<=3?
+    Number(v):null;
+  const ffTimestamp=v=>{
+    if(typeof v==='number')return v>1e12?v:v>1e9?v*1000:0;
+    if(typeof v==='string'&&/^\d+$/.test(v))return ffTimestamp(Number(v));
+    const parsed=Date.parse(String(v||''));return Number.isFinite(parsed)?parsed:0;
+  };
+  function parseFFRows(rows,ids,at=Date.now()){
+    if(!Array.isArray(rows))throw new Error('FFScouter response is not a list');
+    const allowed=new Set(ids.map(positive)),out={};
+    for(const p of rows){
+      const id=positive(p?.player_id);
+      if(!allowed.has(id))continue;
+      const ff=validFF(p?.fair_fight);
+      const bss=Number(p?.bss_public),estimate=Number(p?.bs_estimate);
+      out[id]={ff,bss:Number.isFinite(bss)&&bss>0?bss:null,
+        bsEstimate:Number.isFinite(estimate)&&estimate>0?estimate:null,
+        bsHuman:String(p?.bs_estimate_human||'').slice(0,70),
+        source:String(p?.source||'public estimate').slice(0,35),
+        updatedAt:ffTimestamp(p?.last_updated),
+        premium:Boolean(p?.premium_insights_available),
+        missing:ff===null&&!(Number.isFinite(bss)&&bss>0),
+        at};
+    }
+    // A missing response entry is explicitly unknown. Never imply a zero FF.
+    for(const id of allowed)if(!out[id])out[id]={ff:null,bss:null,missing:true,at};
+    return out;
+  }
   function ffscouter(id){
+    if(!cfg.ffEnabled||!cfg.ffConsent)return null;
     const x=state.data.ffstats[String(id)];
-    return cfg.ffEnabled&&x&&Date.now()-n(x.at)<24*HOUR?x:null;
+    return x&&x.at&&Date.now()-n(x.at)<7*24*HOUR?x:null;
+  }
+  function ffCoverage(){
+    let covered=0,unknown=0,stale=0;
+    for(const p of state.data.enemies){
+      const x=ffscouter(p.id);
+      if(!x||x.ff===null||x.ff===undefined){unknown++;continue;}
+      if(Date.now()-n(x.at)>=24*HOUR)stale++;
+      else covered++;
+    }
+    return {covered,unknown,stale,total:state.data.enemies.length,
+      last:n(state.data.updated.ffscouter),enabled:Boolean(cfg.ffEnabled&&cfg.ffConsent),
+      keyAvailable:Boolean(ffApiKey())};
+  }
+  function ffLabel(id){
+    const x=ffscouter(id);
+    if(x&&x.ff!==null&&x.ff!==undefined){
+      const stale=Date.now()-n(x.at)>=24*HOUR;
+      return {value:x.ff.toFixed(2)+'x',tag:stale?'FF stale':'FFScouter',
+        age:age(x.at),source:stale?'stale':'estimate',ff:x.ff};
+    }
+    const hit=ffObserved(id);
+    if(hit.count&&hit.avg!==null)return {value:hit.avg.toFixed(2)+'x',
+      tag:'Observed team FF',age:hit.count+' attack(s)',source:'observed',ff:hit.avg};
+    return {value:'--',tag:cfg.ffEnabled?'FF unknown':'FF off',age:'No usable fair-fight data',
+      source:'unknown',ff:null};
+  }
+  function ffBadge(id,action=true){
+    const x=ffLabel(id),cl=x.source==='unknown'?'ws-ff-none':x.source==='stale'?'ws-ff-stale':
+      x.source==='observed'?'ws-ff-actual':x.ff>=2.5?'ws-ff-high':x.ff>=2?'ws-ff-mid':'ws-ff-low';
+    const title=x.tag+' | '+x.age+' | '+(x.source==='estimate'?
+      'FF for API-key owner; other hitters have different FF':
+      x.source==='observed'?'Actual recorded FF from faction attacks; not a personal matchup':
+      'No guaranteed win probability');
+    const html='<span class="ws-ff '+cl+'" title="'+esc(title)+'">FF '+esc(x.value)+'</span>';
+    return action?'<button type="button" class="ws-ff-button" data-action="player:'+positive(id)+'" title="'+esc(title)+'">'+html+'</button>':html;
   }
   function matchup(friend,enemy){
-    const a=spy(friend.id), b=spy(enemy.id),sa=bsScore(a);
-    const manual=bsScore(b),third=ffscouter(enemy.id),sb=manual!==null?manual:(third&&positive(third.bss)?positive(third.bss):null);
+    const a=spy(friend.id),b=spy(enemy.id),sa=bsScore(a),manual=bsScore(b),third=ffscouter(enemy.id);
+    const sb=manual!==null?manual:(third&&Number.isFinite(Number(third.bss))&&Number(third.bss)>0?Number(third.bss):null);
     if(sa===null||sb===null)return {known:false,ff:null,ratio:null,verdict:'Unverified stats',confidence:'Unknown'};
     const r=sb/Math.max(1,sa);
-    // Approximate uncapped FF curve. Official top-1000 BSS cap varies over time; do not hardcode it.
-    const ff=Math.max(1,Math.min(3,1+(8/3)*(sb/Math.max(1,sa))));
+    const ff=Math.max(1,Math.min(3,1+(8/3)*r));
     const old=Math.max(n(a?.observedAt),n(b?.observedAt));
-    return {known:true,ratio:r,ff,verdict:r>=1.15?'Likely tougher':r>=0.8?'Close fight':'Favourable on BS score',
-      confidence:manual===null?'FFScouter public BSS estimate':old&&Date.now()-old<7*24*HOUR?'Recent manual spy':'Older manual spy'};
+    return {known:true,ratio:r,ff,verdict:r>=1.15?'Likely tougher':r>=0.8?'Close fight':'Favourable on BSS',
+      confidence:manual===null?'FFScouter public BSS model':old&&Date.now()-old<7*24*HOUR?'Recent manual spy':'Older manual spy'};
   }
   function ffObserved(enemyId,friendId){
     const all=(state.data.attacks||[]).filter(a=>a.defender===enemyId&&(!friendId||a.attacker===friendId)&&
