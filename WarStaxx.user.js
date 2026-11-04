@@ -549,12 +549,14 @@
     const x=state.data.ffstats[String(id)];
     return x&&x.at&&Date.now()-n(x.at)<7*24*HOUR?x:null;
   }
+  function ffIsStale(x){return !x||Date.now()-n(x.at)>=24*HOUR||
+    Boolean(x.updatedAt&&Date.now()-n(x.updatedAt)>90*24*HOUR);}
   function ffCoverage(){
     let covered=0,unknown=0,stale=0;
     for(const p of state.data.enemies){
       const x=ffscouter(p.id);
       if(!x||x.ff===null||x.ff===undefined){unknown++;continue;}
-      if(Date.now()-n(x.at)>=24*HOUR)stale++;
+      if(ffIsStale(x))stale++;
       else covered++;
     }
     return {covered,unknown,stale,total:state.data.enemies.length,
@@ -564,7 +566,7 @@
   function ffLabel(id){
     const x=ffscouter(id);
     if(x&&x.ff!==null&&x.ff!==undefined){
-      const stale=Date.now()-n(x.at)>=24*HOUR;
+      const stale=ffIsStale(x);
       return {value:x.ff.toFixed(2)+'x',tag:stale?'FF stale':'FFScouter',
         age:age(x.at),source:stale?'stale':'estimate',ff:x.ff};
     }
@@ -586,7 +588,7 @@
   }
   function matchup(friend,enemy){
     const a=spy(friend.id),b=spy(enemy.id),sa=bsScore(a),manual=bsScore(b),third=ffscouter(enemy.id);
-    const sb=manual!==null?manual:(third&&Number.isFinite(Number(third.bss))&&Number(third.bss)>0?Number(third.bss):null);
+    const sb=manual!==null?manual:(third&&!ffIsStale(third)&&Number.isFinite(Number(third.bss))&&Number(third.bss)>0?Number(third.bss):null);
     if(sa===null||sb===null)return {known:false,ff:null,ratio:null,verdict:'Unverified stats',confidence:'Unknown'};
     const r=sb/Math.max(1,sa);
     const ff=Math.max(1,Math.min(3,1+(8/3)*r));
@@ -812,7 +814,10 @@
   }
   async function checkFFRegistration(force=false){
     const old=state.data.meta.ffRegistration||{};
-    if(!force&&old.at&&Date.now()-n(old.at)<6*HOUR)return old;
+    if(!force&&old.at&&Date.now()-n(old.at)<6*HOUR){
+      if(old.registered===false)throw new Error('FFScouter key is not registered. Use Check registered key after signing up.');
+      return old;
+    }
     const data=await ffRequest('https://ffscouter.com/api/v1/check-key?key='+encodeURIComponent(ffApiKey()));
     const registered=data?.is_registered===true||data?.registered===true;
     const result={registered,premium:Boolean(data?.is_premium),at:Date.now()};
@@ -1711,8 +1716,8 @@
       }
       return;
     }
-    if(action==='clear-key'){cfg.key='';cfg.factionVerifiedAt=0;saveCfg();render();return;}
-    if(action==='clear-ff-key'){cfg.ffKey='';delete state.data.meta.ffRegistration;state.data.updated.ffscouter=0;saveCfg();save();state.error='FFScouter will use your Torn PDA key if you enabled and consented to FF lookup.';render();return;}
+    if(action==='clear-key'){cfg.key='';cfg.factionVerifiedAt=0;delete state.data.meta.ffRegistration;state.data.ffstats={};state.data.updated.ffscouter=0;saveCfg();save();render();return;}
+    if(action==='clear-ff-key'){cfg.ffKey='';state.data.ffstats={};delete state.data.meta.ffRegistration;state.data.updated.ffscouter=0;saveCfg();save();state.error='FFScouter will use your Torn PDA key if you enabled and consented to FF lookup.';render();return;}
     if(action==='detect-faction'){
       cfg.factionAuto=true;
       cfg.factionVerifiedAt=0;
@@ -1730,8 +1735,8 @@
     if(action==='reset-activity'){state.data.activity={};state.data.sampleCount=0;save();render();return;}
     if(action==='reset-orders'){cfg.assignments={};saveCfg();render();return;}
     if(action==='save-settings'){
-      const supplied=$('#ws-key',root)?.value?.trim();if(supplied&&supplied!==cfg.key){cfg.key=supplied;delete state.data.meta.ffRegistration;state.data.updated.ffscouter=0;}
-      const ffSupplied=$('#ws-ffkey',root)?.value?.trim();if(ffSupplied&&ffSupplied!==cfg.ffKey){cfg.ffKey=ffSupplied;delete state.data.meta.ffRegistration;state.data.updated.ffscouter=0;}
+      const supplied=$('#ws-key',root)?.value?.trim();if(supplied&&supplied!==cfg.key){cfg.key=supplied;delete state.data.meta.ffRegistration;state.data.updated.ffscouter=0;state.data.ffstats={};}
+      const ffSupplied=$('#ws-ffkey',root)?.value?.trim();if(ffSupplied&&ffSupplied!==cfg.ffKey){cfg.ffKey=ffSupplied;delete state.data.meta.ffRegistration;state.data.updated.ffscouter=0;state.data.ffstats={};}
       cfg.ffConsent=Boolean($('#ws-ff-consent',root)?.checked);
       cfg.ffEnabled=Boolean($('#ws-ff-enable',root)?.checked)&&cfg.ffConsent&&Boolean(cfg.ffKey||effectiveKey());
       const manualId=positive($('#ws-our',root)?.value);
