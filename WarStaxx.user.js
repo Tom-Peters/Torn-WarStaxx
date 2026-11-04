@@ -951,12 +951,17 @@
       if(score&&score.net<0)out.push({id:'war-score',title:'Ranked war score is behind',detail:'Current net score '+fmt(score.net)+'; review team assignments and coverage.',status:'review',priority:70,tab:'strategy'});
     }
     if(w&&(!t||Date.now()-t>5*MIN))out.push({id:'stale-roster',title:'Refresh opponent statuses',detail:'Last observed status is stale; refresh before hitting.',status:'soon',priority:75,tab:'overview'});
+    const newDebrief=Object.values(state.data.afterActions).find(x=>x.newFromObservedWar&&!x.reviewed);
+    if(newDebrief)out.push({id:'after-action-'+newDebrief.id,title:'Ranked war after-action ready',detail:'War #'+newDebrief.id+' '+newDebrief.outcome+'; review the scoreline, known contributors and tactical lessons.',status:'review',priority:81,tab:'afteraction'});
     if(w){const pace=warPace();
       const acceleration=scoreAcceleration();
       if(acceleration?.accelerating)
         out.push({id:'enemy-accelerating',title:'Enemy scoring is accelerating',detail:'Scoring increased from '+fmt(acceleration.previousEnemy)+' to '+fmt(acceleration.recentEnemy)+' pts/hour across sampled windows. Recheck coverage and assignments.',status:'review',priority:91,tab:'pace'});
       if(pace&&pace.measurable&&pace.span>=20&&Date.now()-pace.last.at<10*MIN&&pace.netRate<-20)
         out.push({id:'score-pace-falling',title:'Enemy gaining score momentum',detail:'Observed net pace '+fmt(pace.netRate)+' points/hour; review your hitters and coverage.',status:'review',priority:79,tab:'pace'});
+      const arrivals=inboundReturns().filter(x=>x.flight.eta&&x.flight.eta>Date.now()&&x.flight.eta-Date.now()<=20*MIN);
+      if(arrivals.length&&Date.now()-n(state.data.updated.enemies)<5*MIN)
+        out.push({id:'inbound-return',title:arrivals.length+' enemy flight return(s) approaching',detail:arrivals.slice(0,3).map(x=>x.player.name+' '+flightCountdown(x.flight.eta)).join(', ')+'. Return ETA from Torn roster; refresh status before targeting.',status:'review',priority:86,tab:'targets'});
       const plan=leadershipSummary();
       if(plan.duplicateTargets.length)out.push({id:'overlapping-orders',title:'Overlapping Black Skulls targets',detail:plan.duplicateTargets.length+' opponent targets assigned to multiple hitters; review local leadership orders.',status:'review',priority:67,tab:'command'});
     }
@@ -1091,6 +1096,7 @@
     }
     const keep=Object.keys(state.data.reports).map(Number).sort((a,b)=>b-a);
     for(const id of keep.slice(40))delete state.data.reports[id];
+    buildAfterActions();
     state.historicalRead=Date.now();
   }
   async function ffRequest(url){
@@ -1180,7 +1186,9 @@
       if(!positive(cfg.ourId))throw new Error('Unable to detect your faction from Torn API. Check your API key or use the optional manual faction ID in Settings.');
       const wars=await call('/faction/'+cfg.ourId+'/wars','wars',force?0:90*1000);
       if(wars){
+        const previousWarId=positive(state.data.war?.id);
         const w=detectWar(wars);state.data.war=w;
+        if(previousWarId&&(!w||positive(w.id)!==previousWarId))state.data.meta.pendingAfterAction=previousWarId;
         if(w)recordWarScore(w);
         if(w&&w.opponentId)setOpponent(w.opponentId);
       }
@@ -1366,6 +1374,72 @@
       else if(!state.data.reports[id])state.error='War report not available yet. Check Diagnostics for endpoint errors.';
     }catch(e){state.error='Cannot load official report: '+String(e.message||e);}
     finally{state.loading=false;save();render();}
+  }
+  function makeAfterAction(w){
+    if(!w?.id||!n(w.end))return null;
+    const ourId=positive(cfg.ourId),ours=w.scores?.find(f=>positive(f.id)===ourId),
+      theirs=w.scores?.find(f=>positive(f.id)!==ourId);
+    if(!ours||!theirs)return null;
+    const enemyId=positive(theirs.id),r=state.data.reports[String(w.id)]||null;
+    const ourReport=r?.factions?.find(f=>positive(f.id)===ourId);
+    const enemyReport=r?.factions?.find(f=>positive(f.id)===enemyId);
+    const ownContributors=(ourReport?.members||[]).filter(p=>n(p.score)>0).sort((a,b)=>n(b.score)-n(a.score));
+    const enemyContributors=(enemyReport?.members||[]).filter(p=>n(p.score)>0).sort((a,b)=>n(b.score)-n(a.score));
+    const sumTop=arr=>arr.slice(0,3).reduce((total,p)=>total+n(p.score),0);
+    const sumAll=arr=>arr.reduce((total,p)=>total+n(p.score),0);
+    const enemyTop3Pct=sumAll(enemyContributors)?Math.round(sumTop(enemyContributors)/sumAll(enemyContributors)*100):null;
+    const oursTop3Pct=sumAll(ownContributors)?Math.round(sumTop(ownContributors)/sumAll(ownContributors)*100):null;
+    const ownObserved=warSamples(w.id,'ours'),enemyObserved=warSamples(w.id,'enemies'),pace=warPace(w.id);
+    const outcome=positive(w.winner)?w.winner===ourId?'Won':'Lost':'Undecided';
+    const lessons=[];
+    if(enemyTop3Pct!==null&&enemyContributors.length>=4&&enemyTop3Pct>=65)
+      lessons.push('Opponent scoring was concentrated in its top three recorded contributors ('+enemyTop3Pct+'% of recorded player points). Review these hitters next war.');
+    if(ownObserved.checks>=5&&ownObserved.onlinePct!==null&&ownObserved.onlinePct<35)
+      lessons.push('Only '+ownObserved.onlinePct+'% of our sampled member checks were online in this war. Review roster coverage at critical times.');
+    if(enemyObserved.checks>=5&&enemyObserved.awayPct!==null&&enemyObserved.awayPct>=25)
+      lessons.push('Opponent was travelling in '+enemyObserved.awayPct+'% of sampled member checks. Compare flight timing with the next opponent.');
+    if(ownContributors.length&&ownContributors.length<Math.max(2,Math.ceil(n(ourReport?.members?.length)*0.4)))
+      lessons.push('A limited share of members listed in our report scored points. Review deployment and energy readiness.');
+    if(outcome==='Lost')lessons.push('Review our manual assignments against confirmed matchup evidence before the next ranked war.');
+    if(!ourReport||!enemyReport)lessons.push('Detailed player scorecards are not available yet. Refresh Past wars for an upgraded debrief.');
+    if(!ownObserved.checks&&!enemyObserved.checks)lessons.push('No online/travel telemetry was collected during this war; historical behaviour is unknown.');
+    if(!pace?.measurable)lessons.push('No reliable timed scoring trend was observed; final score alone cannot establish momentum changes.');
+    return {id:positive(w.id),start:n(w.start),end:n(w.end),ourId,enemyId,enemyName:String(theirs.name||''),
+      ourScore:officialNumber(ours.score),enemyScore:officialNumber(theirs.score),outcome,detail:Boolean(ourReport&&enemyReport),
+      ownContributors:ownContributors.slice(0,12),enemyContributors:enemyContributors.slice(0,12),
+      ownCount:ownContributors.length,enemyCount:enemyContributors.length,
+      ownTop3Pct:oursTop3Pct,enemyTop3Pct,ownSamples:ownObserved.checks,enemySamples:enemyObserved.checks,
+      ourOnlinePct:ownObserved.onlinePct,enemyOnlinePct:enemyObserved.onlinePct,
+      enemyTravelPct:enemyObserved.awayPct,paceSamples:pace?.samples||0,
+      lessons,computedAt:Date.now()};
+  }
+  function buildAfterActions(){
+    const wars=(state.data.ourWars||[]).filter(w=>n(w.end)).slice()
+      .sort((a,b)=>n(b.end)-n(a.end)).slice(0,20);
+    for(const w of wars){
+      const summary=makeAfterAction(w);
+      if(!summary)continue;
+      const key=String(w.id),prior=state.data.afterActions[key];
+      const pending=positive(state.data.meta.pendingAfterAction)===positive(w.id);
+      state.data.afterActions[key]={...summary,reviewed:Boolean(prior?.reviewed),
+        newFromObservedWar:Boolean(prior?.newFromObservedWar||pending),
+        firstSeen:prior?.firstSeen||Date.now()};
+      if(pending)state.data.meta.pendingAfterAction=0;
+    }
+    const keep=new Set(wars.map(w=>String(w.id)));
+    for(const id of Object.keys(state.data.afterActions))if(!keep.has(id))delete state.data.afterActions[id];
+  }
+  function afterActionText(x){
+    return 'War-TornStaxx after-action | War #'+x.id+'\n'+
+      'Result: '+x.outcome+' | Us '+(x.ourScore??'unknown')+' / Opponent '+(x.enemyScore??'unknown')+
+      ' | Opponent faction #'+x.enemyId+'\n'+
+      'Detailed report: '+(x.detail?'available':'awaiting')+
+      ' | Our recorded scorers: '+x.ownCount+' | Enemy scorers: '+x.enemyCount+'\n'+
+      'Opponent top-three recorded share: '+(x.enemyTop3Pct===null?'unknown':x.enemyTop3Pct+'%')+'\n'+
+      'Observed our online: '+(x.ourOnlinePct===null?'unknown':x.ourOnlinePct+'%')+
+      ' | Enemy travel: '+(x.enemyTravelPct===null?'unknown':x.enemyTravelPct+'%')+'\n'+
+      'Review:\n'+x.lessons.map((z,i)=>(i+1)+'. '+z).join('\n')+'\n'+
+      'Sources: official completed-war results and optional local foreground observations. No gameplay actions were performed.';
   }
   function warContributionIntel(){
     const last=latestFinished('enemies');
