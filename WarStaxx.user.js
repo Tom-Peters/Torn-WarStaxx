@@ -2066,6 +2066,129 @@
     setTimeout(()=>{if(node.isConnected)node.style.outline=old;},5000);
     if(info)info.textContent='Located. Tap Torn native Use yourself. Check blood compatibility first.';
   }
+
+  // The shared service holds ONLY faction orders and policy. Torn keys, spies, notes,
+  // FFScouter credentials and personal activity never appear in this payload.
+  function sharedScope(){
+    const faction=positive(cfg.ourId),war=positive(state.data.war?.id);
+    return faction&&war?{faction,war}:null;
+  }
+  function sharedEndpoint(){
+    if(!cfg.shared?.enabled||!cfg.shared.endpoint||!cfg.shared.token)return '';
+    try{
+      const url=new URL(String(cfg.shared.endpoint).trim());
+      if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash)return '';
+      return url.href.replace(/\/+$/,'');
+    }catch(_){return '';}
+  }
+  function sharedPayload(){
+    return {assignments:{...cfg.assignments},blackSkulls:Object.fromEntries(
+      Object.entries(cfg.blackSkulls).filter(([,yes])=>yes===true)),
+      hitterRisk:Object.fromEntries(Object.entries(cfg.hitterRisk).map(([id,x])=>
+        [id,{mode:hitterRisk(id).mode}])),
+      controlAssignments:{...(cfg.controlAssignments[currentPlanKey()]||{})}};
+  }
+  function sharedHasLocalOrders(){
+    return Boolean(Object.keys(cfg.assignments).length||
+      Object.values(cfg.blackSkulls).some(Boolean)||Object.keys(cfg.hitterRisk).length||
+      Object.keys(cfg.controlAssignments[currentPlanKey()]||{}).length);
+  }
+  function sharedResetScope(){
+    const scope=sharedScope();if(!scope)return;
+    const value=scope.faction+':'+scope.war;
+    if(cfg.shared.scope===value)return;
+    cfg.shared.scope=value;cfg.shared.revision=0;cfg.shared.localDirty=false;
+    state.sharedRevision=0;state.sharedSyncAt=0;state.sharedError='';
+    saveCfg();
+  }
+  async function sharedRequest(method,revision,payload){
+    const base=sharedEndpoint(),scope=sharedScope();
+    if(!base||!scope)throw new Error('Shared orders require HTTPS endpoint, token, faction and active war');
+    const url=base+'/v1/factions/'+scope.faction+'/wars/'+scope.war+'/orders';
+    const headers={'Authorization':'Bearer '+String(cfg.shared.token),
+      'Accept':'application/json'};
+    if(method==='PUT'){headers['Content-Type']='application/json';
+      headers['If-Match']=String(revision);}
+    // Deliberately uses CORS fetch: never sends the Torn API key or credentials.
+    const response=await fetch(url,{method,mode:'cors',credentials:'omit',cache:'no-store',
+      headers,...(method==='PUT'?{body:JSON.stringify({data:payload})}:{})});
+    let result;try{result=await response.json();}catch(_){result={error:'Invalid server response'};}
+    return {ok:response.ok,status:response.status,result};
+  }
+  function applySharedOrders(data){
+    if(!data||typeof data!=='object')return false;
+    const maps=['assignments','blackSkulls','hitterRisk','controlAssignments'];
+    if(maps.some(k=>!data[k]||typeof data[k]!=='object'||Array.isArray(data[k])))return false;
+    // Only share allowed namespaces; protect against prototype-pollution keys.
+    const positiveMap=value=>Object.fromEntries(Object.entries(value)
+      .filter(([id])=>/^[1-9][0-9]{0,9}$/.test(id)));
+    cfg.assignments=Object.fromEntries(Object.entries(positiveMap(data.assignments))
+      .map(([k,v])=>[k,positive(v)]).filter(([,v])=>v>0));
+    if(positive(cfg.enemyId))cfg.ordersByEnemy[String(cfg.enemyId)]={...cfg.assignments};
+    cfg.blackSkulls=Object.fromEntries(Object.entries(positiveMap(data.blackSkulls))
+      .filter(([,v])=>v===true));
+    cfg.hitterRisk=Object.fromEntries(Object.entries(positiveMap(data.hitterRisk))
+      .filter(([,v])=>v&&['safe','balanced','aggressive'].includes(v.mode))
+      .map(([id,v])=>[id,{mode:v.mode}]));
+    cfg.controlAssignments[currentPlanKey()]=Object.fromEntries(
+      Object.entries(positiveMap(data.controlAssignments)).map(([k,v])=>[k,positive(v)])
+        .filter(([,v])=>v>0));
+    saveCfg();return true;
+  }
+  async function sharedPull(discardLocal=false){
+    if(state.sharedBusy||!sharedEndpoint()||!sharedScope()||document.hidden)return;
+    if(cfg.shared.localDirty&&!discardLocal){
+      state.sharedError='Unpublished local orders: publish, or choose Discard local and pull.';
+      return;
+    }
+    if(!discardLocal&&Date.now()-n(state.sharedSyncAt)<75*1000)return;
+    sharedResetScope();state.sharedBusy=true;
+    try{
+      const response=await sharedRequest('GET');
+      if(!response.ok)throw new Error('Shared GET '+response.status+': '+String(response.result.error||'denied'));
+      const remote=response.result;
+      if(remote.faction!==positive(cfg.ourId)||remote.war!==positive(state.data.war?.id))
+        throw new Error('Wrong faction or war in shared response');
+      if(remote.data){
+        if(!discardLocal&&n(cfg.shared.revision)===0&&sharedHasLocalOrders()){
+          state.sharedError='Local orders already exist. Publish local as officer or choose Discard local and pull.';
+          state.sharedRevision=0;state.sharedSyncAt=Date.now();return;
+        }
+        if(!applySharedOrders(remote.data))throw new Error('Invalid shared orders schema');
+      }
+      cfg.shared.revision=positive(remote.revision)||0;cfg.shared.localDirty=false;
+      state.sharedRevision=cfg.shared.revision;state.sharedSyncAt=Date.now();
+      state.sharedError='';saveCfg();publish();render();
+    }catch(e){state.sharedError=String(e.message||e).slice(0,160);render();}
+    finally{state.sharedBusy=false;}
+  }
+  async function sharedPush(){
+    if(state.sharedBusy||!sharedEndpoint()||!sharedScope()||!cfg.shared.canWrite||
+      document.hidden)return;
+    sharedResetScope();state.sharedBusy=true;
+    try{
+      const scope=sharedScope(),before=sharedPayload(),
+        response=await sharedRequest('PUT',n(cfg.shared.revision),before);
+      if(response.status===409){
+        state.sharedError='CONFLICT: a newer shared plan exists. Review before discarding or reapplying local changes.';
+        cfg.shared.localDirty=true;saveCfg();render();return;
+      }
+      if(!response.ok)throw new Error('Shared PUT '+response.status+': '+String(response.result.error||'denied'));
+      if(response.result.faction!==scope.faction||response.result.war!==scope.war)
+        throw new Error('Shared response scope mismatch');
+      cfg.shared.revision=positive(response.result.revision);cfg.shared.localDirty=false;
+      state.sharedRevision=cfg.shared.revision;state.sharedSyncAt=Date.now();state.sharedError='';
+      saveCfg();publish();render();
+    }catch(e){state.sharedError=String(e.message||e).slice(0,160);render();}
+    finally{state.sharedBusy=false;}
+  }
+  function markSharedDirty(){
+    if(!cfg.shared?.enabled||!cfg.shared?.canWrite)return;
+    cfg.shared.localDirty=true;saveCfg();
+    if(state.sharedPushTimer)clearTimeout(state.sharedPushTimer);
+    state.sharedPushTimer=setTimeout(()=>{if(!document.hidden)sharedPush();},1500);
+  }
+
   function warQuick(action){
     const self=ourWarReadiness();
     if(action==='compact'){
