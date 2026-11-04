@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.2.0
+// @version      1.3.0
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -183,10 +183,10 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.2.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.3.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
-  const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Leader command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
+  const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
   const $=(s,root=document)=>root.querySelector(s);
   const $$=(s,root=document)=>Array.from(root.querySelectorAll(s));
   const n=v=>Number.isFinite(Number(v))?Number(v):0;
@@ -199,7 +199,7 @@
   const link=id=>'https://www.torn.com/profiles.php?XID='+positive(id);
   const attackLink=id=>'https://www.torn.com/loader.php?sid=attack&user2ID='+positive(id);
   const apiKeyPda=typeof window.PDA_APIKEY==='string'?window.PDA_APIKEY:'###PDA-APIKEY###';
-  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},controlAssignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,warStripCompact:false,priorityNotifications:true,hitterRisk:{},shared:{enabled:false,endpoint:'',token:'',canWrite:false},hidden:false};
+  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},controlAssignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,warStripCompact:false,priorityNotifications:true,hitterRisk:{},heavyPolicy:{mode:'percent',percent:40,minBss:0},shared:{enabled:false,endpoint:'',token:'',canWrite:false},hidden:false};
   const cfg=Object.assign({},defaults,safeRead(CONFIG,{}));
   cfg.assignments=cfg.assignments&&typeof cfg.assignments==='object'?cfg.assignments:{};
   cfg.ordersByEnemy=cfg.ordersByEnemy&&typeof cfg.ordersByEnemy==='object'?cfg.ordersByEnemy:{};
@@ -216,6 +216,8 @@
   cfg.leaderNotes=cfg.leaderNotes&&typeof cfg.leaderNotes==='object'?cfg.leaderNotes:{};
   cfg.manualReadiness=cfg.manualReadiness&&typeof cfg.manualReadiness==='object'?cfg.manualReadiness:{};
   cfg.hitterRisk=cfg.hitterRisk&&typeof cfg.hitterRisk==='object'?cfg.hitterRisk:{};
+  cfg.heavyPolicy=Object.assign({mode:'percent',percent:40,minBss:0},
+    cfg.heavyPolicy&&typeof cfg.heavyPolicy==='object'?cfg.heavyPolicy:{});
   cfg.shared=Object.assign({enabled:false,endpoint:'',token:'',canWrite:false},
     cfg.shared&&typeof cfg.shared==='object'?cfg.shared:{});
   const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},factionBasic:{},publicIntel:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},scoreTimelines:{},warTimelines:{},afterActions:{},ownerReadiness:{},availabilityEvents:{},chain:{},sampleCount:0});
@@ -1146,19 +1148,30 @@
       return {value:third.bss,source:'Fresh FFScouter public BSS estimate',verified:false};
     return {value:null,source:'Unknown - obtain spy or enable FFScouter',verified:false};
   }
-  // Stable buckets across changing enemy hospital status: toughest ~40% of
-  // KNOWN enemy BSS go to Black Skulls. Unclassified targets need scouting.
+  // Skull Capo can choose percent-of-known-opponents or an absolute BSS threshold.
+  // Never label a missing estimate as a weak opponent or shuffle by hospital state.
+  function heavyRule(input=cfg.heavyPolicy){
+    const mode=input?.mode==='min-bss'?'min-bss':'percent',
+      percentage=Number(input?.percent),
+      threshold=Number(input?.minBss);
+    return {mode,percent:Number.isFinite(percentage)?
+        Math.max(5,Math.min(100,Math.round(percentage))):40,
+      minBss:Number.isFinite(threshold)&&threshold>=0?
+        Math.min(1e15,threshold):0};
+  }
   function enemyRoleBands(){
-    const ranked=state.data.enemies.map(enemy=>({
+    const rule=heavyRule(),ranked=state.data.enemies.map(enemy=>({
       enemy,...enemyBattleEstimate(enemy)
     })).filter(x=>x.value!==null).sort((a,b)=>b.value-a.value||
       n(b.enemy.level)-n(a.enemy.level)||a.enemy.id-b.enemy.id);
-    const heavyCount=ranked.length?Math.max(1,Math.ceil(ranked.length*0.40)):0,
+    const heavyCount=rule.mode==='percent'?
+      (ranked.length?Math.max(1,Math.ceil(ranked.length*rule.percent/100)):0):
+      ranked.filter(x=>x.value>=rule.minBss).length,
       heavy=new Set(ranked.slice(0,heavyCount).map(x=>x.enemy.id)),
       regular=new Set(ranked.slice(heavyCount).map(x=>x.enemy.id));
     return {heavy,regular,heavyCount,regularCount:regular.size,
       known:ranked.length,unknown:state.data.enemies.length-ranked.length,
-      threshold:ranked[heavyCount-1]?.value??null,ranked};
+      threshold:ranked[heavyCount-1]?.value??null,ranked,rule};
   }
   function enemyRole(enemy,band=enemyRoleBands()){
     if(!enemy)return 'unknown';
