@@ -1,5 +1,52 @@
 > **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v1.0.0). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
 
+## v1.1.0 - Adaptive combat learning, Black Skulls risk, chain and shared war orders (4 November 2026)
+
+Install / update at the **existing Torn PDA URL**:
+https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js
+
+### 1. Learned ranked-war efficiency with evidence gates
+
+- Rank opponents by **predicted respect per standard 25-energy attack**, not their level or headline battle stats.
+- Use Torn's revised level-based base-respect formula, manual-spy-based FF model, and the locally observed same-war faction attack log when the API key has permission and **Read faction attacks** is enabled.
+- Blend recent attack results with the model (up to eight usable observations). Ordinary chain-scale respect is normalised, fixed chain milestone bonuses excluded, and unusual retaliation, group, Warlord, overseas and mugging effects excluded where identified. Records can be incomplete.
+- Require fresh own/enemy rosters, manually verified comparable battle stats and a favourable matchup; known losses and assignment conflicts are excluded. FFScouter estimates alone are not proof of safe fights. The HIT button **opens Torn's attack page only**.
+
+### 2. Individual Black Skulls risk profiles
+
+The new selector in the **Black Skulls** tab supports:
+
+- **Safe:** opponent BSS/own BSS <= 0.55 and at least one recorded winning encounter.
+- **Balanced:** opponent BSS/own BSS <= 0.70 (default).
+- **Aggressive:** opponent BSS/own BSS <= 0.78, permitting evidence-backed "Possible" tier targets.
+
+These are deliberately conservative **planning thresholds**, not empirical probabilities of winning. A missing or stale spy, loss evidence, assignment collision or target not Okay still prevents one-click HIT suggestions. Risk selections are local unless shared-orders sync is configured.
+
+### 3. Live chain control
+
+Fetches the **official faction/{id}/chain** selection during foreground refreshes. Shows chain count, API modifier, a countdown derived from the observed Torn timeout, next milestones (10, 25, 50, 100 and upward) and hits remaining. The War Room and Black Skulls view show the chain; the on-page bar also displays it. Alerts highlight imminent chain expiry and bonus milestones. This is a **sampled timer** rather than a realtime server push. Check Torn before committing energy.
+
+### 4. Optional, real cross-device faction orders
+
+A runnable Cloudflare Worker + D1 backend lives in [shared-worker](shared-worker/README.md). The Worker is **not deployed just by merging scripts into GitHub**.
+
+A faction officer deploys it, sets a required one-faction ID, and chooses separate strong read and write secrets. In **WarStaxx > Settings > Shared faction war orders**, each member enters the HTTPS base URL and their read token; officers can select Can publish with the write token. While Torn PDA is in the foreground, reader devices automatically poll remote orders. Eligible writer edits publish after a short debounce. Concurrent changes use a revision check; HTTP 409 produces a clear conflict rather than silently replacing newer orders.
+
+Only four selected kinds of data are shared: manual target assignments, Black Skulls membership, per-member risk modes and hospital watchers. Torn API keys, FFScouter credentials, manual spies, notes, player activity, and medical readings are never put in the sync payload. Local data isn't silently discarded when first connecting; the user explicitly chooses to publish their existing orders or replace them with shared ones. **The service is opt-in and disabled by default**. A device with no backend remains completely functional.
+
+### 5. Post-war performance report automatically compiled on next foreground refresh
+
+When the Torn API reports a completed ranked war, WarStaxx saves a debrief with final official score, wins/losses, individual contributions and attack counts, Black Skulls comparisons, available sampled opponent activity, pacing and tactical lessons. With optional faction attack-history permission, it adds captured attempts, positive-respect hits, captured respect per **estimated** 25 E per attack, a hitter breakdown, best observed opponent targets and maximum **observed** chain count.
+
+Official member points divided by reported attacks and estimated energy are labelled **proxies**, not true energy logs. Device-limited attack feeds can omit events. The report can be copied as text, reviewed and revisited. End-of-war detection runs on subsequent visible app refreshes, not while the user's device is closed.
+
+### Compatibility and verification
+
+- Script identity, raw installer URL, configuration keys and TornStaxx hub event integration remain unchanged; original spies, assignments and saved observations are retained.
+- Script source uses ASCII only for Torn PDA parser compatibility; no automatic attacks, healing, flights or medical item use.
+- Automated tests in **tests/war-v11.test.mjs** supplement the historical regression suite for chain parsing, risk gates, hit-learning treatment, shared-data privacy and post-war analysis.
+- Live Torn PDA WebView behaviour, faction API permissions and a deployed Cloudflare Worker need testing in the user's actual game/browser environment. Source checks do **not** constitute live multiplayer end-to-end validation.
+
 ## v1.0.0 - Adaptive live war bar, efficient hits, defensive windows and Black Skulls (4 November 2026)
 
 **Unchanged Torn PDA URL:** https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js
