@@ -777,6 +777,18 @@
     '#warstaxx-root .ws-note{border-left:3px solid #54d7fa;background:#0c2f4f;padding:10px;border-radius:6px;margin:9px 0}',
     '#warstaxx-root .ws-warn{border-left-color:#ff8094}#warstaxx-root .ws-small{font-size:11px;color:#a8c4d7}',
     '#warstaxx-root .ws-pct{height:8px;background:#132a44;border-radius:8px;overflow:hidden;margin:9px 0}#warstaxx-root .ws-pct i{display:block;height:100%;background:#2eafd6}',
+    '#warstaxx-root .ws-stat-action{display:flex;flex-direction:column;align-items:flex-start;text-align:left;color:#e5f5ff;gap:4px;min-height:106px;width:100%;cursor:pointer}',
+    '#warstaxx-root .ws-stat-action:active{background:#15436b}#warstaxx-root .ws-stat-title{color:#acd7ec;font-weight:700;font-size:12px}#warstaxx-root .ws-stat-link{color:#63d9f6;font-size:11px;margin-top:auto}',
+    '#warstaxx-root .ws-lead{padding:14px;background:linear-gradient(110deg,#103e63,#0b2948);border:1px solid #397a9e;border-radius:12px;margin-bottom:10px}',
+    '#warstaxx-root .ws-lead h2{font-size:18px;margin:0 0 8px}#warstaxx-root .ws-score{font-size:22px;font-weight:800}',
+    '#warstaxx-root .ws-table-wrap button.ws-inline{border:0;background:none;color:#8ae3ff;padding:2px;min-height:28px;text-align:left;font-weight:700;text-decoration:underline}',
+    '#warstaxx-root .ws-hour-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:3px;margin:8px 0}#warstaxx-root .ws-hour{border:1px solid #426781;border-radius:5px;text-align:center;padding:5px 1px;background:#103652}',
+    '#warstaxx-root .ws-hour.positive{background:#125d61;border-color:#4d9c99}#warstaxx-root .ws-hour.negative{background:#633144;border-color:#a26b7c}#warstaxx-root .ws-hour.unknown{opacity:.5;background:#1e3249}',
+    '#warstaxx-root .ws-hour b{display:block;font-size:11px}#warstaxx-root .ws-hour small{font-size:9px}',
+    '#warstaxx-root .ws-data-label{color:#77dfef;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.8px}#warstaxx-root .ws-inline-metrics{display:flex;flex-wrap:wrap;gap:6px}',
+    '#warstaxx-root .ws-inline-metrics span{border:1px solid #315f7e;border-radius:7px;background:#0d3452;padding:5px 9px;color:#bde5f6}',
+    '#warstaxx-root .ws-compact-table{min-width:340px}#warstaxx-root .ws-focus-row{cursor:pointer}#warstaxx-root .ws-btn{min-height:36px}',
+    '@media(max-width:640px){#warstaxx-root .ws-panel{height:100dvh;bottom:auto}#warstaxx-root .ws-hour-grid{grid-template-columns:repeat(8,minmax(0,1fr))}#warstaxx-root .ws-stat-action{min-height:112px}#warstaxx-root .ws-lead{padding:10px}#warstaxx-root .ws-score{font-size:19px}}',
     '@media(max-width:640px){#warstaxx-root .ws-panel{top:0;bottom:0;width:100%;border-radius:0}#warstaxx-root .ws-head{padding:8px}#warstaxx-root .ws-head strong{font-size:18px}#warstaxx-root .ws-head small{font-size:8px}#warstaxx-root .ws-content{padding:8px}#warstaxx-root .ws-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}#warstaxx-root .ws-card{padding:9px}#warstaxx-root .ws-number{font-size:21px}}'
   ].join('');
   function card(title,body){return '<section class="ws-card"><h2>'+esc(title)+'</h2>'+body+'</section>';}
