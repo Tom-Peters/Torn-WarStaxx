@@ -7,6 +7,7 @@
 ### Interactive War Room and Enemy Intel
 - War Room now links directly into live opponent roster, last official ranked-war score, faction win/loss history, top recorded scorers, current online/last-day activity, travel and hospital states, tactical assignments, and the time-comparison screen.
 - The **Enemy intel** screen aggregates the opponent's latest result and previous official scorelines, win/decided total, mean recorded score, live roster and per-member known prior-war scores.
+- Opponent and friendly **faction basics** now show public respect, ranked-war division/rank, lifetime ranked-war wins, roster capacity, leadership and best chain (cached at sensible intervals). **Deep scan 20 wars** increases both history windows to 20 and starts a bounded refresh.
 - Selecting a historical war opens a **full official scorecard**: scores, attacks, winner, rank movement, prizes where returned, and every player in each faction with their recorded score, attacks and score contribution percentage. Missing reports can be requested individually without waiting for the next backfill.
 - Players in rosters, matchups, scorecards, activity summaries and orders link to a **player intelligence dossier**. It displays the history available for that player, status, recent action, level, observed online/travel rates (including explicitly sampled in-war travel), manual spy data and local notes. Optional public Torn profile/personal-stat lookup is performed only when the player presses the button; unavailable data stays labelled unknown.
 
