@@ -1,4 +1,20 @@
-> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v0.8.0). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v0.9.0). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+
+## v0.9.0 - Live war command screen and quick manual action shortcuts (4 November 2026)
+
+**Permanent Torn PDA installer:** https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js
+
+During an officially detected *started* ranked war (recent Torn observation less than ten minutes old), WarStaxx inserts a compact command strip at the top of the Torn content page. The default War Room switches from long-form intelligence to a compact tactical dashboard. Outside active wars, the existing scouting homepage remains.
+
+- **TURTLE:** opens the Torn Items page with Find Ipecac / Find blood bags buttons; these highlight items already visible in the player's inventory. The player verifies blood-type compatibility and taps Torn's own Use button. If already hospitalised, TURTLE opens defensive planning instead.
+- **HIT:** if in hospital, opens the manual Heal items flow, so the user can press HIT again afterwards. With current status Okay and enough known energy, chooses the strongest available enemy supported by fresh comparative manual spy evidence, excluding unavailable/conflicted targets and known losses. Attack navigation never starts the fight. If own status is unknown, energy is known to be below 25 E, or there is no verified favourable match, Hit stops and explains why instead of guessing.
+- **HEAL:** navigates to Items with Find Blood bags, Morphine and First Aid controls. Nothing consumes a medical item automatically. **WAR ROOM**, **MORE STATS** and **Minimise** keep key navigation close to hand.
+- The live War Room prioritises official score/net score, current owner status, energy, best evidenced target, opponent Okay/hospital/active counts, observed enemy scoring pace, and the three highest-priority current alerts. **Show other stats** reveals all previous detailed tabs (FF, spies, threats, history, hospital control, turtling, Black Skulls and more), without deleting data.
+- A future war, completed war or stale war API observation will not trigger the live shortcut strip. The bar is embedded rather than floating and shares the existing TornStaxx hub. No extra script or new installer.
+
+The script does not initiate fights, use items, infer blood type, request unvisited Torn pages, or modify a member's status. Find item buttons work on the foreground inventory; if the item isn't found, select Torn's Medical category or check your stock.
+
+Validation: tests/war-v09.test.mjs covers active-war freshness, strongest verified target, hospital-to-heal and manual-item safeguards. Version-pinned tests and package metadata updated. Code-level validation does not replace Torn PDA testing.
 
 ## v0.8.0 - Ranked-war command, Black Skulls performance, hospital control and turtling (4 November 2026)
 
