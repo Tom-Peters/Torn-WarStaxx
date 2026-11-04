@@ -6,11 +6,12 @@ const code=readFileSync(new URL('../WarStaxx.user.js',import.meta.url),'utf8');
 const marker="(function () {\n  'use strict';\n  if (typeof document === 'undefined'";
 const appStart=code.lastIndexOf(marker);
 class FakeElement {
-  constructor(tag){this.tagName=tag;this.style={};this.listeners={};this.attributes={};this.nodes={};this.isConnected=false;this.innerHTML='';this.textContent='';this.scrollTop=0;this.firstChild=null;}
+  constructor(tag){this.tagName=tag;this.style={};this.listeners={};this.attributes={};this.nodes={};this.isConnected=false;this.innerHTML='';this.textContent='';this.scrollTop=0;this.firstChild=null;this.dataset={};}
   appendChild(node){node.isConnected=true;this.child=node;return node;}
   append(node){return this.appendChild(node);}
   insertBefore(node){node.isConnected=true;this.child=node;return node;}
   addEventListener(name,fn){this.listeners[name]=fn;}
+  click(){this.listeners.click?.({target:this,preventDefault:()=>{}});}
   setAttribute(name,value){this.attributes[name]=value;}
   closest(){return null;}
   querySelector(sel){
@@ -65,4 +66,17 @@ test('No extra floating button on normal Torn page; StaxxHub registration still 
  assert.equal(host.child ?? null,null);
  assert.ok(body.child && body.child.id==='warstaxx-root');
  assert.ok(events.some(e=>e.type==='staxx:register'&&e.detail.id==='war'));
+});
+
+
+test('DOM click launch bridge opens the War interface without CustomEvent communication',()=>{
+ const {body,events}=start('/gym.php');
+ const bridge=body.child.child;
+ assert.ok(bridge && bridge.id==='warstaxx-dom-open','real DOM bridge is mounted inside War root');
+ assert.equal(body.child.style.display,undefined,'War panel starts closed');
+ bridge.dataset.section='overview';
+ bridge.click();
+ assert.equal(body.child.style.display,'block','DOM .click() opens War modal even without hub events');
+ assert.ok(events.some(e=>e.type==='staxx:panel'&&e.detail.id==='war'&&e.detail.open),
+  'War acknowledges that its visible panel opened');
 });
