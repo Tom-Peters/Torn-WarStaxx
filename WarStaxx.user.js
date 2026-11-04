@@ -1512,6 +1512,23 @@
           '<div class="ws-toolbar">'+b('See all watched','watched-list')+'</div>':
         empty('Tap Watch beside any enemy to pin them here across refreshes and return to their dossier quickly.'));
   }
+  function reliabilityPanel(){
+    const available=state.data.ours.filter(p=>Boolean(cfg.blackSkulls[p.id])&&memberState(p)==='okay');
+    const ranked=available.flatMap(p=>personalShortlist(p,6).filter(x=>x.tier===0).map(x=>({...x,hitter:p})))
+      .sort((a,b)=>b.encounters.wins-a.encounters.wins||b.score-a.score||a.enemy.id-b.enemy.id)
+      .slice(0,8);
+    return card('Black Skulls | most reliable evidenced matchups',
+      '<p>Ranked by current favourable manual battle-stat evidence and recorded wins for the selected hitter. Unknown and stale spies never appear as confirmed candidates. FFScouter remains beside each opponent but does not by itself establish reliability.</p>'+
+      (ranked.length?ranked.map(x=>'<div class="ws-row"><span>'+
+        infoButton(x.hitter.name,x.hitter.id)+' vs '+infoButton(x.enemy.name,x.enemy.id)+' '+ffBadge(x.enemy.id)+
+        '<br><small>'+esc(x.reliability)+' | Previous recorded wins '+x.encounters.wins+
+        ' | Modelled hitter FF '+(x.ffForHitter===null?'unknown':x.ffForHitter.toFixed(2)+'x')+
+        ' | Enemy status '+esc(x.enemy.status)+'</small></span>'+
+        b('Save manual assignment','assign:'+x.hitter.id+':'+x.enemy.id)+'</div>').join(''):
+        empty('No confirmed favourable Black Skulls matchups yet. Add fresh comparable manual spies for both sides; third-party estimates alone are insufficient.'))+
+      '<div class="ws-toolbar">'+b('Every hitter shortlist','tab:matchups')+
+      b('Leadership board','tab:command')+'</div>');
+  }
   function ffReviewShortlist(){
     const rows=state.data.enemies.map(p=>({p,intel:ffLabel(p.id)}))
       .filter(x=>x.intel.source==='estimate'&&memberState(x.p)==='okay')
@@ -1807,7 +1824,7 @@
           '</select><br><small>Leadership entry only</small></td>'+
           '<td data-label="Personal option">'+(best?infoButton(best.enemy.name,best.enemy.id)+' '+ffBadge(best.enemy.id)+
             '<br>'+pill(best.category)+
-            '<br><small>'+esc(best.reason)+'</small>':'No opponents loaded')+'</td>'+
+            '<br><small>'+esc(best.reliability)+' | '+esc(best.reason)+'</small>':'No opponents loaded')+'</td>'+
           '<td data-label="Actions">'+b('Personal shortlist','hitter:'+member.id)+
           (target?' '+a('Attack (manual)',attackLink(target.id)):'')+'</td></tr>';
       }).join('')+'</tbody></table></div>':empty('No members match the selected roster filter.'))+
@@ -1872,7 +1889,7 @@
         '<p class="ws-small">Concentration is based only on the latest stored official report, not a prediction.</p>'+ 
         b('Full player contribution breakdown','war:'+contribution.id));
     }
-    html+=watchlistPanel()+ffReviewShortlist()+ffStatusPanel();
+    html+=watchlistPanel()+reliabilityPanel()+ffStatusPanel();
     const leaders=perMemberRows('enemies',5).filter(x=>x.last!==null);
     html+=card('Enemy last-war top scorers',leaders.length?
       '<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Enemy</th><th>Latest known war score</th><th>Action</th></tr></thead><tbody>'+
@@ -2183,7 +2200,9 @@
         return '<tr><td>'+infoButton(x.enemy.name,x.enemy.id)+' '+ffBadge(x.enemy.id)+
           '<br><small>Lv '+fmt(x.enemy.level)+' | #'+x.enemy.id+'</small></td>'+
           '<td>'+pill(x.category,x.tier===0?'good':x.tier===4?'bad':'')+
-          '<br><small>'+esc(x.reason)+(x.conflict?' | Already assigned elsewhere':'')+'</small></td>'+
+          '<br><small><b>'+esc(x.reliability)+'</b> | '+esc(x.reason)+
+          ' | Prior recorded wins '+x.encounters.wins+' / losses '+x.encounters.losses+
+          (x.conflict?' | Already assigned elsewhere':'')+'</small></td>'+
           '<td>'+(x.ffForHitter===null?'Unknown':x.ffForHitter.toFixed(2)+'x modelled')+
           '<br><small>'+evidence+
           (actual.avg!==null?'<br>Observed for this hitter '+actual.avg.toFixed(2)+'x ('+actual.count+')':'')+
