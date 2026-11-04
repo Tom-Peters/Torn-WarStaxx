@@ -715,7 +715,7 @@
     }else if(externalOnly&&m.known&&m.ratio<0.8){
       category='Verify estimate';reason='FFScouter BSS model; scout before hit';tier=2;
     }else if(m.known){category='Risky';reason='Close or unfavourable modelled battle score';tier=4;}
-    const threat=official===null?null:threatRating(enemy).score;
+    const threat=null; // History influences ranking below; avoid quadratic roster-wide threat recalculation.
     const statusBonus=isOnline(enemy)?5:0;
     const points=official===null?0:Math.min(18,Math.round(Math.log10(official+1)*4));
     const score=Math.max(0,100-tier*18+points+statusBonus-(conflict?12:0));
@@ -744,7 +744,7 @@
     const ours=state.data.ours,enemy=state.data.enemies;
     const skulls=ours.filter(p=>Boolean(cfg.blackSkulls[p.id]));
     const ready=ours.filter(p=>memberState(p)==='okay'),skullReady=skulls.filter(p=>memberState(p)==='okay');
-    const manual=ours.filter(p=>positive(cfg.assignments[p.id])).length;
+    const manual=ours.filter(p=>state.data.enemies.some(e=>e.id===positive(cfg.assignments[p.id]))).length;
     const inProgress=ours.filter(p=>['engaged','monitor'].includes(hitterPlanStatus(p.id))).length;
     const conflicts=new Map();
     for(const member of ours){
@@ -2049,9 +2049,11 @@
     const content=$('.ws-content',root);
     const scroll=content.scrollTop;
     const form=state.tab==='settings'?Array.from(content.querySelectorAll('input,select,textarea')).map(x=>({id:x.id,checked:x.checked,value:x.value,type:x.type})):null;
+    const priorLeaderNote=state.tab==='command'&&$('#ws-leader-note',content)?$('#ws-leader-note',content).value:null;
     try{content.innerHTML=state.tab==='targets'&&state.playerOpen?playerIntel(state.chosen):(pages[state.tab]||overview)();}catch(e){content.innerHTML=empty('Render error: '+String(e.message||e));}
     if(form)for(const prior of form){if(!prior.id)continue;const field=content.querySelector('#'+prior.id);
       if(!field)continue;if(prior.type==='checkbox')field.checked=prior.checked;else field.value=prior.value;}
+    if(priorLeaderNote!==null&&$('#ws-leader-note',content))$('#ws-leader-note',content).value=priorLeaderNote;
     content.scrollTop=scroll;
     $('.ws-sync',root).textContent=state.loading?'Checking Torn\u2026':Math.max(n(state.data.updated.enemies),n(state.data.updated.ours))?'Last observation '+age(Math.max(n(state.data.updated.enemies),n(state.data.updated.ours))):'Not connected yet';
     $('.ws-head [data-action="refresh"]',root).disabled=state.loading;
@@ -2087,6 +2089,25 @@
   function close(){state.open=false;render();event('panel',{id:ID,open:false});}
   function handle(action){
     if(action==='refresh'){refresh(true);return;}
+    if(action==='match-more'){state.showAllMatchups=!state.showAllMatchups;render();return;}
+    if(action.startsWith('hitter:')){const id=positive(action.slice(7));if(state.data.ours.some(p=>p.id===id)){state.chosen=id;navigate('matchups');}return;}
+    if(action.startsWith('pace-war:')){state.selectedTimeline=positive(action.slice(9));navigate('pace');return;}
+    if(action.startsWith('timeline-war:')){state.selectedTimeline=positive(action.slice(13));navigate('timeline');return;}
+    if(action==='draft-black'){
+      const drafts=suggestedDraft();
+      for(const x of drafts)if(!positive(cfg.assignments[x.friend.id]))cfg.assignments[x.friend.id]=x.enemy.id;
+      saveCfg();state.error=drafts.length?'Drafted '+drafts.length+' Black Skulls targets locally. Review and confirm each manually.':'No verified unassigned Black Skulls targets; obtain comparable spies first.';render();return;
+    }
+    if(action==='save-leader-note'){
+      const key=positive(state.data.war?.id)||('scout-'+positive(cfg.enemyId));
+      cfg.leaderNotes[key]=String($('#ws-leader-note',root)?.value||'').slice(0,1800);
+      saveCfg();state.error='Local leadership notes saved.';render();return;
+    }
+    if(action==='copy-leader-brief'){
+      const content=leadershipBrief();
+      if(navigator.clipboard?.writeText){navigator.clipboard.writeText(content).then(()=>{state.error='Leadership briefing copied for manual sharing.';render();}).catch(()=>{state.error='Clipboard not permitted; no briefing was sent.';render();});}
+      else{const textArea=document.createElement('textarea');textArea.value=content;textArea.style.cssText='position:fixed;left:-9999px;';document.body.appendChild(textArea);textArea.select();let copied=false;try{copied=document.execCommand('copy');}catch(_){}textArea.remove();state.error=copied?'Leadership briefing copied for manual sharing.':'Clipboard unavailable; no briefing was sent.';render();}return;
+    }
     if(action==='refresh-ff'){manualFFCheck(false);return;}
     if(action==='watched-list'){state.filter='watched';navigate('targets');return;}
     if(action==='check-ff-key'){manualFFCheck(true);return;}
@@ -2193,6 +2214,22 @@
     }
   });
   root.addEventListener('change',e=>{
+    const target=e.target.closest('[data-leader-target]');
+    if(target){const ourId=positive(target.dataset.leaderTarget),enemyId=positive(target.value);
+      if(!state.data.ours.some(p=>p.id===ourId))return;
+      if(enemyId&&state.data.enemies.some(p=>p.id===enemyId))cfg.assignments[ourId]=enemyId;
+      else if(!enemyId)delete cfg.assignments[ourId];
+      else return;
+      saveCfg();state.error=enemyId?'Manual target saved locally; no Torn action performed.':'Manual target cleared.';render();return;
+    }
+    const duty=e.target.closest('[data-leader-duty]');
+    if(duty){const id=positive(duty.dataset.leaderDuty),value=String(duty.value);
+      if(!state.data.ours.some(p=>p.id===id)||!hitterPlanStatuses().some(x=>x[0]===value))return;
+      if(value==='not-set')delete cfg.planStatus[hitterPlanKey(id)];else cfg.planStatus[hitterPlanKey(id)]=value;
+      saveCfg();state.error='Manual duty updated locally; this is not a verified Torn action.';render();return;
+    }
+    if(e.target.id==='ws-leader-filter'){state.leaderFilter=e.target.value;render();return;}
+    if(e.target.id==='ws-hitter-filter'){state.hitterFilter=e.target.value;render();return;}
     if(e.target.id==='ws-friend'){state.chosen=positive(e.target.value);render();}
     if(e.target.id==='ws-sort'){state.sort=e.target.value;render();}
   });
