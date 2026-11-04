@@ -52,8 +52,8 @@ test('installable userscript starts at byte zero with a complete metadata header
 });
 
 
-test('v0.2.3 sideband is restricted to War-TornStaxx and keeps credentials private',()=>{
- assert.match(code,/\/\/ @version\s+0\.2\.3/);
+test('v0.2.4 sideband is restricted to War-TornStaxx and keeps credentials private',()=>{
+ assert.match(code,/\/\/ @version\s+0\.2\.4/);
  assert.match(code,/tornstaxx-war-runtime-v1/);
  assert.match(code,/__tornstaxxBridge:bridge/);
  assert.match(code,/e\.source&&e\.source!==window/);
@@ -75,4 +75,16 @@ test('War exposes a DOM-backed visual-only launch bridge',()=>{
  assert.match(code,/domBridge\.hidden=true/);
  assert.match(code,/domBridge\.addEventListener\('click'/);
  assert.match(code,/root\.appendChild\(domBridge\)/);
+});
+
+
+test('War 0.2.4 writes cross-world DOM startup marker and repairs emergency launcher failures',()=>{
+ assert.match(code,/tornstaxx-war-execution-probe/);
+ assert.match(code,/probe\.dataset\.phase=/);
+ assert.match(code,/probe\.dataset\.version=version/);
+ assert.match(code,/beacon\.dataset\.phase='ready'/);
+ assert.match(code,/beacon\.dataset\.phase='error'/);
+ assert.match(code,/const safeMount=\(\)=>/);
+ assert.match(code,/__TornStaxxFallbackError/);
+ assert.doesNotMatch(code,/GM_setValue\(['\"]tornstaxx-war-execution-probe/);
 });
