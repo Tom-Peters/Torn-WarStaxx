@@ -123,7 +123,7 @@ test('command strip and item shortcuts are manual, PDA parser safe',()=>{
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
   const actionPart=part('  function itemIntent(){','  function statusNote(){');
-  assert.match(actionPart,/async function verifyHealedThenHit\\(/);
+  assert.match(actionPart,/async function verifyHealedThenHit\(/);
   assert.ok(actionPart.includes("await call('/faction/'+cfg.ourId+'/members','ours',0)"),
     'Post-heal HIT must read a fresh official own roster');
   assert.ok(actionPart.includes('state.quickHitPending=true'),
