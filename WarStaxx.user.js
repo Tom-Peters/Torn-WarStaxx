@@ -1556,7 +1556,10 @@
         if(own||enemy)snapshot([...(own?['ours']:[]),...(enemy?['enemies']:[])]);
       }
       await refreshFactionBasics(force);
-      await refreshHistory(force);
+      const pendingReport=positive(state.data.meta?.pendingAfterAction)>0;
+      const urgentReport=pendingReport&&Date.now()-n(state.data.meta.lastDebriefAttempt)>5*MIN;
+      if(urgentReport)state.data.meta.lastDebriefAttempt=Date.now();
+      await refreshHistory(force||urgentReport);
       await refreshAttacks();
       try{
         const chain=await call('/faction/'+cfg.ourId+'/chain','chain',30*1000);
@@ -1756,6 +1759,16 @@
     const enemyTop3Pct=sumAll(enemyContributors)?Math.round(sumTop(enemyContributors)/sumAll(enemyContributors)*100):null;
     const oursTop3Pct=sumAll(ownContributors)?Math.round(sumTop(ownContributors)/sumAll(ownContributors)*100):null;
     const ownObserved=warSamples(w.id,'ours'),enemyObserved=warSamples(w.id,'enemies'),pace=warPace(w.id);
+    const hitEvidence=warAttackInsights(w.id),rows=warAttackRows(w.id).filter(a=>a.side==='ours');
+    const chains=rows.map(a=>officialNumber(a.chain)).filter(v=>v!==null&&v>0);
+    const maxObservedChain=chains.length?Math.max(...chains):null;
+    const targets=Object.values(rows.reduce((db,a)=>{
+      const item=db[a.defender]||(db[a.defender]={
+        id:a.defender,name:a.defenderName||('Player '+a.defender),attacks:0,score:0});
+      item.attacks++;if(n(a.respect)>0)item.score+=n(a.respect);
+      return db;
+    },{})).map(p=>({...p,perEnergy:p.attacks?p.score/(p.attacks*25):null}))
+      .sort((a,b)=>(b.perEnergy??-1)-(a.perEnergy??-1)||b.score-a.score).slice(0,10);
     const outcome=positive(w.winner)?w.winner===ourId?'Won':'Lost':'Undecided';
     const lessons=[];
     if(enemyTop3Pct!==null&&enemyContributors.length>=4&&enemyTop3Pct>=65)
@@ -1770,6 +1783,16 @@
     if(!ourReport||!enemyReport)lessons.push('Detailed player scorecards are not available yet. Refresh Past wars for an upgraded debrief.');
     if(!ownObserved.checks&&!enemyObserved.checks)lessons.push('No online/travel telemetry was collected during this war; historical behaviour is unknown.');
     if(!pace?.measurable)lessons.push('No reliable timed scoring trend was observed; final score alone cannot establish momentum changes.');
+    if(hitEvidence.known){
+      const efficient=hitEvidence.per.filter(p=>p.attacks>=3)
+        .sort((a,b)=>b.respect/b.attacks-a.respect/a.attacks);
+      if(efficient.length)lessons.push('Compare recorded respect per attack: '+
+        efficient[0].name+' led eligible observed hitters. Recorded feed is partial and total energy is estimated.');
+      if(hitEvidence.attempts>=5&&hitEvidence.pointsPerEnergy!==null)
+        lessons.push('Partial attack ledger: '+hitEvidence.attempts+' own attempts, '+
+          hitEvidence.scored+' with positive respect and '+hitEvidence.pointsPerEnergy.toFixed(3)+
+          ' observed respect per estimated energy. Validate against official report.');
+    }
     return {id:positive(w.id),start:n(w.start),end:n(w.end),ourId,enemyId,enemyName:String(theirs.name||''),
       ourScore:officialNumber(ours.score),enemyScore:officialNumber(theirs.score),outcome,detail:Boolean(ourReport&&enemyReport),
       ownContributors:ownContributors.slice(0,12),enemyContributors:enemyContributors.slice(0,12),
@@ -1777,6 +1800,7 @@
       ownTop3Pct:oursTop3Pct,enemyTop3Pct,ownSamples:ownObserved.checks,enemySamples:enemyObserved.checks,
       ourOnlinePct:ownObserved.onlinePct,enemyOnlinePct:enemyObserved.onlinePct,
       enemyTravelPct:enemyObserved.awayPct,paceSamples:pace?.samples||0,
+      hitEvidence,topTargets:targets,maxObservedChain,
       lessons,computedAt:Date.now()};
   }
   function buildAfterActions(){
@@ -1804,6 +1828,13 @@
       'Opponent top-three recorded share: '+(x.enemyTop3Pct===null?'unknown':x.enemyTop3Pct+'%')+'\n'+
       'Observed our online: '+(x.ourOnlinePct===null?'unknown':x.ourOnlinePct+'%')+
       ' | Enemy travel: '+(x.enemyTravelPct===null?'unknown':x.enemyTravelPct+'%')+'\n'+
+      'Sampled attacks: '+(x.hitEvidence?.known?x.hitEvidence.attempts+' captured, '+
+          x.hitEvidence.scored+' scored, respect/E '+(x.hitEvidence.pointsPerEnergy===null?
+          'unknown':x.hitEvidence.pointsPerEnergy.toFixed(3)):'not captured')+'\n'+
+      'Best sampled target: '+(x.topTargets?.length?x.topTargets[0].name+
+          ' ('+x.topTargets[0].score.toFixed(1)+' respect / '+x.topTargets[0].attacks+
+          ' attempts)':'not captured')+'\n'+
+      'Max observed chain: '+(x.maxObservedChain??'unknown')+'\n'+
       'Review:\n'+x.lessons.map((z,i)=>(i+1)+'. '+z).join('\n')+'\n'+
       'Sources: official completed-war results and optional local foreground observations. No gameplay actions were performed.';
   }
@@ -2494,7 +2525,7 @@
       '<p>A debrief is generated locally when a completed ranked war appears in the official history. It improves when Torn returns the detailed scorecard. Activity and scoring trends only appear if this device captured them.</p>'+
       '<div class="ws-toolbar">'+b('Refresh official reports','refresh')+b('Leadership command','tab:command')+
       b('Past wars','tab:history')+'</div></div>';
-    if(!all.length)return html+empty('No finished ranked wars have loaded yet. On the next refresh after a war ends, WarStaxx will build a read-only debrief from the official result and available evidence.');
+    if(!all.length)return html+empty('No finished ranked wars have loaded yet. On the next foreground refresh after a war ends, WarStaxx generates a read-only full performance report from the official result and available evidence.');
     html+=card('War results and analysis status',
       '<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>War</th><th>Result</th><th>Score</th><th>Player report</th><th>Review</th><th>Open</th></tr></thead><tbody>'+
       all.map(x=>'<tr><td>#'+x.id+'<br><small>'+esc(stamp(x.end*1000))+'</small></td>'+
@@ -2534,6 +2565,40 @@
             fmt(p.score)+'</td><td>'+fmt(p.attacks)+'</td><td>'+a('Torn profile',link(p.id))+'</td></tr>').join('')+
           '</tbody></table></div>':empty('Individual contributions not available in the stored Torn report.'));
     html+=table('Our top recorded contributors',r.ownContributors)+table('Opponent top recorded contributors',r.enemyContributors);
+    const attacks=r.hitEvidence||{},hasHits=Boolean(attacks.known);
+    html+=card('Attack efficiency and energy use | partial captured ledger',
+      '<div class="ws-grid">'+
+      stat('Observed own attempts',hasHits?fmt(attacks.attempts):'Unknown',
+        'Partial API feed for the official war window')+
+      stat('Hits producing respect',hasHits?fmt(attacks.scored):'Unknown',
+        'Does not prove every missed API attack was a loss')+
+      stat('Estimated energy spent',hasHits?fmt(attacks.estimatedEnergy)+' E':'Unknown',
+        'Assumes 25 E for each captured attack')+
+      stat('Captured respect / E',hasHits&&attacks.pointsPerEnergy!==null?
+        attacks.pointsPerEnergy.toFixed(3):'Unknown',
+        'Captured respect / estimated energy, not total war points / actual energy')+
+      stat('Highest observed chain',r.maxObservedChain===null?'Unknown':'#'+fmt(r.maxObservedChain),
+        'Only captured chain values, not a complete chain history')+'</div>'+
+      '<p class="ws-small">Final war score and member attack totals above are official where the completed war report is available. '+
+      'The energy calculations below use only matching captured attacks, and are not a full Torn energy ledger.</p>'+
+      (hasHits&&attacks.per.length?'<div class="ws-table-wrap"><table><thead><tr><th>Hitter</th><th>Captured attacks</th><th>Captured respect</th><th>Approx E</th><th>Respect / E</th></tr></thead><tbody>'+
+        attacks.per.slice(0,20).map(p=>'<tr><td>'+infoButton(p.name,p.id)+'</td><td>'+fmt(p.attacks)+'</td>'+
+          '<td>'+fmt(p.respect)+'</td><td>'+fmt(p.estimatedEnergy)+'</td>'+
+          '<td>'+(p.attacks?(p.respect/p.estimatedEnergy).toFixed(3):'Unknown')+'</td></tr>').join('')+
+        '</tbody></table></div>':empty('No same-war own-faction ranked attacks captured by this device.'))+
+      (r.topTargets?.length?'<h3>Most efficient observed enemy targets</h3>'+
+        '<div class="ws-table-wrap"><table><thead><tr><th>Target</th><th>Recorded attempts</th><th>Captured respect</th><th>Respect / E</th></tr></thead><tbody>'+
+        r.topTargets.map(p=>'<tr><td>'+infoButton(p.name,p.id)+'</td><td>'+fmt(p.attacks)+
+          '</td><td>'+fmt(p.score)+'</td><td>'+p.perEnergy.toFixed(3)+'</td></tr>').join('')+
+        '</tbody></table></div>':''));
+    if(r.detail)html+=card('Official points per attack | all available contributors',
+      '<p>The ratio below uses official reported score / official attack count. It is a performance proxy, '+
+      'not an exact energy measurement. Unknown or zero-attack rows are shown as unknown.</p>'+
+      '<div class="ws-table-wrap"><table><thead><tr><th>Contributor</th><th>Points</th><th>Attacks</th><th>Score / attack</th><th>Score / approx E</th></tr></thead><tbody>'+
+      r.ownContributors.map(p=>'<tr><td>'+infoButton(p.name,p.id)+'</td><td>'+fmt(p.score)+
+        '</td><td>'+fmt(p.attacks)+'</td><td>'+(p.attacks?(p.score/p.attacks).toFixed(2):'Unknown')+
+        '</td><td>'+(p.attacks?(p.score/(p.attacks*25)).toFixed(3):'Unknown')+'</td></tr>').join('')+
+      '</tbody></table></div>');
     const skulls=blackSkullScorecards(r.id);
     const scorecard='<p>Official individual score and attack totals are taken from the completed-war report, if available. The comparison is against up to three prior fetched official reports and is not a skill rating. Black Skulls are identified using your CURRENT local tags.</p>'+
       (skulls.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Black Skull</th><th>Official score</th><th>Official attacks</th><th>Faction score share</th><th>Previous-war mean</th><th>Performance review</th></tr></thead><tbody>'+
