@@ -65,7 +65,7 @@ test('hospital hit opens manual medical page; ready hit opens attack link only',
     'const saveCfg=()=>{},render=()=>{},renderWarStrip=()=>{};',
     'const open=d=>{opened=d.section};',
     'const ourWarReadiness=()=>({kind:status,fresh:true,energy:75});',
-    'const strongestVerifiedHit=()=>({player:{id:55}});',
+    'const bestEfficiencyHit=()=>({player:{id:55}});',
     "const attackLink=id=>'https://www.torn.com/loader.php?sid=attack&user2ID='+id;"
   ].join('\n');
   const x=runInNewContext(setup+part('  function itemIntent(){','  function renderWarStrip(force=false){')+
@@ -91,7 +91,7 @@ test('pressing HIT after manual heal rechecks Torn before attacking',async()=>{
     "const location={pathname:'/item.php',assign(v){route=v}};",
     "const sessionStorage={getItem:()=>JSON.stringify({mode:'heal',at:Date.now()}),removeItem(){},setItem(){}};",
     "const ourWarReadiness=()=>({kind:cached,fresh:true,energy:75});",
-    "const strongestVerifiedHit=()=>({player:{id:77}});",
+    "const bestEfficiencyHit=()=>({player:{id:77}});",
     'const rosterFresh=()=>true;',
     "const attackLink=id=>'https://www.torn.com/loader.php?sid=attack&user2ID='+id;",
     "const effectiveKey=()=> 'test-key';",
