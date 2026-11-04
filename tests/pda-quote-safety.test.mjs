@@ -25,7 +25,7 @@ test('Exact full source parses after typographic quote normalisation', () => {
 test('War source stays ASCII-only while JavaScript escapes retain visual glyphs', () => {
   assert.doesNotMatch(source, /[^\x00-\x7f]/,
     'Keep War script entirely ASCII: encode UI symbols as JavaScript Unicode escapes');
-  assert.match(source, /\\u26[0-9a-f]{2}/i, 'Retain UI icon via a JS Unicode escape');
+  assert.match(source, /\\u21bb/i, 'Retain the escaped native refresh icon');
   assert.match(source, /Compare observed online coverage for both factions/);
   assert.match(source, /individual player sleep schedules/);
 });
