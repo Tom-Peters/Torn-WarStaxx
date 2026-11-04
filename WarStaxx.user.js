@@ -212,7 +212,7 @@
   const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},factionBasic:{},publicIntel:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},scoreTimelines:{},warTimelines:{},afterActions:{},ownerReadiness:{},sampleCount:0});
   const state={data:Object.assign(freshData(),safeRead(DATA,{})),open:false,tab:'overview',showMore:false,
     filter:'all',sort:'warScore',search:'',loading:false,ffLoading:false,spinner:'',error:'',scanning:false,alerts:[],chosen:0,
-    lastRefresh:0,historicalRead:0,localKeyError:false,warExpected:false,selectedWar:0,selectedTimeline:0,selectedPace:0,detailFrom:'targets',leaderFilter:'all',hitterFilter:'all'};
+    lastRefresh:0,historicalRead:0,localKeyError:false,warExpected:false,selectedWar:0,selectedTimeline:0,selectedPace:0,selectedDebrief:0,detailFrom:'targets',leaderFilter:'all',hitterFilter:'all'};
   state.data.reports=state.data.reports||{};
   state.data.activity=state.data.activity||{};
   state.data.ffstats=state.data.ffstats||{};
@@ -1596,6 +1596,14 @@
       stat('Net scoring pace',w.netRate===null?'\u2014':(w.netRate>=0?'+':'')+fmt(w.netRate)+' /h',
         'Score difference change, not a win prediction')+
       stat('Observation coverage',fmt(w.samples)+' checks',fmt(w.fullSpan)+' min between first and latest samples')+'</div>';
+    const acceleration=scoreAcceleration(selected);
+    if(acceleration)html+=card('Enemy scoring acceleration | observed',
+      '<p>'+pill(acceleration.label,acceleration.accelerating?'bad':'')+'</p>'+ 
+      '<div class="ws-inline-metrics"><span>Previous enemy rate '+fmt(acceleration.previousEnemy)+' pts/h</span>'+ 
+      '<span>Recent enemy rate '+fmt(acceleration.recentEnemy)+' pts/h</span>'+ 
+      '<span>Change '+(acceleration.increase>=0?'+':'')+fmt(acceleration.increase)+' pts/h</span></div>'+ 
+      '<p>Two timestamped, non-overlapping windows. Accelerating requires a meaningful increase, recent observations, and adequate coverage. This is not a guarantee of future scoring.</p>'+ 
+      b('Open Black Skulls command','tab:command'));
     html+=card('War #'+selected+' | sampled score trend',scoreSpark(w)+
       '<p>Current sample: Our faction <b>'+fmt(w.last.our)+'</b>, enemy <b>'+fmt(w.last.enemy)+'</b>'+
       (score&&score.target?' | Ranked-war target '+fmt(score.target):'')+
@@ -1675,6 +1683,57 @@
       '</tbody></table></div>':empty('Enemy member samples are missing in this war.'));
     return html;
   }
+  function afteraction(){
+    const all=Object.values(state.data.afterActions).filter(x=>positive(x.id)).sort((a,b)=>n(b.end)-n(a.end));
+    const selected=positive(state.selectedDebrief)||positive(all[0]?.id),
+      r=state.data.afterActions[String(selected)]||null;
+    let html=statusNote()+'<div class="ws-lead"><span class="ws-data-label">AUTOMATIC AFTER-ACTION REVIEW | OFFICIAL + OBSERVED EVIDENCE</span>'+
+      '<h2>What happened, and what should we change?</h2>'+
+      '<p>A debrief is generated locally when a completed ranked war appears in the official history. It improves when Torn returns the detailed scorecard. Activity and scoring trends only appear if this device captured them.</p>'+
+      '<div class="ws-toolbar">'+b('Refresh official reports','refresh')+b('Leadership command','tab:command')+
+      b('Past wars','tab:history')+'</div></div>';
+    if(!all.length)return html+empty('No finished ranked wars have loaded yet. On the next refresh after a war ends, WarStaxx will build a read-only debrief from the official result and available evidence.');
+    html+=card('War results and analysis status',
+      '<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>War</th><th>Result</th><th>Score</th><th>Player report</th><th>Review</th><th>Open</th></tr></thead><tbody>'+
+      all.map(x=>'<tr><td>#'+x.id+'<br><small>'+esc(stamp(x.end*1000))+'</small></td>'+
+        '<td>'+pill(x.outcome,x.outcome==='Won'?'good':x.outcome==='Lost'?'bad':'')+'</td>'+
+        '<td>'+scoreLabel(x.ourScore)+' / '+scoreLabel(x.enemyScore)+'</td>'+
+        '<td>'+pill(x.detail?'Detailed':'Summary only')+'</td>'+
+        '<td>'+pill(x.reviewed?'Reviewed':x.newFromObservedWar?'New debrief':'Historical')+'</td>'+
+        '<td>'+b('Analyse','debrief:'+x.id)+'</td></tr>').join('')+'</tbody></table></div>');
+    if(!r)return html;
+    html+=card('War #'+r.id+' | '+r.outcome,
+      '<div class="ws-grid">'+
+      stat('Our score',scoreLabel(r.ourScore),'Official war result')+
+      stat('Opponent score',scoreLabel(r.enemyScore),'Opponent #'+r.enemyId)+
+      stat('Our scoring members',fmt(r.ownCount),r.detail?'Detailed report':'Incomplete report')+
+      stat('Enemy scoring members',fmt(r.enemyCount),r.detail?'Detailed report':'Incomplete report')+
+      stat('Enemy top 3 share',r.enemyTop3Pct===null?'\u2014':fmt(r.enemyTop3Pct)+'%',
+        'Of summed recorded enemy member points')+
+      stat('Observed coverage',r.ourSamples+' / '+r.enemySamples,'Our / their roster polls')+'</div>'+
+      '<p>End '+esc(stamp(r.end*1000))+' | Enemy '+esc(r.enemyName||('#'+r.enemyId))+
+      ' | '+(r.detail?'Official player scorecards loaded':'Waiting for official individual reports')+'</p>'+
+      '<div class="ws-toolbar">'+b('See detailed official scorecard','war:'+r.id)+
+      b('View war timeline','debrief-timeline:'+r.id)+
+      b('View score samples','debrief-pace:'+r.id)+
+      b('Copy report','copy-debrief:'+r.id)+
+      b(r.reviewed?'Mark unreviewed':'Mark reviewed','review-debrief:'+r.id)+'</div>');
+    html+=card('Evidence-based lessons and action items',
+      '<p>These are prompts derived from known scores and sampled data, not proof of hidden battle stats or unrecorded activity.</p>'+
+      (r.lessons.length?'<ol>'+r.lessons.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ol>':
+        empty('No evidence-backed action items found in the currently loaded data.'))+
+      (r.ourOnlinePct===null?'':'<p>Our observed online member-check share '+r.ourOnlinePct+'%.</p>')+
+      (r.enemyOnlinePct===null?'':'<p>Enemy observed online share '+r.enemyOnlinePct+'%.</p>')+
+      (r.enemyTravelPct===null?'':'<p>Enemy travel share '+r.enemyTravelPct+'% of recorded checks.</p>'));
+    const table=(title,players)=>
+      card(title,
+        players.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Player</th><th>Points</th><th>Attacks</th><th>Open</th></tr></thead><tbody>'+
+          players.map(p=>'<tr><td>'+infoButton(p.name||('Player '+p.id),p.id)+'</td><td>'+
+            fmt(p.score)+'</td><td>'+fmt(p.attacks)+'</td><td>'+a('Torn profile',link(p.id))+'</td></tr>').join('')+
+          '</tbody></table></div>':empty('Individual contributions not available in the stored Torn report.'));
+    html+=table('Our top recorded contributors',r.ownContributors)+table('Opponent top recorded contributors',r.enemyContributors);
+    return html;
+  }
   function command(){
     const plan=leadershipSummary(),p=warPace(),score=warScore(),
       noteKey=positive(state.data.war?.id)||('scout-'+positive(cfg.enemyId)),
@@ -1685,6 +1744,7 @@
       .filter(x=>state.leaderFilter==='all'||state.leaderFilter==='black'&&cfg.blackSkulls[x.id]||
         state.leaderFilter==='ready'&&memberState(x)==='okay');
     const draft=suggestedDraft(),busy=['engaged','monitor'];
+    const acceleration=scoreAcceleration();
     const readyE=state.data.ours.filter(p=>cfg.blackSkulls[p.id]&&hitterReadiness(p).energyEnough===true&&memberState(p)==='okay').length;
     let html=statusNote()+'<div class="ws-lead"><span class="ws-data-label">LEADERSHIP COMMAND | LOCAL TACTICAL BOARD</span>'+
       '<h2>Ranked war command centre</h2>'+
@@ -1699,6 +1759,9 @@
       stat('Enemy Okay',state.data.enemies.filter(x=>memberState(x)==='okay').length+' / '+plan.enemy,'Last official roster snapshot')+
       stat('Scoring momentum',p?.netRate===null||!p?'\u2014':(p.netRate>=0?'+':'')+fmt(p.netRate)+'/h','Recent observed net score pace')+
       stat('Current score',score?fmt(score.our)+' / '+fmt(score.enemy):'\u2014','Our faction / enemy official snapshot')+'</div>';
+    if(acceleration?.accelerating)html+=card('Opponent pace warning',
+      '<p>Enemy scoring accelerated from '+fmt(acceleration.previousEnemy)+' to '+fmt(acceleration.recentEnemy)+
+      ' points/hour in two observed windows. Check your available Black Skulls and assignments.</p>'+b('See score evidence','tab:pace'));
     html+=readinessPanel()+flightWatchPanel();
     html+=card('Operational checks',
       (plan.duplicateTargets.length?'<div class="ws-note ws-warn"><b>Overlapping manual targets:</b> '+
@@ -1762,7 +1825,7 @@
       '<p>'+(score?'Official score: Our faction '+fmt(score.our)+' / Opponent '+fmt(score.enemy)+' | Net '+fmt(score.net):
         'Live ranked-war score not available. Historical scouting remains available.')+'</p>'+
       '<div class="ws-toolbar">'+b('Enemy intelligence','tab:intel')+b('Players and targets','tab:targets')+
-      b('Previous wars','tab:history')+b('Our war orders','tab:assignments')+
+      b('Previous wars','tab:history')+b('After-action reports','tab:afteraction')+b('Our war orders','tab:assignments')+
       b('Leadership board','tab:command')+b('Live points/hour','tab:pace')+b('War timelines','tab:timeline')+'</div></div>'+
       '<div class="ws-grid">'+
       statAction('Enemy online now',them.total?fmt(them.online)+' / '+them.total:'\u2014',
@@ -1855,7 +1918,7 @@
       '<h2>'+(state.data.war?.opponentName?esc(state.data.war.opponentName):fid?'Faction #'+fid:'No opponent selected')+'</h2>'+
       '<p>Official history, current roster, player contributions, observed online behaviour and your own tactical notes in one place.</p>'+
       '<div class="ws-toolbar">'+(fid?a('Open faction in Torn',factionLink(fid)):'')+
-      b('View all players','tab:targets')+b('Full war history','tab:history')+b('Scan 20 past wars','deep-scan')+b('Activity hours','tab:activity')+'</div></div>'+
+      b('View all players','tab:targets')+b('Full war history','tab:history')+b('After-action reports','tab:afteraction')+b('Scan 20 past wars','deep-scan')+b('Activity hours','tab:activity')+'</div></div>'+
       '<div class="ws-grid">'+
       statAction('Last war score',scoreLabel(m.lastScore),m.last?'War #'+m.last.id+' | '+esc(stamp(m.last.end*1000)):'No completed war','tab:history')+
       statAction('Enemy faced',scoreLabel(m.lastAgainst),m.last?'Opponent score in latest war':'No historical score','tab:history')+
