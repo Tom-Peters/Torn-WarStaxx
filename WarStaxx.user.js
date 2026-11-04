@@ -352,7 +352,7 @@
     for(const key of ['scoreTimelines','warTimelines']){
       const data=state.data[key],ids=Object.keys(data).sort((a,b)=>
         n(data[b]?.lastAt||data[b]?.updated)-n(data[a]?.lastAt||data[a]?.updated));
-      for(const id of ids.slice(0,20))delete data[id];
+      for(const id of ids.slice(20))delete data[id];
     }
   }
   function recordWarScore(w,at=Date.now()){
