@@ -22,6 +22,36 @@ const report = runInNewContext(helpers+extract('report','attacks')+'; report');
 const warHistory = runInNewContext(helpers+extract('warHistory','detectWar')+'; warHistory');
 const roster = runInNewContext(helpers+extract('roster','warHistory')+'; roster');
 
+const basicStart=source.indexOf('  function normaliseFactionBasic(');
+const basicEnd=source.indexOf('  async function refreshFactionBasics(',basicStart);
+assert.ok(basicStart>0&&basicEnd>basicStart,'Expected public faction-basic parser');
+const normaliseFactionBasic=runInNewContext(
+  helpers+source.slice(basicStart,basicEnd)+'; normaliseFactionBasic');
+
+test('public faction basic comparison retains respect, rank, winning history, leadership and capacity',()=>{
+  const basic=normaliseFactionBasic({basic:{
+    id:123,name:'Example A',tag:'EX',respect:5500000,days_old:1200,capacity:100,members:95,
+    leader_id:111,co_leader_id:222,best_chain:5000,
+    rank:{name:'Gold',level:10,division:3,position:4,wins:17}
+  }});
+  assert.equal(basic.id,123);
+  assert.equal(basic.name,'Example A');
+  assert.equal(basic.respect,5500000);
+  assert.equal(basic.members,95);
+  assert.equal(basic.capacity,100);
+  assert.equal(basic.rankName,'Gold');
+  assert.equal(basic.rankedWins,17);
+  assert.equal(basic.leader,111);
+  assert.equal(basic.bestChain,5000);
+});
+
+test('deep scan and opponent-switch safeguards remain wired',()=>{
+  assert.match(source,/action==='deep-scan'/);
+  assert.match(source,/function setOpponent\\(/);
+  assert.match(source,/state\\.data\\.enemies=\\[\\]/);
+  assert.match(source,/function refreshFactionBasics\\(/);
+});
+
 test('source remains ASCII and parses after smart-quote conversion',()=>{
   assert.doesNotMatch(source,/[^\x00-\x7f]/u);
   assert.doesNotThrow(()=>new Script(source));
