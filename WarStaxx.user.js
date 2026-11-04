@@ -1032,7 +1032,7 @@
       '<h2>'+(state.data.war?.opponentName?esc(state.data.war.opponentName):fid?'Faction #'+fid:'No opponent selected')+'</h2>'+
       '<p>Official history, current roster, player contributions, observed online behaviour and your own tactical notes in one place.</p>'+
       '<div class="ws-toolbar">'+(fid?a('Open faction in Torn',factionLink(fid)):'')+
-      b('View all players','tab:targets')+b('Full war history','tab:history')+b('Activity hours','tab:activity')+'</div></div>'+
+      b('View all players','tab:targets')+b('Full war history','tab:history')+b('Scan 20 past wars','deep-scan')+b('Activity hours','tab:activity')+'</div></div>'+
       '<div class="ws-grid">'+
       statAction('Last war score',scoreLabel(m.lastScore),m.last?'War #'+m.last.id+' | '+esc(stamp(m.last.end*1000)):'No completed war','tab:history')+
       statAction('Enemy faced',scoreLabel(m.lastAgainst),m.last?'Opponent score in latest war':'No historical score','tab:history')+
@@ -1159,6 +1159,16 @@
       stat('Online checks',pat.count?pat.online+'%':'\u2014',pat.count+' samples | '+pat.reliability)+
       stat('Travel checks',pat.count?pat.travel+'%':'\u2014','War sample '+(pat.warTravel===null?'unknown':pat.warTravel+'%'))+
       stat('Observed FF',myFf.avg===null?'\u2014':myFf.avg.toFixed(2)+'x',myFf.count+' faction encounters')+'</div>';
+    if(current){
+      html+=card('More official roster indicators',
+        '<div class="ws-inline-metrics"><span>Member for '+fmt(p.daysInFaction)+' days</span>'+
+        '<span>'+(p.onWall?'Defending a wall':'Not defending a wall')+'</span>'+
+        '<span>'+(p.revivable?'Revivable':'Revive disabled')+'</span>'+
+        (p.earlyDischarge?'<span>Early hospital discharge available</span>':'')+
+        (side==='ours'?'<span>'+(p.inOc?'Currently in OC':'Not currently in OC')+'</span>':'')+
+        '</div><p class="ws-small">Torn public member record from '+esc(age(p.updated))+
+        '. Opponent OC participation is not made available in this selection.</p>');
+    }
     html+=card('Historical ranked-war performance',
       records.length?'<p>Official points and attacks from reports are shown per war. A dash means report or member data is unavailable, not zero.</p>'+
       '<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>War</th><th>Score</th><th>Attacks</th><th>Outcome</th><th>Open</th></tr></thead><tbody>'+
@@ -1297,7 +1307,7 @@
     let html=statusNote()+'<div class="ws-lead"><span class="ws-data-label">OFFICIAL TORN RANKED-WAR RECORDS</span>'+
       '<h2>Previous war results, scores and detailed contributions</h2>'+
       '<p>Open any war to see total points, attacks, rank movement, rewards and individual score tables. Missing detailed reports can be fetched individually.</p>'+
-      '<div class="ws-toolbar">'+b('Opponent summary','tab:intel')+b('Refresh war history','refresh')+'</div></div>';
+      '<div class="ws-toolbar">'+b('Opponent summary','tab:intel')+b('Refresh war history','refresh')+b('Deep scan 20 wars','deep-scan')+'</div></div>';
     for(const [title,side,fid,history] of groups){
       const stats=factionWarMetrics(side);
       const wars=history.slice().sort((a,b)=>(b.end||b.start)-(a.end||a.start)).slice(0,20);
@@ -1428,6 +1438,7 @@
   function handle(action){
     if(action==='refresh'){refresh(true);return;}
     if(action==='war-list'){state.selectedWar=0;navigate('history');return;}
+    if(action==='deep-scan'){cfg.historyLimit=20;saveCfg();navigate('history');refresh(true);return;}
     if(action.startsWith('hour:')){const h=Number(action.slice(5));if(Number.isInteger(h)&&h>=0&&h<24){const tr=$('#ws-hour-row-'+h,root);if(tr){tr.scrollIntoView({block:'center'});tr.style.outline='2px solid #54d7fa';}}return;}
     if(action.startsWith('war:')){navigate('intel');state.selectedWar=positive(action.slice(4));render();return;}
     if(action.startsWith('load-report:')){loadWarReport(positive(action.slice(12)));return;}
@@ -1497,7 +1508,7 @@
         cfg.factionSource=manualId?'Manual override':'Not set';
         cfg.factionVerifiedAt=0;
       }
-      setOpponent(positive($('#ws-enemy',root)?.value));
+      if(setOpponent(positive($('#ws-enemy',root)?.value)))state.data.war=null;
       cfg.refreshSeconds=Math.max(90,Math.min(300,positive($('#ws-interval',root)?.value)||120));
       cfg.historyLimit=Math.max(2,Math.min(20,positive($('#ws-limit',root)?.value)||8));
       cfg.enableAttacks=Boolean($('#ws-attacks',root)?.checked);
