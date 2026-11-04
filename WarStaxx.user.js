@@ -524,7 +524,21 @@
       let result=null;
       try{
         const response=await call(path,kind,force?0:6*HOUR);
-        if(response)result=ownFactionFrom(response,source);
+        if(response){
+          // Key ownership explicitly showing no faction is authoritative, unlike
+          // a missing or permission-restricted faction field.
+          const owner=response?.info?.user||response?.user||response?.key?.user;
+          if(source==='key-info'&&owner&&Object.prototype.hasOwnProperty.call(owner,'faction_id')&&
+             (owner.faction_id===null||Number(owner.faction_id)===0)){
+            cfg.ourId=0;cfg.enemyId=0;cfg.factionVerifiedAt=Date.now();
+            cfg.factionSource='Torn key/info (no faction)';
+            state.data.ours=[];state.data.enemies=[];state.data.ourWars=[];state.data.enemyWars=[];
+            state.data.war=null;saveCfg();
+            state.data.errors.identity='Your Torn account is not currently in a faction.';
+            return 0;
+          }
+          result=ownFactionFrom(response,source);
+        }
       }catch(e){lastError=String(e?.message||e).slice(0,140);}
       if(!result?.id)continue;
       const previous=positive(cfg.ourId);
