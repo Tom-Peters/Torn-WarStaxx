@@ -205,13 +205,14 @@
   cfg.blackSkulls=cfg.blackSkulls&&typeof cfg.blackSkulls==='object'?cfg.blackSkulls:{};
   cfg.spies=cfg.spies&&typeof cfg.spies==='object'?cfg.spies:{};
   cfg.notes=cfg.notes&&typeof cfg.notes==='object'?cfg.notes:{};
-  const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},sampleCount:0});
+  const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},publicIntel:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},sampleCount:0});
   const state={data:Object.assign(freshData(),safeRead(DATA,{})),open:false,tab:'overview',showMore:false,
     filter:'all',sort:'warScore',search:'',loading:false,spinner:'',error:'',scanning:false,alerts:[],chosen:0,
     lastRefresh:0,historicalRead:0,localKeyError:false,warExpected:false,selectedWar:0,detailFrom:'targets'};
   state.data.reports=state.data.reports||{};
   state.data.activity=state.data.activity||{};
   state.data.ffstats=state.data.ffstats||{};
+  state.data.publicIntel=state.data.publicIntel||{};
   state.data.updated=state.data.updated||{};
   state.data.errors=state.data.errors||{};
   state.data.backoff=state.data.backoff||{};
@@ -219,7 +220,7 @@
   // Repair malformed legacy cached containers without wiping valid user data.
   for(const k of ['ours','enemies','ourWars','enemyWars','attacks'])
     if(!Array.isArray(state.data[k]))state.data[k]=[];
-  for(const k of ['reports','activity','ffstats','seenAttacks','updated','errors','backoff','meta'])
+  for(const k of ['reports','activity','publicIntel','ffstats','seenAttacks','updated','errors','backoff','meta'])
     if(!state.data[k]||typeof state.data[k]!=='object'||Array.isArray(state.data[k]))state.data[k]={};
   if(state.data.war&&!Array.isArray(state.data.war.factions))state.data.war=null;
   for(const [key,value] of Object.entries(state.data.reports))
@@ -989,15 +990,15 @@
     root.style.display=state.open?'block':'none';
     if(!state.open)return;
     const simple=(()=>{try{return JSON.parse(localStorage.getItem('staxx-hub-mode-v1'))!=='advanced';}catch(_){return true;}})();
-    const basics=['overview','targets','matchups','strategy','assignments','alerts'];
+    const basics=['overview','intel','targets','history','activity','matchups','strategy','assignments','alerts'];
     const displayed=simple&&!state.showMore?sections.filter(s=>basics.includes(s)||s===state.tab):sections;
     $('.ws-tabs',root).innerHTML=displayed.map(s=>'<button type="button" class="'+(s===state.tab?'on':'')+'" data-tab="'+s+'">'+esc(labels[s])+'</button>').join('')+
       (simple?'<button type="button" data-action="more">'+(state.showMore?'Less':'More')+'</button>':'');
-    const pages={overview,targets,matchups,strategy,activity,history,assignments:orders,alerts:alertView,settings,diagnostics};
+    const pages={overview,intel,targets,matchups,strategy,activity,history,assignments:orders,alerts:alertView,settings,diagnostics};
     const content=$('.ws-content',root);
     const scroll=content.scrollTop;
     const form=state.tab==='settings'?Array.from(content.querySelectorAll('input,select,textarea')).map(x=>({id:x.id,checked:x.checked,value:x.value,type:x.type})):null;
-    try{content.innerHTML=(pages[state.tab]||overview)();}catch(e){content.innerHTML=empty('Render error: '+String(e.message||e));}
+    try{content.innerHTML=state.tab==='targets'&&state.playerOpen?playerIntel(state.chosen):(pages[state.tab]||overview)();}catch(e){content.innerHTML=empty('Render error: '+String(e.message||e));}
     if(form)for(const prior of form){if(!prior.id)continue;const field=content.querySelector('#'+prior.id);
       if(!field)continue;if(prior.type==='checkbox')field.checked=prior.checked;else field.value=prior.value;}
     content.scrollTop=scroll;
@@ -1006,7 +1007,7 @@
   }
   function navigate(tab,focus){
     if(!sections.includes(tab))tab='overview';
-    state.tab=tab;state.open=true;
+    state.tab=tab;state.open=true;state.playerOpen=false;if(tab!=='intel')state.selectedWar=0;
     root.style.display='block';render();
     $('.ws-content',root).scrollTop=0;
     if(focus)setTimeout(()=>$('#ws-alert-'+focus,root)?.scrollIntoView({block:'center'}),100);
@@ -1035,13 +1036,16 @@
   function close(){state.open=false;render();event('panel',{id:ID,open:false});}
   function handle(action){
     if(action==='refresh'){refresh(true);return;}
+    if(action==='war-list'){state.selectedWar=0;navigate('history');return;}
+    if(action.startsWith('war:')){navigate('intel');state.selectedWar=positive(action.slice(4));render();return;}
+    if(action.startsWith('load-report:')){loadWarReport(positive(action.slice(12)));return;}
+    if(action.startsWith('public:')){loadPublicIntel(positive(action.slice(7)));return;}
     if(action==='find'){close();event('find',{});return;}
     if(action==='more'){state.showMore=!state.showMore;render();return;}
     if(action.startsWith('tab:')){navigate(action.slice(4));event('visit',{id:ID,section:state.tab});return;}
     if(action.startsWith('alert:')){const x=currentAlerts().find(a=>a.id===action.slice(6));navigate(x?.tab||'alerts');return;}
     if(action.startsWith('tool:')){close();event('open',{id:action.slice(5)});return;}
-    if(action.startsWith('player:')){state.tab='targets';state.chosen=positive(action.slice(7));
-      const c=$('.ws-content',root);c.innerHTML=playerIntel(state.chosen);c.scrollTop=0;return;}
+    if(action.startsWith('player:')){state.tab='targets';state.chosen=positive(action.slice(7));state.playerOpen=true;render();$('.ws-content',root).scrollTop=0;return;}
     if(action.startsWith('spy:')){
       const id=positive(action.slice(4));const box=$('.ws-content',root);
       const s={observedAt:Date.now()};
@@ -1052,8 +1056,8 @@
       }
       cfg.spies[id]=s;saveCfg();navigate('targets');return;
     }
-    if(action.startsWith('clear-spy:')){delete cfg.spies[positive(action.slice(10))];saveCfg();navigate('targets');return;}
-    if(action.startsWith('note:')){cfg.notes[positive(action.slice(5))]=String($('#ws-note',root)?.value||'').slice(0,500);saveCfg();navigate('targets');return;}
+    if(action.startsWith('clear-spy:')){delete cfg.spies[positive(action.slice(10))];saveCfg();render();return;}
+    if(action.startsWith('note:')){cfg.notes[positive(action.slice(5))]=String($('#ws-note',root)?.value||'').slice(0,500);saveCfg();render();return;}
     if(action.startsWith('assign:')){const [friend,enemy]=action.slice(7).split(':').map(positive);
       if(friend&&enemy){cfg.assignments[friend]=enemy;saveCfg();navigate('assignments');}return;}
     if(action.startsWith('clear-assign:')){delete cfg.assignments[positive(action.slice(13))];saveCfg();render();return;}
@@ -1119,6 +1123,7 @@
   });
   root.addEventListener('change',e=>{
     if(e.target.id==='ws-friend'){state.chosen=positive(e.target.value);render();}
+    if(e.target.id==='ws-sort'){state.sort=e.target.value;render();}
   });
   root.addEventListener('input',e=>{
     if(e.target.id==='ws-search'){
