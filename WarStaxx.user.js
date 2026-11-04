@@ -1722,6 +1722,7 @@
       }
       const own=await call('/faction/'+cfg.ourId+'/members','ours',force?0:90*1000);
       if(own)state.data.ours=roster(own);
+      if(state.data.war?.id&&state.data.ours.length)snapshotWarSquads(state.data.war.id);
       if(positive(cfg.enemyId)){
         const old=state.data.enemies.slice(),oldAt=n(state.data.updated.enemies);
         const enemy=await call('/faction/'+cfg.enemyId+'/members','enemies',force?0:90*1000);
@@ -3581,7 +3582,7 @@
     h+=leaderboardCard(24);
     const groups=[
       ['OPERATIONS & ORDERS',[
-        ['Faction leader command','leader'],['Black Skulls','skulls'],
+        ['Skull Capo command','leader'],['Black Skulls','skulls'],
         ['Quick commander','commander'],['Daily operations','operations'],
         ['Turtling','turtle'],['Hospital watchers','control'],
         ['Assignments','assignments'],['Full leadership orders','command']]],
@@ -3623,19 +3624,19 @@
         '</small></span><span>'+
         b('Assign','tab:command')+' '+b('Matchups','hitter:'+p.id)+'</span></div>';
     }).join(''):empty('No members currently allocated to '+kind+'.');
-    return statusNote()+'<div class="ws-lead"><span class="ws-data-label">FACTION LEADERSHIP | WAR COMMAND</span>'+
-      '<h2>Three-team battle coordination</h2>'+
-      '<p>Black Skulls take the top opponent BSS bracket. Regular attackers use the lower bracket. '+
-      'Defence/reserve members protect points and rotate in when needed.</p>'+
+    return statusNote()+'<div class="ws-lead"><span class="ws-data-label">SKULL CAPO | BLACK SKULLS COMMAND</span>'+
+      '<h2>Black Skulls squad command</h2>'+
+      '<p>You lead the Black Skulls heavy hitters, not the whole faction. This board prioritises '+
+      'high-BSS assignments and squad readiness. Regular attackers and defenders appear for wider coordination only.</p>'+
       '<div class="ws-toolbar">'+b('Refresh','refresh')+
-        b('Draft role-safe orders','draft-black')+b('Edit every order','tab:command')+
+        b('Draft role-safe orders','draft-black')+b('Coordinate orders','tab:command')+
         b('Sync orders','tab:settings')+'</div></div>'+
       '<div class="ws-grid">'+
       stat('Score',score?fmt(score.our)+' / '+fmt(score.enemy):'Unknown','Official live score')+
       stat('Net lead',score?(score.net>=0?'+':'')+fmt(score.net):'Unknown','Current ranked war')+
-      stat('Black Skulls',fmt(black.length),'Strong-opponent specialists')+
-      stat('Regular attackers',fmt(regular.length),'Lower-BSS targets')+
-      stat('Defence and reserve',fmt(defensive.length),'Manual turtle duties')+
+      stat('Black Skulls',fmt(black.length),'Your heavy-hitter squad')+
+      stat('Regular attackers',fmt(regular.length),'Coordination context only')+
+      stat('Defence and reserve',fmt(defensive.length),'Wider faction context')+
       stat('Current chain',chain.fresh?'#'+fmt(chain.count):'Unknown',
         chain.fresh?chain.remaining+' seconds left':'Refresh chain')+
       stat('Net scoring pace',pace?.measurable?fmt(pace.netRate)+' points/h':'Unknown',
@@ -3648,6 +3649,20 @@
         (state.sharedError?' | '+esc(state.sharedError):'')+'</p>'+
         '<div class="ws-toolbar">'+b('Pull orders','shared-pull')+
         (cfg.shared.canWrite?b('Publish orders','shared-push'):'')+'</div>'):'')+
+      card('Skull Capo | define heavy targets',
+        '<p>Choose the top percentage of opponents with known BSS or an absolute minimum BSS. '+
+        'Lower-BSS opponents remain in the regular-member pool. Unknown BSS requires scouting.</p>'+
+        '<div class="ws-toolbar"><label>Strength cutoff method<select id="ws-heavy-mode">'+
+        [['percent','Top percentage'],['min-bss','Minimum BSS']].map(([v,label])=>
+          '<option value="'+v+'" '+(bands.rule.mode===v?'selected':'')+'>'+label+'</option>').join('')+
+        '</select></label>'+
+        '<label>Top % (5-100)<input id="ws-heavy-percent" type="number" min="5" max="100" step="1" value="'+bands.rule.percent+'"></label>'+
+        '<label>Minimum BSS<input id="ws-heavy-bss" type="number" min="0" max="1000000000000000" step="any" value="'+bands.rule.minBss+'"></label></div>'+
+        '<p class="ws-small">Current buckets: '+fmt(bands.heavyCount)+' heavy, '+
+          fmt(bands.regularCount)+' regular, '+fmt(bands.unknown)+' unknown. '+
+          'This controls targets only; it does not prove a win.</p>'+
+        b('Save strength cutoff','save-heavy-cutoff'))+
+      blackSkullsCoverageCard(40)+
       blackSkullsPerformanceCard()+bonusTargetCard()+leaderboardCard(12)+
       card('BLACK SKULLS | strongest enemy targets',teamRows(black,'Black Skulls'))+
       card('REGULAR ATTACKERS | lower BSS targets',teamRows(regular,'regular attackers'))+
@@ -3691,7 +3706,7 @@
           b('My matchups','hitter:'+myId)+b('Defend','tab:turtle')+'</div>':
         '<p>You are not marked as a Black Skull on this device. Use Leadership to set membership.</p>'+
         b('Leadership','tab:command'))+
-      bonusTargetCard()+
+      bonusTargetCard()+blackSkullsCoverageCard(20)+
       card('Black Skulls priority targets | toughest known BSS',
         '<p>Only the top relative BSS bracket is available for Black Skulls automatic target suggestions. '+
         'Opponent strength combines verified manual spies and fresh FFScouter estimates; '+
@@ -3783,7 +3798,7 @@
         esc(x.title)+'</b><br><small>'+esc(x.detail)+'</small></span>'+
         b('Review','alert:'+x.id)+'</div>').join(''):empty('No verified urgent alerts. Keep statuses fresh.'))+
       '<div class="ws-toolbar">'+b('Opponent intelligence','tab:enemy')+
-      b('Reports and advanced tools','tab:reports')+b('Leader command','tab:leader')+'</div>';
+      b('Reports and advanced tools','tab:reports')+b('Skull Capo','tab:leader')+'</div>';
     return body;
   }
   function overview(){
@@ -4499,6 +4514,34 @@
     if(action==='pace-live'){state.selectedPace=0;navigate('pace');return;}
     if(action==='timeline-latest'){state.selectedTimeline=0;navigate('timeline');return;}
     if(action.startsWith('timeline-war:')){state.selectedTimeline=positive(action.slice(13));navigate('timeline');return;}
+    if(action==='save-heavy-cutoff'){
+      const mode=String($('#ws-heavy-mode',root)?.value||'percent'),
+        percent=Number($('#ws-heavy-percent',root)?.value),
+        minBss=Number($('#ws-heavy-bss',root)?.value);
+      if(!['percent','min-bss'].includes(mode)||!Number.isInteger(percent)||
+        percent<5||percent>100||!Number.isFinite(minBss)||minBss<0||minBss>1e15){
+        state.error='Cutoff must use 5-100% or a non-negative BSS up to 1e15.';
+        render();return;
+      }
+      cfg.heavyPolicy=heavyRule({mode,percent,minBss});saveCfg();markSharedDirty();
+      state.error='Black Skulls strength cutoff saved. Check coverage and existing orders.';
+      render();return;
+    }
+    if(action.startsWith('skull-assign:')){
+      const [id,targetId]=action.slice(13).split(':').map(positive),
+        member=state.data.ours.find(p=>p.id===id),
+        target=state.data.enemies.find(p=>p.id===targetId);
+      if(!member||!target||!cfg.blackSkulls[id]||positive(cfg.assignments[id])||
+        Object.entries(cfg.assignments).some(([other,enemy])=>
+          positive(other)!==id&&positive(enemy)===targetId)||
+        !roleMatch(member,target)){
+        state.error='Cannot assign: need a free Black Skull, in-role target and verified favourable current matchup.';
+        render();return;
+      }
+      cfg.assignments[id]=targetId;saveCfg();markSharedDirty();
+      state.error='Assigned '+member.name+' to review '+target.name+'. No Torn attack performed.';
+      render();return;
+    }
     if(action==='draft-black'){
       const drafts=suggestedDraft();
       for(const x of drafts)if(!positive(cfg.assignments[x.friend.id]))cfg.assignments[x.friend.id]=x.enemy.id;
