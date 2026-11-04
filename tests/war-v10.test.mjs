@@ -16,7 +16,7 @@ test('highest reliable points per 25 energy outranks level and excludes unavaila
   const setup=[
     'const MIN=60000,n=Number,positive=Number;',
     "const self={id:1,name:'Us',status:'Okay'};",
-    "const cfg={enableAttacks:false},state={data:{war:{id:500},enemies:["+
+    "const cfg={enableAttacks:false,blackSkulls:{}},state={data:{war:{id:500},enemies:["+
       "{id:101,status:'Okay',level:95},{id:102,status:'Okay',level:20},"+
       "{id:103,status:'Hospital',level:100}]}};",
     'const memberState=p=>p.status.toLowerCase();',
