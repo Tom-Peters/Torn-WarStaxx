@@ -11,7 +11,7 @@ function part(a,b){
 function fixture(setup,a,b,out){return runInNewContext(setup+'\n'+part(a,b)+';\n'+out);}
 test('heavy target priority combines known BSS, last official member war points and partial live scoring',()=>{
  const setup=[
-   'const n=Number,positive=Number,officialNumber=v=>v===null||v===undefined?null:Number(v);',
+   'const n=v=>Number.isFinite(Number(v))?Number(v):0,positive=Number,officialNumber=v=>v===null||v===undefined?null:Number(v);',
    "const cfg={enemyId:20};",
    "const state={data:{reports:{50:{factions:[{id:20,members:["+
      "{id:101,score:200,attacks:12},{id:102,score:2000,attacks:90}]}]}}}};",
