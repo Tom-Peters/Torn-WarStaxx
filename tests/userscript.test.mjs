@@ -52,7 +52,7 @@ test('installable userscript starts at byte zero with a complete metadata header
 });
 
 
-test('v0.2.4 sideband is restricted to War-TornStaxx and keeps credentials private',()=>{
+test('v0.2.5 sideband is restricted to War-TornStaxx and keeps credentials private',()=>{
  assert.match(code,/\/\/ @version\s+0\.2\.4/);
  assert.match(code,/tornstaxx-war-runtime-v1/);
  assert.match(code,/__tornstaxxBridge:bridge/);
@@ -78,7 +78,7 @@ test('War exposes a DOM-backed visual-only launch bridge',()=>{
 });
 
 
-test('War 0.2.4 writes cross-world DOM startup marker and repairs emergency launcher failures',()=>{
+test('War 0.2.5 writes cross-world DOM startup marker and repairs emergency launcher failures',()=>{
  assert.match(code,/tornstaxx-war-execution-probe/);
  assert.match(code,/probe\.dataset\.phase=/);
  assert.match(code,/probe\.dataset\.version=version/);
