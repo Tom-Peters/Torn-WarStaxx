@@ -503,7 +503,7 @@
       .filter(x=>x.advantage!==null).sort((a,b)=>b.advantage-a.advantage);
   }
   function lastKnownMemberScore(side,id){
-    return recentWarRecords(side,id).find(x=>x.covered)?.score??null;
+    return recentWarRecords(side,id).find(x=>x.covered&&x.member)?.score??null;
   }
   function spy(id){const s=cfg.spies[String(id)];return s&&typeof s==='object'?s:null;}
   function bsScore(s){
@@ -1218,6 +1218,19 @@
       '<div class="ws-toolbar">'+b('See all past wars','tab:history')+'</div>';
     return html;
   }
+  function threatRating(p){
+    const last=lastKnownMemberScore('enemies',p.id);
+    const hist=pastPerformance(p.id,'enemies');
+    const max=state.data.enemies.reduce((m,e)=>Math.max(m,lastKnownMemberScore('enemies',e.id)||0),0);
+    const scoreImpact=max>0&&last!==null?Math.round(65*last/max):0;
+    const active24=Boolean(p.lastAt&&Date.now()-p.lastAt<24*HOUR);
+    const online=isOnline(p),available=memberState(p)==='okay';
+    const score=scoreImpact+(active24?15:0)+(online?10:0)+(available?10:0);
+    const reason=last===null?'Low confidence; no official individual score':
+      'Last score '+fmt(last)+' | '+(active24?'recently active':'not active in 24h');
+    return {score:Math.min(100,Math.max(0,score)),reason,known:last!==null,
+      note:'Priority index is derived from historical points and observed activity, never hidden battle strength.'};
+  }
   function targetRows(){
     const q=state.search.trim().toLowerCase(),filter=state.filter;
     return state.data.enemies.filter(p=>{
@@ -1228,8 +1241,12 @@
       if(filter==='away'&&ev.kind!=='away')return false;
       if(filter==='hospital'&&ev.kind!=='hospital')return false;
       if(filter==='scorers'&&lastKnownMemberScore('enemies',p.id)===null)return false;
+      if(filter==='watched'&&!cfg.watchlist[p.id])return false;
+      if(filter==='ff'&&ffLabel(p.id).source!=='estimate')return false;
       return true;
     }).sort((a,b)=>{
+      if(state.sort==='ff')return (ffLabel(b.id).source==='estimate'?ffLabel(b.id).ff:-1)-(ffLabel(a.id).source==='estimate'?ffLabel(a.id).ff:-1)||a.id-b.id;
+      if(state.sort==='threat')return threatRating(b).score-threatRating(a).score||a.id-b.id;
       if(state.sort==='lastwar')return (lastKnownMemberScore('enemies',b.id)??-1)-(lastKnownMemberScore('enemies',a.id)??-1)||a.id-b.id;
       if(state.sort==='activity')return n(b.lastAt)-n(a.lastAt)||a.id-b.id;
       if(state.sort==='level')return b.level-a.level||a.id-b.id;
@@ -1239,32 +1256,33 @@
   }
   function targets(){
     const row=targetRows(),total=state.data.enemies.length;
-    const chips=['all','ready','online','hospital','away','scorers'].map(f=>
+    const chips=['all','ready','online','hospital','away','scorers','ff','watched'].map(f=>
       '<button class="ws-btn '+(state.filter===f?'':'secondary')+'" data-filter="'+f+'">'+
-      esc(f==='ready'?'Okay':f==='scorers'?'War scorers':f)+'</button>').join('');
+      esc(f==='ready'?'Okay':f==='scorers'?'War scorers':f==='ff'?'Has FF':f==='watched'?'Watched':f)+'</button>').join('');
     let html=statusNote()+
       '<div class="ws-lead"><span class="ws-data-label">ENEMY PLAYERS | OPEN ANY NAME FOR FULL INTELLIGENCE</span>'+
       '<h2>'+row.length+' shown / '+total+' current enemies</h2>'+
       '<p>Live state, last action, official war performance and observed travel are separate evidence sources. Unknown scores are never treated as zero.</p></div>'+
       '<div class="ws-toolbar"><input type="search" id="ws-search" placeholder="Search name, ID or role" value="'+esc(state.search)+'" aria-label="Find enemy player">'+
       '<select id="ws-sort" aria-label="Sort enemy players">'+
-      [['warScore','Recommended priority'],['lastwar','Last reported war score'],['activity','Most recently active'],['online','Observed online rate'],['level','Level high to low']]
+      [['warScore','Recommended priority'],['ff','FF highest first'],['threat','Historical threat index'],['lastwar','Last reported war score'],['activity','Most recently active'],['online','Observed online rate'],['level','Level high to low']]
       .map(x=>'<option value="'+x[0]+'" '+(state.sort===x[0]?'selected':'')+'>'+x[1]+'</option>').join('')+'</select></div>'+
-      '<div class="ws-toolbar">'+chips+'</div>';
+      '<div class="ws-toolbar">'+chips+'</div>'+ffStatusPanel();
     if(!row.length)return html+empty('No matching opponents. Clear filters, refresh, or configure a faction in Settings.');
-    return html+'<div class="ws-table-wrap"><table><thead><tr><th>Opponent</th><th>Current state</th><th>Last activity</th><th>Last reported score</th><th>Travel / FF</th><th>Go to</th></tr></thead><tbody>'+
+    return html+'<div class="ws-table-wrap"><table><thead><tr><th>Opponent + FF</th><th>Current state</th><th>Last activity</th><th>Last reported score</th><th>War priority</th><th>Travel / intel</th><th>Go to</th></tr></thead><tbody>'+
       row.map(p=>{const ev=evaluate(p),pat=ev.pat,ff=ffObserved(p.id),third=ffscouter(p.id);
         const score=lastKnownMemberScore('enemies',p.id);
-        return '<tr><td>'+infoButton(p.name,p.id)+'<br><small>#'+p.id+' | Lv'+fmt(p.level)+
+        return '<tr><td>'+infoButton(p.name,p.id)+' '+ffBadge(p.id)+'<br><small>#'+p.id+' | Lv'+fmt(p.level)+
           (p.position?' | '+esc(p.position):'')+'</small></td>'+
           '<td>'+pill(p.status,ev.ready?'good':ev.kind==='hospital'?'bad':'')+
           '<br><small>'+esc(p.statusText)+'</small></td>'+
           '<td>'+pill(p.lastAction,isOnline(p)?'good':'')+'<br><small>'+esc(age(p.lastAt))+'</small></td>'+
-          '<td><b>'+scoreLabel(score)+'</b><br><small>'+ev.hist.wars+' report(s) | avg '+scoreLabel(ev.hist.avg)+'</small></td>'+
-          '<td><small>In war: '+(pat.warTravel===null?'No samples':pat.warTravel+'% away')+
-          '<br>FF: '+(ff.avg===null?'Not observed':ff.avg.toFixed(2)+'x observed')+
-          (third?.ff!==null&&third?.ff!==undefined?'<br>'+third.ff.toFixed(2)+'x FFScouter estimate':'')+'</small></td>'+
-          '<td>'+infoButton('Full intel',p.id)+' '+a('Attack',attackLink(p.id))+' '+a('Profile',link(p.id))+'</td></tr>';
+          '<td><b>'+scoreLabel(score)+'</b><br><small>'+ev.hist.wars+' report(s) | avg '+scoreLabel(ev.hist.avg)+'</small></td>'+ 
+          '<td>'+pill('Threat '+threatRating(p).score+'/100')+'<br><small>'+esc(threatRating(p).reason)+'</small></td>'+
+          '<td><small>In-war travel: '+(pat.warTravel===null?'No samples':pat.warTravel+'% away')+
+          '<br>Recorded team FF: '+(ff.avg===null?'No hits':ff.avg.toFixed(2)+'x / '+ff.count+' hits')+
+          (third?.bss?'<br>Estimated BSS: '+fmt(third.bss):'')+'</small></td>'+
+          '<td>'+b(cfg.watchlist[p.id]?'Unwatch':'Watch','watch:'+p.id)+' '+infoButton('Full intel',p.id)+' '+a('Attack',attackLink(p.id))+' '+a('Profile',link(p.id))+'</td></tr>';
       }).join('')+'</tbody></table></div>'+
       '<p class="ws-small">Scores shown only where official detailed reports exist. Attack links open Torn for manual action; no attack is submitted.</p>';
   }
