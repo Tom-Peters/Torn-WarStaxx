@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      0.8.0
+// @version      0.9.0
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='0.8.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='0.9.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'War room',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -199,7 +199,7 @@
   const link=id=>'https://www.torn.com/profiles.php?XID='+positive(id);
   const attackLink=id=>'https://www.torn.com/loader.php?sid=attack&user2ID='+positive(id);
   const apiKeyPda=typeof window.PDA_APIKEY==='string'?window.PDA_APIKEY:'###PDA-APIKEY###';
-  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},controlAssignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,hidden:false};
+  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},controlAssignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,warStripCompact:false,hidden:false};
   const cfg=Object.assign({},defaults,safeRead(CONFIG,{}));
   cfg.assignments=cfg.assignments&&typeof cfg.assignments==='object'?cfg.assignments:{};
   cfg.ordersByEnemy=cfg.ordersByEnemy&&typeof cfg.ordersByEnemy==='object'?cfg.ordersByEnemy:{};
@@ -218,7 +218,7 @@
   const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},factionBasic:{},publicIntel:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},scoreTimelines:{},warTimelines:{},afterActions:{},ownerReadiness:{},sampleCount:0});
   const state={data:Object.assign(freshData(),safeRead(DATA,{})),open:false,tab:'overview',showMore:false,
     filter:'all',sort:'warScore',search:'',commanderFilter:'black',controlFocus:0,loading:false,ffLoading:false,spinner:'',error:'',scanning:false,alerts:[],chosen:0,
-    lastRefresh:0,historicalRead:0,localKeyError:false,warExpected:false,selectedWar:0,selectedTimeline:0,selectedPace:0,selectedDebrief:0,detailFrom:'targets',leaderFilter:'all',hitterFilter:'all'};
+    lastRefresh:0,historicalRead:0,localKeyError:false,warMore:false,warExpected:false,selectedWar:0,selectedTimeline:0,selectedPace:0,selectedDebrief:0,detailFrom:'targets',leaderFilter:'all',hitterFilter:'all'};
   state.data.reports=state.data.reports||{};
   state.data.activity=state.data.activity||{};
   state.data.ffstats=state.data.ffstats||{};
@@ -1843,6 +1843,133 @@
       state.error=state.data.errors.ffscouter;
     }finally{state.ffLoading=false;save();render();}
   }
+
+  // War shortcuts are a navigational overlay, never a gameplay automator.
+  // Require an official recent war update before exposing live controls.
+  function activeWarNow(){
+    const w=state.data.war,at=Date.now(),update=n(state.data.updated.wars);
+    return Boolean(w?.id&&update&&at>=update&&at-update<=10*MIN&&
+      (!n(w.start)||n(w.start)*1000<=at)&&
+      !/pending|upcoming|scheduled|waiting|matching|ended|complete/i.test(String(w.status||'')));
+  }
+  function ourWarReadiness(){
+    const id=positive(state.data.meta?.ownerId),player=state.data.ours.find(p=>p.id===id),
+      fresh=rosterFresh('ours'),kind=fresh&&player?memberState(player):'unknown',
+      readiness=player?hitterReadiness(player):null;
+    return {id,player,fresh,kind,energy:readiness?.energy??null};
+  }
+  function strongestVerifiedHit(){
+    const self=ourWarReadiness();
+    if(!activeWarNow()||self.kind!=='okay'||!rosterFresh('enemies'))return null;
+    return state.data.enemies.filter(p=>memberState(p)==='okay').map(player=>{
+      const evidence=matchEvidence(self.player,player);
+      return {player,evidence,strength:bsScore(spy(player.id))};
+    }).filter(x=>x.strength!==null&&x.evidence.tier===0&&x.evidence.rosterVerified&&
+      !x.evidence.encounters.losses&&!x.evidence.conflict)
+      .sort((a,b)=>b.strength-a.strength||b.evidence.score-a.evidence.score||a.player.id-b.player.id)[0]||null;
+  }
+  function itemIntent(){
+    try{
+      const x=JSON.parse(sessionStorage.getItem('warstaxx-item-intent')||'null');
+      return x&&['heal','turtle'].includes(x.mode)&&Date.now()-n(x.at)<20*MIN?x.mode:'';
+    }catch(_){return '';}
+  }
+  function itemFlow(mode){
+    try{sessionStorage.setItem('warstaxx-item-intent',JSON.stringify({mode,at:Date.now()}));}catch(_){}
+    if(location.pathname.toLowerCase()==='/item.php')renderWarStrip(true);
+    else location.assign('https://www.torn.com/item.php');
+  }
+  function locateItem(mode){
+    if(location.pathname.toLowerCase()!=='/item.php')return;
+    const patterns={ipecac:/\bipecac\b/i,blood:/\bblood bag\b/i,morphine:/\bmorphine\b/i,firstaid:/\bfirst aid kit\b/i};
+    const rule=patterns[mode],info=document.querySelector('#warstaxx-live-strip [data-ws-note]');
+    if(!rule)return;
+    // Inspect only the current foreground Torn item page, never request other pages.
+    const rows=Array.from(document.querySelectorAll('li,tr,[class*="itemRow"],[class*="item-row"],[class*="itemCard"],[class*="item-card"],[data-item-id]')).slice(0,1800);
+    const node=rows.filter(el=>!el.closest('#warstaxx-live-strip,#warstaxx-root,#staxx-hub-root')&&
+      rule.test((el.textContent||'').slice(0,260))).sort((a,b)=>(a.textContent||'').length-(b.textContent||'').length)[0];
+    if(!node){if(info)info.textContent='Not found in loaded items. Open Medical or check stock, then retry.';return;}
+    node.scrollIntoView({block:'center',behavior:'smooth'});
+    const old=node.style.outline;
+    node.style.outline='3px solid #58dfff';
+    setTimeout(()=>{if(node.isConnected)node.style.outline=old;},5000);
+    if(info)info.textContent='Located. Tap Torn native Use yourself. Check blood compatibility first.';
+  }
+  function warQuick(action){
+    const self=ourWarReadiness();
+    if(action==='compact'){cfg.warStripCompact=!cfg.warStripCompact;saveCfg();renderWarStrip(true);return;}
+    if(action==='war'){open({section:'overview'});return;}
+    if(action==='stats'){state.warMore=true;open({section:'overview'});return;}
+    if(action==='heal'){itemFlow('heal');return;}
+    if(action==='turtle'){if(self.kind==='hospital')open({section:'turtle'});else itemFlow('turtle');return;}
+    if(action==='clear-item'){try{sessionStorage.removeItem('warstaxx-item-intent');}catch(_){}renderWarStrip(true);return;}
+    if(action.startsWith('item:')){locateItem(action.slice(5));return;}
+    if(action!=='hit')return;
+    if(self.kind==='hospital'){itemFlow('heal');return;}
+    if(self.kind!=='okay'||!self.fresh){
+      open({section:'overview'});state.error='Hit unavailable: own Torn roster status is not confirmed Okay. Refresh before acting.';render();return;
+    }
+    if(self.energy!==null&&self.energy<25){
+      open({section:'overview'});state.error='Hit unavailable: last known energy is below 25 E.';render();return;
+    }
+    const target=strongestVerifiedHit();
+    if(!target){
+      open({section:'overview'});state.error='No verified favourable target. Open Matchups and obtain recent comparable spies; FFScouter alone cannot confirm a win.';render();return;
+    }
+    location.assign(attackLink(target.player.id));
+  }
+  function renderWarStrip(force=false){
+    let host=document.querySelector('#mainContent,#main-content,#mainContainer,#mainWrapper,main,[role="main"]')||document.body;
+    let bar=document.getElementById('warstaxx-live-strip');
+    if(!activeWarNow()){if(bar)bar.remove();return;}
+    if(!host||host.closest('#warstaxx-root,#staxx-hub-root'))return;
+    if(!document.getElementById('warstaxx-live-style')){
+      const style=document.createElement('style');style.id='warstaxx-live-style';
+      style.textContent='#warstaxx-live-strip{position:relative;z-index:40;clear:both;margin:8px 4px 12px;padding:10px;border-radius:12px;border:1px solid #448db0;background:linear-gradient(110deg,#091c30,#0d3b5b);color:#eafbff;font:13px/1.4 system-ui,Arial,sans-serif;box-sizing:border-box;box-shadow:0 8px 25px #0004}'+
+        '#warstaxx-live-strip *{box-sizing:border-box}#warstaxx-live-strip .wsw-top{display:flex;align-items:center;gap:9px;flex-wrap:wrap}'+
+        '#warstaxx-live-strip .wsw-top strong{font-size:17px}#warstaxx-live-strip .wsw-kicker{color:#6dd6fb;font-size:10px;font-weight:900}'+
+        '#warstaxx-live-strip .wsw-meta{display:flex;gap:6px 15px;flex-wrap:wrap;color:#bdd9e8;font-size:11px;margin:6px 0}'+
+        '#warstaxx-live-strip .wsw-actions{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-top:8px}'+
+        '#warstaxx-live-strip button{background:#154a6d;border:1px solid #3f8db9;color:white;font:750 12px system-ui,Arial,sans-serif;min-height:43px;padding:7px;border-radius:8px;cursor:pointer}'+
+        '#warstaxx-live-strip button[data-ws-quick=hit]{background:#076fad;border-color:#61d5ff}'+
+        '#warstaxx-live-strip button[data-ws-quick=compact]{margin-left:auto;background:#10314b;font-size:11px}'+
+        '#warstaxx-live-strip .wsw-item-controls{border-top:1px solid #3b7794;margin-top:10px;padding-top:8px;display:flex;gap:7px;flex-wrap:wrap}'+
+        '#warstaxx-live-strip .wsw-item-controls small{display:block;width:100%;color:#c6ddeb}'+
+        '@media(max-width:600px){#warstaxx-live-strip{margin:6px 2px;padding:8px}#warstaxx-live-strip .wsw-actions{grid-template-columns:repeat(3,minmax(0,1fr))}#warstaxx-live-strip button{font-size:11px;min-height:44px}}';
+      document.head.appendChild(style);
+    }
+    if(!bar){
+      bar=document.createElement('section');bar.id='warstaxx-live-strip';
+      bar.setAttribute('aria-label','WarStaxx live war command bar');
+      bar.addEventListener('click',e=>{
+        const b=e.target.closest('[data-ws-quick]');if(!b||!bar.contains(b))return;
+        e.preventDefault();warQuick(String(b.dataset.wsQuick||''));
+      });
+    }
+    if(bar.parentNode!==host)host.insertBefore(bar,host.firstChild);
+    const self=ourWarReadiness(),score=warScore(),target=strongestVerifiedHit(),
+      intent=location.pathname.toLowerCase()==='/item.php'?itemIntent():'',
+      sig=[state.data.war.id,score?.our,score?.enemy,self.kind,self.energy,target?.player.id,
+        intent,cfg.warStripCompact,location.pathname,Math.floor(Date.now()/MIN)].join(':');
+    if(!force&&bar.dataset.signature===sig)return;
+    bar.dataset.signature=sig;
+    const btn=(name,action)=>'<button type="button" data-ws-quick="'+esc(action)+'">'+esc(name)+'</button>';
+    bar.innerHTML='<div class="wsw-top"><span class="wsw-kicker">RANKED WAR LIVE</span>'+
+      '<strong>Us '+(score?fmt(score.our):'?')+' / Them '+(score?fmt(score.enemy):'?')+'</strong>'+
+      '<strong>Net '+(score?(score.net>=0?'+':'')+fmt(score.net):'?')+'</strong>'+
+      btn(cfg.warStripCompact?'Expand':'Minimise','compact')+'</div>'+
+      (cfg.warStripCompact?'':'<div class="wsw-meta"><span>Your status: '+esc(self.kind)+' | '+(self.energy===null?'Energy unknown':fmt(self.energy)+' E')+'</span>'+
+        '<span>'+(target?'Strongest verified hit: '+esc(target.player.name)+' (Lv '+fmt(target.player.level)+')':'No verified safe hit')+'</span>'+
+        '<span>Official war '+esc(age(state.data.updated.wars))+' | own roster '+esc(age(state.data.updated.ours))+'</span></div>')+
+      '<div class="wsw-actions">'+btn('TURTLE','turtle')+btn(self.kind==='hospital'?'HEAL TO HIT':'HIT','hit')+
+      btn('HEAL','heal')+btn('WAR ROOM','war')+btn('MORE STATS','stats')+'</div>'+
+      (intent?'<div class="wsw-item-controls"><b>'+(intent==='turtle'?'Turtle items:':'Healing items:')+'</b>'+
+        (intent==='turtle'?btn('Find Ipecac','item:ipecac')+btn('Find blood bags','item:blood'):
+          btn('Find blood bags','item:blood')+btn('Find Morphine','item:morphine')+btn('Find First Aid','item:firstaid'))+
+        btn('Close shortcuts','clear-item')+
+        '<small data-ws-note>Locate an item, then tap Torn native Use. The script does not use medical items. Incompatible blood bags require your own blood-type check.</small></div>':'');
+  }
+
   function statusNote(){
     const latest=Math.max(n(state.data.updated.enemies),n(state.data.updated.ours));
     const fresh=latest&&Date.now()-latest<5*MIN;
@@ -2482,7 +2609,50 @@
       }).join(''):empty('No Black Skulls roster members yet. Mark them in Leadership.')));
     return h;
   }
+
+  function liveWarRoom(){
+    const w=state.data.war,score=warScore(),own=ourWarReadiness(),target=strongestVerifiedHit(),
+      enemies=sideActivity('enemies'),pace=warPace(),alerts=currentAlerts().slice(0,3),
+      fresh=rosterFresh('enemies');
+    let body=statusNote()+'<div class="ws-lead"><span class="ws-data-label">LIVE WAR | ACT NOW</span>'+
+      '<h2>Vs '+esc(w.opponentName||('Faction #'+positive(cfg.enemyId)))+'</h2>'+
+      '<div class="ws-score">Us '+(score?fmt(score.our):'?')+' / Them '+(score?fmt(score.enemy):'?')+
+      ' | Net '+(score?(score.net>=0?'+':'')+fmt(score.net):'?')+'</div>'+
+      '<p>Official points '+esc(age(state.data.updated.wars))+
+      (score?.target?' | Target '+fmt(score.target):'')+'</p></div>'+
+      '<div class="ws-toolbar">'+b('TURTLE','fast-turtle')+b(own.kind==='hospital'?'HEAL TO HIT':'HIT','fast-hit')+
+      b('HEAL','fast-heal')+b('Refresh','refresh')+'</div>'+
+      card('Your next action','<p><b>Official status:</b> '+esc(own.kind)+
+        ' | <b>Energy:</b> '+(own.energy===null?'Unknown':fmt(own.energy)+' E')+'</p>'+
+        (own.kind==='hospital'?'<p>Heal manually on Torn items, then tap HIT again.</p>':
+        target?'<p><b>Highest verified favourable opponent:</b> '+infoButton(target.player.name,target.player.id)+
+          ' '+ffBadge(target.player.id)+' | Lv '+fmt(target.player.level)+
+          ' | known spy strength '+fmt(target.strength)+'</p><small>'+
+          esc(target.evidence.reliability)+'. Confirm buffs and opponent status before starting the battle.</small>':
+          '<p>No recent verified favourable matchup. Review your manual spies rather than guessing a winning fight.</p>'+
+          b('Open matchups','tab:matchups')))+
+      '<div class="ws-grid">'+
+      statAction('Enemy Okay',fresh?fmt(enemies.okay)+' / '+fmt(enemies.total):'Unknown','Current roster','tab:targets')+
+      statAction('Enemy hospital',fresh?fmt(enemies.hospital):'Unknown','Watch expiry windows','tab:control')+
+      statAction('Enemy active 24h',enemies.total?fmt(enemies.active24)+' / '+fmt(enemies.total):'Unknown','Last actions, not uptime','tab:activity')+
+      statAction('Enemy points / hour',pace?.measurable?fmt(pace.rateEnemy):'Unknown','Sampled observations','tab:pace')+'</div>'+
+      card('Immediate priorities',alerts.length?alerts.map(x=>'<div class="ws-row"><span><b>'+
+        esc(x.title)+'</b><br><small>'+esc(x.detail)+'</small></span>'+
+        b('Review','alert:'+x.id)+'</div>').join(''):empty('No verified urgent alerts. Keep statuses fresh.'))+
+      '<div class="ws-toolbar">'+b(state.warMore?'Hide other stats':'Show other stats','war-more')+
+      b('Full commander','tab:commander')+'</div>';
+    if(state.warMore)body+=card('More war intelligence','<div class="ws-toolbar">'+[
+      ['Enemy intelligence','intel'],['Player FF','targets'],['Matchups','matchups'],
+      ['Pace','pace'],['Hit ledger','ledger'],['Threats','threats'],
+      ['Turtling strategy','turtle'],['Hospital control','control'],['Black Skulls','command'],
+      ['Operations','operations'],['Activity','activity'],['Previous wars','history'],
+      ['Timeline','timeline'],['Orders','assignments'],['After action','afteraction'],
+      ['Settings','settings']
+    ].map(([label,tab])=>b(label,'tab:'+tab)).join('')+'</div>');
+    return body;
+  }
   function overview(){
+    if(activeWarNow())return liveWarRoom();
     const w=state.data.war,score=warScore(),our=sideActivity('ours'),them=sideActivity('enemies');
     const ff=ffCoverage();
     const historyStats=factionWarMetrics('enemies'),last=historyStats.last;
@@ -3040,11 +3210,13 @@
   function render(){
     if(!root.isConnected)return;
     root.style.display=state.open?'block':'none';
+    renderWarStrip();
     if(!state.open)return;
     const simple=(()=>{try{return JSON.parse(localStorage.getItem('staxx-hub-mode-v1'))!=='advanced';}catch(_){return true;}})();
     const basics=['overview','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts'];
-    const displayed=simple&&!state.showMore?sections.filter(s=>basics.includes(s)||s===state.tab):sections;
-    $('.ws-tabs',root).innerHTML=displayed.map(s=>'<button type="button" class="'+(s===state.tab?'on':'')+'" data-tab="'+s+'">'+esc(labels[s])+'</button>').join('')+
+    const focus=activeWarNow()?['overview','commander','operations','threats','targets']:basics;
+    const displayed=simple&&!state.showMore?sections.filter(s=>focus.includes(s)||s===state.tab):sections;
+    $('.ws-tabs',root).innerHTML=displayed.map(s=>'<button type="button" class="'+(s===state.tab?'on':'')+'" data-tab="'+s+'">'+esc(activeWarNow()&&s==='overview'?'LIVE WAR':labels[s])+'</button>').join('')+
       (simple?'<button type="button" data-action="more">'+(state.showMore?'Less':'More')+'</button>':'');
     const pages={overview,commander,operations,ledger,threats,control,turtle,command,pace,afteraction,intel,targets,matchups,timeline,strategy,activity,history,assignments:orders,alerts:alertView,settings,diagnostics};
     const content=$('.ws-content',root);
@@ -3090,6 +3262,10 @@
   function close(){state.open=false;render();event('panel',{id:ID,open:false});}
   function handle(action){
     if(action==='refresh'){refresh(true);return;}
+    if(action==='war-more'){state.warMore=!state.warMore;render();return;}
+    if(action==='fast-turtle'){warQuick('turtle');return;}
+    if(action==='fast-hit'){warQuick('hit');return;}
+    if(action==='fast-heal'){warQuick('heal');return;}
     if(action==='commander-filter'){
       state.commanderFilter=state.commanderFilter==='black'?'all':'black';render();return;
     }
@@ -3348,6 +3524,7 @@
       (/^\/page\.php$/i.test(location.pathname) && /^(rankedwar|factionwar|war)$/i.test(new URLSearchParams(location.search).get('sid')||''));
   }
   function mountFactionShortcut(){
+    if(activeWarNow()){document.getElementById('warstaxx-faction-open')?.remove();return;}
     if(!factionRoute() || document.getElementById('warstaxx-faction-open'))return;
     const host=document.querySelector('#mainContainer, #mainWrapper, #mainContent, #main-content, main, [role="main"]');
     if(!host || host.closest('#staxx-hub-root, #warstaxx-root'))return;
@@ -3366,7 +3543,7 @@
     if(!document.body){document.addEventListener('DOMContentLoaded',boot,{once:true});return;}
     styleSheet();document.body.appendChild(root);
     // Show a low-profile, on-page fallback on faction routes; never create another floating FAB.
-    mountFactionShortcut();
+    renderWarStrip();mountFactionShortcut();
     if(!root.querySelector('.ws-panel')||!root.querySelector('.ws-tabs')||
        !root.querySelector('.ws-content')||!root.querySelector('.ws-sync'))
        throw new Error('War panel elements are missing');
@@ -3383,13 +3560,16 @@
   }
   // Registration maintenance is local-only; it does not query the Torn API.
   const registrationTimer=setInterval(()=>{if(!document.hidden){
-    announce();mountFactionShortcut();
+    announce();renderWarStrip();mountFactionShortcut();
     document.dispatchEvent(new CustomEvent('staxx:ping'));
   }},45000);
+  const warStripTimer=setInterval(()=>{if(!document.hidden)renderWarStrip();},10000);
+  window.addEventListener('popstate',()=>renderWarStrip(true));
+  window.addEventListener('hashchange',()=>renderWarStrip(true));
   const refreshTimer=setInterval(()=>{
     if(!document.hidden&&effectiveKey()&&!state.loading&&Date.now()-state.lastRefresh>cfg.refreshSeconds*1000)refresh(false);
   },30000);
-  window.addEventListener('beforeunload',()=>{clearInterval(refreshTimer);clearInterval(registrationTimer);},{once:true});
+  window.addEventListener('beforeunload',()=>{clearInterval(refreshTimer);clearInterval(registrationTimer);clearInterval(warStripTimer);},{once:true});
   try{boot();}catch(err){
     window.__warStaxxReady=false;
     window.__warStaxxStartError='Startup failed ('+(err?.name||'Error')+')';
