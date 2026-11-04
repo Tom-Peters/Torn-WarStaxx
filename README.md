@@ -1,5 +1,41 @@
 > **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v1.0.0). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
 
+## v1.3.0 - Skull Capo command, configurable heavy cutoff and squad performance (4 November 2026)
+
+The WarStaxx command view now reflects the correct leadership role: **Skull Capo, commander of the Black Skulls heavy hitters**, rather than overall faction leader. The full faction's regular attackers and defensive/reserve members remain visible for coordination but are clearly marked as context outside the Black Skulls squad.
+
+### Custom enemy strength cutoff
+
+Under **Reports > Skull Capo command**, choose the strength threshold used to reserve enemy opponents for the Black Skulls:
+
+- **Top percentage** (default 40%, adjustable from 5% to 100%) of opponents with current BSS evidence.
+- **Absolute minimum BSS** (e.g. reserve opponents with FFScouter/manual BSS at or above your chosen value).
+
+The rest of the **known-BSS** enemy roster is assigned to the regular-member pool. Enemies without fresh FFScouter BSS or recent manually verified spies remain unknown: never guess their strength based only on level. All actual HIT suggestions still require a safe in-role matchup using comparable manual spies, existing conflict checks and per-player risk settings. Existing incompatible manual orders are flagged rather than silently deleted.
+
+An **uncovered heavy-target board** shows each enemy in the chosen Black Skulls bracket, BSS evidence and freshness, current status, the currently assigned Black Skull (if any), and verified available squad alternatives. An **Assign** action is offered only when the candidate has favourable evidence and no conflicting active assignment; it only writes a manually approved order. New alerts warn when opponents in the heavy bracket have no Black Skull assigned.
+
+The cutoff is also included in optional, revision-controlled shared war orders. Deploy the updated Cloudflare Worker before enabling this version for your faction.
+
+### Scoreboard contributions: earned versus conceded
+
+The live and after-war leaderboard has **Points earned**, **Enemy points conceded** (enemy ranked-war score from attacks on that member), **Net impact proxy** (earned minus observed conceded), attacks made and incoming scoring hits. As Torn ranked-war scores are a tug of war, **being hit does not deduct from that player's own earned-points column**; the opponent gets points and the net faction lead changes. Opponent scoring must be derived from enemy-attacker/our-defender attack records with positive ranked-war respect. Because the local attack feed may be incomplete, conceded totals and their net proxy are labelled **partial**; unavailable incoming history displays **Unknown**, not zero.
+
+### Separate Black Skulls and regular after-action reports
+
+Every completed war's after-action dashboard now contains **two dedicated reports**, one for Black Skulls and one for regular faction members. Each calculates official earned points and attacks, points per attack, locally observed enemy score conceded and a clearly labelled net swing proxy. Individual contributors appear in each group, and each report has its **own Copy report** control for manual faction sharing. Nothing is sent automatically.
+
+For wars actually observed by WarStaxx, the script captures a small per-war Black Skulls membership snapshot, so changing membership later does not silently rewrite historical team reports. For older wars without a snapshot, reports explicitly say the grouping uses **current local tags**. The official completed-war scorecard is required for per-member earned totals; otherwise they remain unknown.
+
+### Preserved workflow and limitations
+
+- Persistent Torn command strip plus **01 Act Now / 02 Opponent / 03 Reports** main screens.
+- No designated chain-bonus attacker assignment, as requested. Existing bonus-target suggestions remain individual and advisory.
+- Torn PDA installation remains at:
+  https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js
+- Shared orders are opt-in and **not live until the Cloudflare Worker is deployed and connected**. The app never attacks, heals, spends energy or performs medical actions automatically.
+- See `tests/war-v13.test.mjs` for cutoff, uncovered heavy targets, attacking/defending score attribution, squad role snapshots and shared data privacy.
+
 ## v1.2.0 - Black Skulls hard-target allocation and four-layer war workflow (4 November 2026)
 
 ### The four parts of WarStaxx
