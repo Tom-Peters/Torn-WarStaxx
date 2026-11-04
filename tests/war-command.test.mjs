@@ -28,7 +28,7 @@ function targetFixture(){
     'const n=v=>Number.isFinite(Number(v))?Number(v):0;',
     'const positive=v=>Number.isSafeInteger(Number(v))&&Number(v)>0?Number(v):0;',
     'const fmt=v=>String(v);',
-    "const cfg={ourId:10,enemyId:20,assignments:{},blackSkulls:{1:true,2:true},planStatus:{},spies:{1:{known:true},2:{known:true},101:{known:true},103:{known:true}}};",
+    "const cfg={ourId:10,enemyId:20,assignments:{},blackSkulls:{1:true,2:true},planStatus:{},watchlist:{},spies:{1:{known:true},2:{known:true},101:{known:true},103:{known:true}}};",
     "const state={data:{war:{id:500},ours:[{id:1,name:'A',status:'okay',online:true},{id:2,name:'B',status:'okay',online:true}],enemies:[{id:101,name:'Known',status:'okay',ratio:0.65,online:true},{id:102,name:'Estimate',status:'okay',ratio:0.55,online:false},{id:103,name:'Hospital',status:'hospital',ratio:0.2,online:false},{id:104,name:'Unknown',status:'okay',ratio:null,online:false},{id:105,name:'Risky',status:'okay',ratio:1.4,online:true}]}};",
     "const spy=id=>cfg.spies[id]||null;",
     'const bsScore=spy=>spy?1:null;',
