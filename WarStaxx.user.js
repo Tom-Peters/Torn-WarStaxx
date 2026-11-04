@@ -953,6 +953,15 @@
     '#warstaxx-root .ws-data-label{color:#77dfef;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.8px}#warstaxx-root .ws-inline-metrics{display:flex;flex-wrap:wrap;gap:6px}',
     '#warstaxx-root .ws-inline-metrics span{border:1px solid #315f7e;border-radius:7px;background:#0d3452;padding:5px 9px;color:#bde5f6}',
     '#warstaxx-root .ws-compact-table{min-width:340px}#warstaxx-root .ws-focus-row{cursor:pointer}#warstaxx-root .ws-btn{min-height:36px}',
+    '#warstaxx-root .ws-ff-button{border:0;background:transparent;padding:1px;min-height:24px;display:inline-flex;align-items:center;vertical-align:middle}',
+    '#warstaxx-root .ws-ff{display:inline-block;white-space:nowrap;font-size:11px;font-weight:850;border-radius:7px;line-height:19px;padding:1px 6px;background:#193d58;color:#cdf0ff;border:1px solid #4c7195;letter-spacing:.1px}',
+    '#warstaxx-root .ws-ff-high{color:#a3ffe2;border-color:#2f9374;background:#12443b}',
+    '#warstaxx-root .ws-ff-mid{color:#bdefff;border-color:#387b9f;background:#17415e}',
+    '#warstaxx-root .ws-ff-low{color:#ffb6bf;border-color:#a04e5c;background:#4d2934}',
+    '#warstaxx-root .ws-ff-actual{color:#d5ecff;border-color:#778ed0;background:#253e68}',
+    '#warstaxx-root .ws-ff-stale{color:#ecb99a;border-color:#8e715c;background:#47342f}',
+    '#warstaxx-root .ws-ff-none{color:#a5b8c8;border-color:#4d5c70;background:#25344a}',
+    '#warstaxx-root .ws-card .ws-ff-button{flex-shrink:0}',
     '@media(max-width:640px){#warstaxx-root .ws-panel{height:100dvh;bottom:auto}#warstaxx-root .ws-hour-grid{grid-template-columns:repeat(8,minmax(0,1fr))}#warstaxx-root .ws-stat-action{min-height:112px}#warstaxx-root .ws-lead{padding:10px}#warstaxx-root .ws-score{font-size:19px}}',
     '@media(max-width:640px){#warstaxx-root .ws-panel{top:0;bottom:0;width:100%;border-radius:0}#warstaxx-root .ws-head{padding:8px}#warstaxx-root .ws-head strong{font-size:18px}#warstaxx-root .ws-head small{font-size:8px}#warstaxx-root .ws-content{padding:8px}#warstaxx-root .ws-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}#warstaxx-root .ws-card{padding:9px}#warstaxx-root .ws-number{font-size:21px}}'
   ].join('');
@@ -1039,6 +1048,36 @@
     }catch(e){state.error='Cannot load official report: '+String(e.message||e);}
     finally{state.loading=false;save();render();}
   }
+  function ffStatusPanel(){
+    const d=ffCoverage(),reg=state.data.meta.ffRegistration||{},
+      enabled=d.enabled&&d.keyAvailable;
+    const status=!cfg.ffConsent?'Third-party consent required':
+      !cfg.ffEnabled?'FFScouter lookup switched off':!d.keyAvailable?'No usable Torn key':
+      reg.registered===false?'Key not registered':reg.registered?'Registered '+(reg.premium?'Premium':'Free'):'Registration not yet checked';
+    return card('Fair Fight intelligence | source: FFScouter',
+      '<p><b>'+esc(status)+'</b> | FF available for '+d.covered+' / '+d.total+' opponents'+
+      (d.stale?' | '+d.stale+' stale estimates':'')+' | '+d.unknown+' unknown.</p>'+
+      '<p>Last successful fetch: '+esc(age(d.last))+
+      '. Estimates are for the registered API-key owner. Individual Black Skulls FF values are calculated separately when you have comparable spy/BSS data for both players.</p>'+
+      (state.data.errors.ffscouter?'<div class="ws-note ws-warn">FFScouter: '+esc(state.data.errors.ffscouter)+'</div>':'')+
+      '<div class="ws-toolbar">'+b('Refresh FF','refresh-ff')+b('Check registered key','check-ff-key')+
+      b('FF settings','tab:settings')+'</div>'+
+      '<p class="ws-small">Blue/green badges are estimates; actual logged Torn attack FF is labelled as observed. A large FF alone does not mean an easy or winnable hit.</p>');
+  }
+  async function manualFFCheck(onlyCheck=false){
+    if(state.loading||state.ffLoading)return;
+    if(!cfg.ffConsent||!cfg.ffEnabled||!ffApiKey()){navigate('settings');state.error='Enable FFScouter with explicit consent, then save Settings before checking the key.';render();return;}
+    state.ffLoading=true;state.error='';render();
+    try{
+      if(onlyCheck){delete state.data.meta.ffRegistration;await checkFFRegistration(true);}
+      else await refreshFF(true);
+      state.error=state.data.errors.ffscouter?'FF lookup: '+state.data.errors.ffscouter:
+        onlyCheck?'FFScouter key is registered.':'FF coverage checked. Last data '+age(state.data.updated.ffscouter)+'.';
+    }catch(e){
+      state.data.errors.ffscouter=String(e?.message||e).slice(0,150);
+      state.error=state.data.errors.ffscouter;
+    }finally{state.ffLoading=false;save();render();}
+  }
   function statusNote(){
     const latest=Math.max(n(state.data.updated.enemies),n(state.data.updated.ours));
     const fresh=latest&&Date.now()-latest<5*MIN;
@@ -1049,6 +1088,7 @@
   }
   function overview(){
     const w=state.data.war,score=warScore(),our=sideActivity('ours'),them=sideActivity('enemies');
+    const ff=ffCoverage();
     const historyStats=factionWarMetrics('enemies'),last=historyStats.last;
     const now=Date.now(),recent=state.data.enemies.filter(p=>p.lastAt&&now-p.lastAt<24*HOUR);
     let html=statusNote()+
@@ -1070,6 +1110,8 @@
         last?'Against '+scoreLabel(historyStats.lastAgainst)+' | #'+last.id:'History not yet loaded','tab:intel')+
       statAction('Enemy war wins',historyStats.decided?fmt(historyStats.wins)+' / '+fmt(historyStats.decided):'\u2014',
         'Last '+historyStats.wars+' completed wars loaded','tab:history')+
+      statAction('FFScouter coverage',ff.total?ff.covered+' / '+ff.total:'\u2014',
+        'Fresh estimates; click to inspect source and connection','tab:targets')+
       statAction('Enemy status',them.total?fmt(them.away)+' away / '+fmt(them.hospital)+' hosp.':'\u2014',
         'Observed travel and hospital states','tab:activity')+'</div>';
     if(score&&score.target){
@@ -1086,10 +1128,11 @@
         '<p class="ws-small">Based on local foreground samples only ('+best.ours.samples+' ours / '+best.theirs.samples+
         ' enemy observations for this hour). Not a guarantee or accurate live member count.</p>'+b('See 24h comparison','tab:activity'));
     }
+    html+=ffStatusPanel();
     const leaders=perMemberRows('enemies',5).filter(x=>x.last!==null);
     html+=card('Enemy last-war top scorers',leaders.length?
       '<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Enemy</th><th>Latest known war score</th><th>Action</th></tr></thead><tbody>'+
-      leaders.map(x=>'<tr><td>'+infoButton(x.p.name,x.p.id)+'</td><td>'+scoreLabel(x.last)+'</td><td>'+a('Profile',link(x.p.id))+'</td></tr>').join('')+
+      leaders.map(x=>'<tr><td>'+infoButton(x.p.name,x.p.id)+' '+ffBadge(x.p.id)+'</td><td>'+scoreLabel(x.last)+'</td><td>'+a('Profile',link(x.p.id))+'</td></tr>').join('')+
       '</tbody></table></div>'+b('Full opponent dossier','tab:intel'):
       empty('Official per-player scores appear as historical reports load. Select the opponent in Settings if not currently at war.')+
       '<div class="ws-toolbar">'+b('Load enemy history','tab:history')+b('See all players','tab:targets')+'</div>');
@@ -1541,6 +1584,9 @@
   function close(){state.open=false;render();event('panel',{id:ID,open:false});}
   function handle(action){
     if(action==='refresh'){refresh(true);return;}
+    if(action==='refresh-ff'){manualFFCheck(false);return;}
+    if(action==='check-ff-key'){manualFFCheck(true);return;}
+    if(action.startsWith('watch:')){const id=positive(action.slice(6));if(id){if(cfg.watchlist[id])delete cfg.watchlist[id];else cfg.watchlist[id]=true;saveCfg();render();}return;}
     if(action==='war-list'){state.selectedWar=0;navigate('history');return;}
     if(action==='deep-scan'){cfg.historyLimit=20;saveCfg();navigate('history');refresh(true);return;}
     if(action.startsWith('hour:')){const h=Number(action.slice(5));if(Number.isInteger(h)&&h>=0&&h<24){const tr=$('#ws-hour-row-'+h,root);if(tr){tr.scrollIntoView({block:'center'});tr.style.outline='2px solid #54d7fa';}}return;}
