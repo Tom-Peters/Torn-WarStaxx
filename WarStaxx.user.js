@@ -211,7 +211,7 @@
   const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},factionBasic:{},publicIntel:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},scoreTimelines:{},warTimelines:{},sampleCount:0});
   const state={data:Object.assign(freshData(),safeRead(DATA,{})),open:false,tab:'overview',showMore:false,
     filter:'all',sort:'warScore',search:'',loading:false,ffLoading:false,spinner:'',error:'',scanning:false,alerts:[],chosen:0,
-    lastRefresh:0,historicalRead:0,localKeyError:false,warExpected:false,selectedWar:0,selectedTimeline:0,detailFrom:'targets',leaderFilter:'all',hitterFilter:'all'};
+    lastRefresh:0,historicalRead:0,localKeyError:false,warExpected:false,selectedWar:0,selectedTimeline:0,selectedPace:0,detailFrom:'targets',leaderFilter:'all',hitterFilter:'all'};
   state.data.reports=state.data.reports||{};
   state.data.activity=state.data.activity||{};
   state.data.ffstats=state.data.ffstats||{};
@@ -700,7 +700,8 @@
     const enemySpy=spy(enemy.id),friendSpy=spy(friend.id);
     const latest=enemySpy?.observedAt||0;
     const manuallyConfirmed=bsScore(friendSpy)!==null&&bsScore(enemySpy)!==null;
-    const freshSpies=manuallyConfirmed&&n(latest)>0&&Date.now()-latest<30*24*HOUR;
+    const freshSpies=manuallyConfirmed&&n(latest)>0&&n(friendSpy?.observedAt)>0&&
+      Date.now()-latest<30*24*HOUR&&Date.now()-n(friendSpy?.observedAt)<30*24*HOUR;
     const externalOnly=m.known&&!manuallyConfirmed;
     const active=memberState(enemy)==='okay';
     const conflict=Object.entries(cfg.assignments).some(([id,target])=>
@@ -708,10 +709,12 @@
     let category='Scout',reason='Missing comparable stats',tier=3;
     if(!active){category='Unavailable';reason=memberState(enemy)==='hospital'?'In hospital':memberState(enemy)==='away'?'Travelling / abroad':'Not Okay';tier=5;}
     else if(m.known&&m.ratio>=1.15){category='Avoid';reason='Enemy modelled battle strength is higher';tier=4;}
-    else if(manuallyConfirmed&&m.known&&m.ratio<0.7){
-      category='Strong candidate';reason=freshSpies?'Favourable manual stats; check current buffs':'Favourable older spies; recheck';tier=0;
+    else if(manuallyConfirmed&&m.known&&m.ratio<0.8&&!freshSpies){
+      category='Recheck old spies';reason='One or both spy records are older than 30 days or undated';tier=2;
+    }else if(manuallyConfirmed&&m.known&&m.ratio<0.7){
+      category='Strong candidate';reason='Recent comparative manual stats; check buffs and equipment';tier=0;
     }else if(manuallyConfirmed&&m.known&&m.ratio<0.8){
-      category='Possible';reason='Moderate manual BSS margin; verify fight conditions';tier=1;
+      category='Possible';reason='Recent manual BSS margin; verify fight conditions';tier=1;
     }else if(externalOnly&&m.known&&m.ratio<0.8){
       category='Verify estimate';reason='FFScouter BSS model; scout before hit';tier=2;
     }else if(m.known){category='Risky';reason='Close or unfavourable modelled battle score';tier=4;}
@@ -749,7 +752,7 @@
     const conflicts=new Map();
     for(const member of ours){
       const target=positive(cfg.assignments[member.id]);
-      if(target)conflicts.set(target,(conflicts.get(target)||0)+1);
+      if(target&&enemy.some(e=>e.id===target))conflicts.set(target,(conflicts.get(target)||0)+1);
     }
     return {members:ours.length,enemy:enemy.length,ready:ready.length,skulls:skulls.length,skullReady:skullReady.length,
       manual,inProgress,unassigned:ours.length-manual,
@@ -1332,12 +1335,12 @@
     const active=positive(state.data.war?.id);
     const tracked=Object.values(state.data.scoreTimelines).filter(x=>Array.isArray(x?.points)&&x.points.length)
       .sort((a,b)=>n(b.lastAt)-n(a.lastAt)).slice(0,20);
-    const selected=positive(state.selectedTimeline)||active||positive(tracked[0]?.id);
+    const selected=positive(state.selectedPace)||active||positive(tracked[0]?.id);
     const w=warPace(selected),current=state.data.war&&active===selected,score=current?warScore():null;
     let html=statusNote()+'<div class="ws-lead"><span class="ws-data-label">RANKED WAR | OFFICIAL SCORE SAMPLES</span>'+
       '<h2>Score pace and momentum</h2>'+
       '<p>Watch the scoreline and how quickly each faction is gaining points. Pace requires multiple score observations collected while Torn PDA is running; it is not continuous tracking.</p>'+
-      '<div class="ws-toolbar">'+b('Refresh live score','refresh')+b('Leadership command','tab:command')+
+      '<div class="ws-toolbar">'+b('Refresh live score','refresh')+b('Follow current war','pace-live')+b('Leadership command','tab:command')+
       b('Opponent war records','tab:history')+'</div></div>';
     if(tracked.length>1)html+=card('Select a war', '<div class="ws-toolbar">'+
       tracked.map(x=>b('#'+x.id+(active===x.id?' active':''),'pace-war:'+x.id)).join('')+'</div>');
@@ -1388,7 +1391,7 @@
     let html=statusNote()+'<div class="ws-lead"><span class="ws-data-label">PER-WAR ACTIVITY AND TRAVEL | ON-DEVICE OBSERVATIONS</span>'+
       '<h2>Opponent behaviour across wars</h2>'+
       '<p>Online, travelling, hospital and available states are sampled separately for each ranked war. Compare real observed patterns without inventing historic travel or sleep schedules.</p>'+
-      '<div class="ws-toolbar">'+b('General 24-hour activity','tab:activity')+b('Review enemy players','tab:targets')+
+      '<div class="ws-toolbar">'+b('Latest observed war','timeline-latest')+b('General 24-hour activity','tab:activity')+b('Review enemy players','tab:targets')+
       b('Live scoring pace','tab:pace')+'</div></div>';
     if(!records.length)return html+empty('No ranked-war-specific snapshots exist on this device yet. Keep WarStaxx open during upcoming wars; each completed war with recorded observations will appear separately.');
     html+=card('Wars with local observations',
@@ -2104,7 +2107,9 @@
     if(action==='refresh'){refresh(true);return;}
     if(action==='match-more'){state.showAllMatchups=!state.showAllMatchups;render();return;}
     if(action.startsWith('hitter:')){const id=positive(action.slice(7));if(state.data.ours.some(p=>p.id===id)){state.chosen=id;navigate('matchups');}return;}
-    if(action.startsWith('pace-war:')){state.selectedTimeline=positive(action.slice(9));navigate('pace');return;}
+    if(action.startsWith('pace-war:')){state.selectedPace=positive(action.slice(9));navigate('pace');return;}
+    if(action==='pace-live'){state.selectedPace=0;navigate('pace');return;}
+    if(action==='timeline-latest'){state.selectedTimeline=0;navigate('timeline');return;}
     if(action.startsWith('timeline-war:')){state.selectedTimeline=positive(action.slice(13));navigate('timeline');return;}
     if(action==='draft-black'){
       const drafts=suggestedDraft();
