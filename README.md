@@ -1,4 +1,39 @@
-> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v0.4.0). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v0.5.0). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+
+## v0.5.0 - Leadership, personalised hitter targets, live scoring pace and per-war behaviour (4 November 2026)
+
+**Torn PDA URL (unchanged):** https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js
+
+### Personalised targets for every faction hitter
+
+- The revamped **Matchups** tab contains a roster-wide per-hitter comparison; choose any member or jump directly to their shortlist. It prioritises comparable manual battle-stat spies, opponent availability and recorded war contributions. Every opponent retains separate FFScouter-for-key-owner, modelled FF-for-selected-hitter and real attack-observed FF labels.
+- **Strong candidate** requires favourable comparative manual spies for **both** players dated within 30 days. Stale manual spies show **Recheck old spies**; FFScouter-only estimates show **Verify estimate**, and missing stats show **Scout**. Dangerous, unavailable and already-assigned opponents are labelled clearly. These models are not win probabilities or guaranteed hits.
+- **Draft verified Black Skulls orders** is a deliberate local button in Leadership. It uses only currently Okay, unassigned hitters with recent comparative manual spy evidence, avoids duplicate targets, and never overrides existing manual orders or performs a Torn attack. You can still select a manual target explicitly when information is incomplete.
+
+### War Pace
+
+- **War Pace** records official scores returned by the current ranked-war endpoint when the Torn page is open; it shows both factions' last sampled score, score differences, score points per hour in the latest sampled hour window, a small two-line historical score graph, data freshness and an observation confidence label.
+- There must be at least two samples separated by five minutes to show an arithmetic rate. The app does **not** invent scoring during gaps, extrapolate a guaranteed victory time or claim the data is continuously collected when Torn PDA is closed.
+- An optional war-score momentum alert routes to the Pace screen when the opponent has a sufficiently strong *observed* score-rate advantage; the ordinary TornStaxx hub remains responsible only for navigation and generic notices.
+
+### Multiple-war behaviour history
+
+- **War Timelines** records separate per-war local activity observations for both rosters (online, travelling/abroad, hospital and Okay). Each timeline has TCT hourly breakdowns, player-specific histories, polling coverage and a comparison with other wars captured on this device.
+- A player's dossier now provides a **per-war travel and activity comparison** when that player was observed in multiple ranked wars. Old wars without observations remain unknown. Official completed war reports cannot reconstruct old online/travel patterns.
+- Separate bounded local stores retain up to 20 score timelines and 20 war-activity histories. Existing 14-day general activity samples, old war reports, FFScouter caches, spies and notes remain intact.
+
+### Leadership command screen
+
+- **Leadership** compares active Black Skulls, currently Okay hitters, the latest official scoreline, locally recorded duties, manual assignment coverage and duplicate-target conflicts.
+- Interactive target and duty selectors let you set and monitor each member, filter by Black Skulls/available/all, open their personalised shortlist or Torn's **manual** attack page, and copy a faction briefing. Duties such as Engaged, Support and Complete are **manual leadership notes**, not verified Torn events.
+- Leadership can mark/unmark Black Skulls, save war-specific tactical notes and draft strong manual-spy assignments on explicit click. The command board switches to vertically stacked member cards on smaller screens.
+- **No cross-device sync, shared spy database, remote service or Torn gameplay writes were introduced.** Keys stay inside War, not in the separate TornStaxx hub.
+
+### Validation and limitations
+
+- The new `tests/war-command.test.mjs` tests timed scoring, unknown history, isolated per-war travel, conservative per-hitter target ranking, Black Skulls drafting and war-scoped leadership statuses.
+- Existing integration, FFScouter and Torn PDA source quote/ASCII regression tests remain in `npm test`. Tests do not substitute for live UI verification using your registered Torn API key.
+- Data is read-only from the game API; score and activity snapshots exist only while Torn PDA executes the script in the foreground.
 
 ## v0.4.0 - Fair Fight and ranked-war targeting intelligence (4 November 2026)
 
