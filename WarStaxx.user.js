@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      0.2.5
+// @version      0.2.6
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='0.2.5';
+  const id='war', version='0.2.6';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='0.2.5', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='0.2.6', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','targets','matchups','strategy','activity','history','assignments','alerts','settings','diagnostics'];
   const labels={overview:'Command',targets:'Targets',matchups:'Matchups',strategy:'Strategy',activity:'Activity',history:'History',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -199,7 +199,7 @@
   const link=id=>'https://www.torn.com/profiles.php?XID='+positive(id);
   const attackLink=id=>'https://www.torn.com/loader.php?sid=attack&user2ID='+positive(id);
   const apiKeyPda=typeof window.PDA_APIKEY==='string'?window.PDA_APIKEY:'###PDA-APIKEY###';
-  const defaults={key:'',ourId:0,enemyId:0,refreshSeconds:120,historyLimit:8,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},blackSkulls:{},spies:{},notes:{},hidden:false};
+  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:8,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},blackSkulls:{},spies:{},notes:{},hidden:false};
   const cfg=Object.assign({},defaults,safeRead(CONFIG,{}));
   cfg.assignments=cfg.assignments&&typeof cfg.assignments==='object'?cfg.assignments:{};
   cfg.blackSkulls=cfg.blackSkulls&&typeof cfg.blackSkulls==='object'?cfg.blackSkulls:{};
@@ -452,7 +452,7 @@
     const out=[];
     const w=state.data.war,score=warScore(),t=state.data.updated.enemies||0;
     if(!effectiveKey())out.push({id:'api-key',title:'Connect Torn API',detail:'Add a key in Settings to load live and historical intelligence.',status:'now',priority:95,tab:'settings'});
-    if(!positive(cfg.ourId))out.push({id:'faction-id',title:'Confirm your faction',detail:'Choose your own faction ID in Settings if autodetection has not completed.',status:'now',priority:92,tab:'settings'});
+    if(!positive(cfg.ourId))out.push({id:'faction-id',title:'Detect your faction',detail:'WarStaxx checks your API key identity automatically. Open Settings if you need to retry or use a manual ID.',status:'now',priority:92,tab:'settings'});
     if(w&&t&&Date.now()-t<5*MIN){
       const hittable=state.data.enemies.filter(p=>evaluate(p).ready);
       if(hittable.length)out.push({id:'ready-targets',title:fmt(hittable.length)+' opponents currently Okay',detail:'Review live status and confirmed matchups before choosing your hit.',status:'now',priority:85,tab:'targets'});
@@ -484,13 +484,66 @@
     event('war-context',{id:ID,active:Boolean(state.data.war),ourFactionId:positive(cfg.ourId),
       opponentFactionId:positive(cfg.enemyId),observedAt:observed||0,hittable:hittable});
   }
-  async function identify(){
-    if(positive(cfg.ourId))return;
-    const j=await call('/user/profile','identity',24*HOUR);
-    if(!j)return;
-    const f=j.faction||j.profile?.faction||{};
-    const id=positive(f.faction_id||f.id);
-    if(id){cfg.ourId=id;saveCfg();}
+  // Torn API v2 key/info reports user.faction_id for the key owner even when
+  // a custom key has no faction management permissions.
+  // Never treat the player's own user ID as a faction ID.
+  function ownFactionFrom(j,source){
+    if(!j||typeof j!=='object')return null;
+    const d=j.info&&typeof j.info==='object'?j.info:j;
+    if(source==='key-info'){
+      const user=d.user||d.key?.user||null;
+      if(user&&Object.prototype.hasOwnProperty.call(user,'faction_id'))
+        return {id:positive(user.faction_id),source:'Torn key/info'};
+      return null;
+    }
+    const faction=d.faction||d.profile?.faction||d.user?.faction||null;
+    if(faction&&typeof faction==='object'){
+      const id=positive(faction.faction_id??faction.id);
+      if(id)return {id,source:source==='user-faction'?'Torn user/faction':'Torn user/profile'};
+    }
+    if(source==='user-faction'&&Object.prototype.hasOwnProperty.call(d,'faction_id'))
+      return {id:positive(d.faction_id),source:'Torn user/faction'};
+    return null;
+  }
+  async function identify(force=false){
+    if(cfg.factionAuto===false)return positive(cfg.ourId);
+    if(!force&&positive(cfg.factionVerifiedAt)&&Date.now()-n(cfg.factionVerifiedAt)<6*HOUR)
+      return positive(cfg.ourId);
+    const sources=[
+      ['/key/info','identity-key','key-info'],
+      ['/user/faction','identity-faction','user-faction'],
+      ['/user/profile','identity-profile','user-profile']
+    ];
+    for(const [path,kind,source] of sources){
+      let result=null;
+      try{
+        const response=await call(path,kind,force?0:6*HOUR);
+        if(response)result=ownFactionFrom(response,source);
+      }catch(_){/* A key may lack this selection; try the next official endpoint. */}
+      if(!result)continue;
+      const previous=positive(cfg.ourId);
+      cfg.ourId=result.id;
+      cfg.factionSource=result.source;
+      cfg.factionVerifiedAt=Date.now();
+      if(previous&&previous!==result.id){
+        // Avoid displaying another faction's live roster as our own.
+        cfg.enemyId=0;
+        state.data.ours=[];
+        state.data.enemies=[];
+        state.data.ourWars=[];
+        state.data.enemyWars=[];
+        state.data.war=null;
+        state.data.updated.wars=0;
+        state.data.updated.ours=0;
+        state.data.updated.enemies=0;
+      }
+      saveCfg();
+      return result.id;
+    }
+    // Keep the last verified ID if only a temporary API/network failure occurred.
+    if(!positive(cfg.ourId))state.data.errors.identity=
+      'Faction auto-detection unavailable: check that your Torn PDA API key is available.';
+    return positive(cfg.ourId);
   }
   async function refreshHistory(){
     if(!positive(cfg.ourId))return;
@@ -555,8 +608,8 @@
     state.loading=true;state.error='';state.spinner='Fetching official Torn data';
     render();
     try{
-      await identify();
-      if(!positive(cfg.ourId))throw new Error('Could not detect your faction. Enter the faction ID in Settings.');
+      await identify(force);
+      if(!positive(cfg.ourId))throw new Error('Unable to detect your faction from Torn API. Check your API key or use the optional manual faction ID in Settings.');
       const wars=await call('/faction/'+cfg.ourId+'/wars','wars',force?0:90*1000);
       if(wars){
         const w=detectWar(wars);state.data.war=w;
@@ -807,7 +860,10 @@
   function settings(){
     return card('Torn API connection','<p>Use your Torn PDA API placeholder when supported, or save a personal key on this device. The key is sent only to the official api.torn.com endpoint. Do not export it.</p>'+
       '<label>API key (saved locally, never displayed on diagnostics)<input id="ws-key" type="password" autocomplete="off" placeholder="'+(effectiveKey()?'Key available \u00b7 leave blank to keep':'Enter custom-scoped Torn API key')+'"></label>'+
-      '<label>Your faction ID<input type="number" id="ws-our" min="1" value="'+(positive(cfg.ourId)||'')+'"></label>'+
+      '<label><input type="checkbox" id="ws-auto-faction" '+(cfg.factionAuto!==false?'checked':'')+'> Automatically detect my faction from the Torn API (recommended)</label>'+
+      '<p class="ws-small">Detected faction: '+(positive(cfg.ourId)?fmt(cfg.ourId):'Not detected yet')+
+      ' | Source: '+esc(cfg.factionSource||'Awaiting API check')+'</p>'+
+      '<label>My faction ID (manual fallback when automatic detection is disabled)<input type="number" id="ws-our" min="1" value="'+(positive(cfg.ourId)||'')+'"></label>'+
       '<label>Opponent faction ID (auto-updated if a ranked war is detected)<input type="number" id="ws-enemy" min="1" value="'+(positive(cfg.enemyId)||'')+'"></label>'+
       '<label>Automatic refresh<select id="ws-interval">'+[90,120,180,300].map(s=>'<option value="'+s+'" '+(cfg.refreshSeconds===s?'selected':'')+'>'+s+' seconds while visible</option>').join('')+'</select></label>'+
       '<label>Historical wars per side<select id="ws-limit">'+[3,5,8,12,20].map(s=>'<option value="'+s+'" '+(cfg.historyLimit===s?'selected':'')+'>'+s+' wars</option>').join('')+'</select></label>'+
@@ -816,7 +872,7 @@
       '<label>Registered FFScouter API key<input id="ws-ffkey" type="password" autocomplete="off" placeholder="'+(cfg.ffKey?'Key saved \u00b7 leave blank to keep':'Torn key registered with FFScouter')+'"></label>'+ 
       '<label><input type="checkbox" id="ws-ff-consent" '+(cfg.ffConsent?'checked':'')+'> I have read the FFScouter data policy and knowingly enable this third-party lookup.</label>'+ 
       '<label><input type="checkbox" id="ws-ff-enable" '+(cfg.ffEnabled?'checked':'')+'> Fetch FFScouter estimates using my registered key, no more than once per 10 minutes.</label>'+
-      '<div class="ws-toolbar">'+b('Save settings','save-settings')+b('Refresh all now','refresh')+b('Clear stored API key','clear-key')+'</div>'+
+      '<div class="ws-toolbar">'+b('Save settings','save-settings')+b('Detect my faction now','detect-faction')+b('Refresh all now','refresh')+b('Clear stored API key','clear-key')+'</div>'+
       '<p class="ws-small">API access depends on your custom key scope. Opponent member lists and ranked-war history use public selections; your own detailed attacks require faction access.</p>')+
       card('Local intelligence controls','<p>War histories, observations, manual spy reports and assignments remain in this browser storage. No central database or cross-device sync is active.</p>'+
       b('Reset activity samples only','reset-activity')+' '+b('Reset manual orders','reset-orders'))+
@@ -825,7 +881,11 @@
   function diagnostics(){
     const d=state.data;
     return card('Safe diagnostics','<p>Version '+VER+' \u00b7 API key '+(effectiveKey()?'available':'missing')+' \u00b7 local storage '+(state.localKeyError?'problem':'available')+'</p>'+
-      '<p>Own ID: '+(positive(cfg.ourId)?'configured':'missing')+' \u00b7 Opponent ID: '+(positive(cfg.enemyId)?'configured':'missing')+'</p>'+
+      '<p>Own faction: '+(positive(cfg.ourId)?fmt(cfg.ourId):'unknown')+
+      ' | Source: '+esc(cfg.factionSource||'Not detected')+
+      ' | Mode: '+(cfg.factionAuto===false?'manual':'automatic')+
+      ' | Verified: '+esc(age(cfg.factionVerifiedAt))+'</p>'+
+      '<p>Opponent ID: '+(positive(cfg.enemyId)?'configured':'missing')+'</p>'+
       '<p>Last known roster: '+esc(age(Math.max(n(d.updated.enemies),n(d.updated.ours))))+'</p>'+
       '<h3>Source freshness and API errors</h3>'+
       '<div class="ws-table-wrap"><table><thead><tr><th>Endpoint</th><th>Last success</th><th>Last error</th></tr></thead><tbody>'+
@@ -918,7 +978,21 @@
       }
       return;
     }
-    if(action==='clear-key'){cfg.key='';saveCfg();render();return;}
+    if(action==='clear-key'){cfg.key='';cfg.factionVerifiedAt=0;saveCfg();render();return;}
+    if(action==='detect-faction'){
+      cfg.factionAuto=true;
+      cfg.factionVerifiedAt=0;
+      saveCfg();
+      state.data.updated['identity-key']=0;
+      state.data.updated['identity-faction']=0;
+      state.data.updated['identity-profile']=0;
+      state.data.backoff['identity-key']=null;
+      state.data.backoff['identity-faction']=null;
+      state.data.backoff['identity-profile']=null;
+      navigate('overview');
+      refresh(true);
+      return;
+    }
     if(action==='reset-activity'){state.data.activity={};state.data.sampleCount=0;save();render();return;}
     if(action==='reset-orders'){cfg.assignments={};saveCfg();render();return;}
     if(action==='save-settings'){
@@ -926,7 +1000,16 @@
       const ffSupplied=$('#ws-ffkey',root)?.value?.trim();if(ffSupplied)cfg.ffKey=ffSupplied;
       cfg.ffConsent=Boolean($('#ws-ff-consent',root)?.checked);
       cfg.ffEnabled=Boolean($('#ws-ff-enable',root)?.checked)&&cfg.ffConsent&&Boolean(cfg.ffKey);
-      cfg.ourId=positive($('#ws-our',root)?.value);
+      const manualId=positive($('#ws-our',root)?.value);
+      cfg.factionAuto=Boolean($('#ws-auto-faction',root)?.checked);
+      if(cfg.factionAuto){
+        cfg.factionVerifiedAt=0;
+        // Leave the prior verified ID in place until an official API answer.
+      }else{
+        cfg.ourId=manualId;
+        cfg.factionSource=manualId?'Manual override':'Not set';
+        cfg.factionVerifiedAt=0;
+      }
       cfg.enemyId=positive($('#ws-enemy',root)?.value);
       cfg.refreshSeconds=Math.max(90,Math.min(300,positive($('#ws-interval',root)?.value)||120));
       cfg.historyLimit=Math.max(2,Math.min(20,positive($('#ws-limit',root)?.value)||8));
