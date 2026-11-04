@@ -10,7 +10,7 @@ function between(start,end){
   return source.slice(a,b);
 }
 function ffFixture(){
-  const code=String.raw\`
+  const code=String.raw`
     const HOUR=3600000;
     const cfg={ffEnabled:true,ffConsent:true,ffKey:'myregisteredkey'};
     const state={data:{ffstats:{},enemies:[{id:101},{id:102},{id:103}],updated:{},attacks:[]}};
@@ -20,9 +20,9 @@ function ffFixture(){
     const esc=v=>String(v);
     const b=()=>'<button>Click</button>';
     const ffObserved=()=>({count:0,avg:null});
-    \`+between('  const ffApiKey=','  function matchup(')+String.raw\`
+    `+between('  const ffApiKey=','  function matchup(')+String.raw`
     ({cfg,state,ffApiKey,parseFFRows,ffscouter,ffLabel,ffCoverage,ffBadge,validFF,ffTimestamp})
-  \`;
+  `;
   return runInNewContext(code);
 }
 test('FFScouter returns usable FF, BSS, estimate source, date and missing data',()=>{
@@ -73,19 +73,19 @@ test('FF key falls back to Torn PDA key only when separate key absent',()=>{
 test('native Torn PDA transport is preferred over GM XMLHttpRequest',async()=>{
   let calls=0;
   const code=between('  async function ffRequest(url){','  async function checkFFRegistration(');
-  const request=runInNewContext(String.raw\`
+  const request=runInNewContext(String.raw`
     const PDA_httpGet=async url=>({status:200,responseText:JSON.stringify([{player_id:101,fair_fight:2.7}])});
     const GM_xmlhttpRequest=()=>{throw new Error('GM should not run in PDA')};
-    \`+code+'; ffRequest',{setTimeout});
+    `+code+'; ffRequest',{setTimeout});
   const data=await request('https://ffscouter.com/api/v1/get-stats?key=redacted&targets=101');
   assert.ok(Array.isArray(data));
   assert.equal(data[0].fair_fight,2.7);
 });
 test('native Torn PDA transport exposes HTTP errors rather than swallowing them',async()=>{
   const code=between('  async function ffRequest(url){','  async function checkFFRegistration(');
-  const request=runInNewContext(String.raw\`
+  const request=runInNewContext(String.raw`
     const PDA_httpGet=async()=>({status:401,responseText:'{"error":"Invalid key","code":401}'});
-    \`+code+'; ffRequest',{setTimeout});
+    `+code+'; ffRequest',{setTimeout});
   await assert.rejects(request('https://ffscouter.com/api/v1/get-stats'),/FFScouter HTTP 401/);
 });
 test('FF is next to player names and remains distinct from team-specific matchup FF',()=>{
