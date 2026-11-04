@@ -829,6 +829,12 @@
       if(score&&score.net<0)out.push({id:'war-score',title:'Ranked war score is behind',detail:'Current net score '+fmt(score.net)+'; review team assignments and coverage.',status:'review',priority:70,tab:'strategy'});
     }
     if(w&&(!t||Date.now()-t>5*MIN))out.push({id:'stale-roster',title:'Refresh opponent statuses',detail:'Last observed status is stale; refresh before hitting.',status:'soon',priority:75,tab:'overview'});
+    if(w){const pace=warPace();
+      if(pace&&pace.measurable&&pace.span>=20&&Date.now()-pace.last.at<10*MIN&&pace.netRate<-20)
+        out.push({id:'score-pace-falling',title:'Enemy gaining score momentum',detail:'Observed net pace '+fmt(pace.netRate)+' points/hour; review your hitters and coverage.',status:'review',priority:79,tab:'pace'});
+      const plan=leadershipSummary();
+      if(plan.duplicateTargets.length)out.push({id:'overlapping-orders',title:'Overlapping Black Skulls targets',detail:plan.duplicateTargets.length+' opponent targets assigned to multiple hitters; review local leadership orders.',status:'review',priority:67,tab:'command'});
+    }
     return out.slice(0,10);
   }
   function event(name,detail){document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}
@@ -841,9 +847,12 @@
     const observed=Math.max(n(state.data.updated.wars),n(state.data.updated.enemies),n(state.data.updated.ours));
     const hittable=state.data.enemies.filter(e=>evaluate(e).ready).length;
     const enemyActivity=sideActivity('enemies'),enemyHistory=factionWarMetrics('enemies');
+    const observedPace=warPace();
     if(observed)event('summary',{id:ID,headline:state.data.war?'Ranked war detected':'War scouting / standby',
       updated:observed,metrics:[{label:'Enemy active 24h',value:enemyActivity.total?enemyActivity.active24+' / '+enemyActivity.total:'--'},
-        {label:'Last war points',value:enemyHistory.lastScore===null?'--':fmt(enemyHistory.lastScore)},
+        {label:state.data.war?'Net pace per hour':'Last war points',value:state.data.war?
+          observedPace?.netRate===null||!observedPace?'--':fmt(observedPace.netRate):
+          enemyHistory.lastScore===null?'--':fmt(enemyHistory.lastScore)},
         {label:'Hittable enemies',value:String(hittable)}]});
     event('actions',{id:ID,updated:observed||0,items:a.map(x=>({id:x.id,title:x.title,detail:x.detail,status:x.status,priority:x.priority,reviewMinutes:2}))});
     event('notice',{id:ID,count:a.filter(x=>x.status==='now'||x.status==='urgent').length,
@@ -1140,6 +1149,10 @@
     '#warstaxx-root .ws-ff-stale{color:#ecb99a;border-color:#8e715c;background:#47342f}',
     '#warstaxx-root .ws-ff-none{color:#a5b8c8;border-color:#4d5c70;background:#25344a}',
     '#warstaxx-root .ws-card .ws-ff-button{flex-shrink:0}',
+    '#warstaxx-root .ws-score-chart{display:block;width:100%;height:auto;min-height:110px;max-height:260px;background:#0a2238;border:1px solid #274960;border-radius:8px;padding:7px;margin:8px 0}',
+    '#warstaxx-root .ws-legend-own{color:#61d9ff;font-weight:750}#warstaxx-root .ws-legend-enemy{color:#ff809e;font-weight:750}',
+    '#warstaxx-root .ws-leader-table select{min-width:170px;max-width:260px;width:100%;padding:7px}#warstaxx-root .ws-leader-table .ws-btn{margin:3px 0}',
+    '@media(max-width:680px){#warstaxx-root .ws-leader-table,#warstaxx-root .ws-leader-table tbody,#warstaxx-root .ws-leader-table tr,#warstaxx-root .ws-leader-table td{display:block;width:100%;min-width:0}#warstaxx-root .ws-leader-table thead{display:none}#warstaxx-root .ws-leader-table tr{border:1px solid #3d627e;border-radius:9px;padding:8px;margin-bottom:10px;background:#0b2742}#warstaxx-root .ws-leader-table td{border:0;padding:6px 4px}#warstaxx-root .ws-leader-table td::before{content:attr(data-label);display:block;font-size:10px;color:#82bedc;text-transform:uppercase;font-weight:750;letter-spacing:.5px;margin-bottom:3px}#warstaxx-root .ws-leader-table select{max-width:none;width:100%}}',
     '@media(max-width:640px){#warstaxx-root .ws-panel{height:100dvh;bottom:auto}#warstaxx-root .ws-hour-grid{grid-template-columns:repeat(8,minmax(0,1fr))}#warstaxx-root .ws-stat-action{min-height:112px}#warstaxx-root .ws-lead{padding:10px}#warstaxx-root .ws-score{font-size:19px}}',
     '@media(max-width:640px){#warstaxx-root .ws-panel{top:0;bottom:0;width:100%;border-radius:0}#warstaxx-root .ws-head{padding:8px}#warstaxx-root .ws-head strong{font-size:18px}#warstaxx-root .ws-head small{font-size:8px}#warstaxx-root .ws-content{padding:8px}#warstaxx-root .ws-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}#warstaxx-root .ws-card{padding:9px}#warstaxx-root .ws-number{font-size:21px}}'
   ].join('');
@@ -1311,7 +1324,7 @@
       '<polyline points="'+line('our')+'" fill="none" stroke="#61d9ff" stroke-width="2.8"/>'+
       '<polyline points="'+line('enemy')+'" fill="none" stroke="#ff809e" stroke-width="2.8"/>'+
       '<text x="10" y="106" fill="#a5bed0" font-size="9">'+
-      esc(stamp(first))+'</text><text x="245" y="106" fill="#a5bed0" font-size="9">Latest sample</text></svg>'+
+      esc(stamp(first.at))+'</text><text x="245" y="106" fill="#a5bed0" font-size="9">Latest sample</text></svg>'+
       '<p class="ws-small"><span class="ws-legend-own">Our score</span> | <span class="ws-legend-enemy">Enemy score</span>. '+
       subset.length+' official score samples observed in Torn PDA, not reconstructed game history.</p>';
   }
@@ -1456,7 +1469,7 @@
       [['all','All members'],['black','Black Skulls'],['ready','Currently Okay']].map(([val,name])=>
         '<option value="'+val+'" '+(state.leaderFilter===val?'selected':'')+'>'+name+'</option>').join('')+
       '</select></label></div>'+
-      (filtered.length?'<div class="ws-table-wrap"><table><thead><tr><th>Our hitter</th><th>Observed status</th><th>Assigned target</th><th>Manual duty</th><th>Personal best option</th><th>Actions</th></tr></thead><tbody>'+
+      (filtered.length?'<div class="ws-table-wrap"><table class="ws-leader-table"><thead><tr><th>Our hitter</th><th>Observed status</th><th>Assigned target</th><th>Manual duty</th><th>Personal best option</th><th>Actions</th></tr></thead><tbody>'+
       filtered.map(member=>{
         const assigned=positive(cfg.assignments[member.id]),target=state.data.enemies.find(x=>x.id===assigned);
         const best=personalShortlist(member,1)[0];
@@ -1465,21 +1478,21 @@
             '<option value="'+enemy.id+'" '+(assigned===enemy.id?'selected':'')+'>'+
             esc(enemy.name)+' ['+enemy.id+'] - '+esc(enemy.status)+'</option>'));
         const status=memberState(member),working=hitterPlanStatus(member.id);
-        return '<tr><td>'+infoButton(member.name,member.id)+
+        return '<tr><td data-label="Our hitter">'+infoButton(member.name,member.id)+
           '<br>'+(cfg.blackSkulls[member.id]?pill('Black Skull','good'):'<span class="ws-muted">Regular member</span>')+
           '<br>'+b(cfg.blackSkulls[member.id]?'Remove from Black Skulls':'Add to Black Skulls','black-skill:'+member.id)+'</td>'+
-          '<td>'+pill(member.status,status==='okay'?'good':status==='hospital'?'bad':'')+
+          '<td data-label="Official roster status">'+pill(member.status,status==='okay'?'good':status==='hospital'?'bad':'')+
           '<br><small>'+esc(member.lastAction)+' | '+esc(age(member.lastAt))+'</small></td>'+
-          '<td><select data-leader-target="'+member.id+'" aria-label="Manual target for '+esc(member.name)+'">'+options.join('')+'</select>'+
+          '<td data-label="Assigned target"><select data-leader-target="'+member.id+'" aria-label="Manual target for '+esc(member.name)+'">'+options.join('')+'</select>'+
           '<br><small>'+(target?esc(matchEvidence(member,target).category)+' | '+esc(matchEvidence(member,target).reason):
             assigned?'Target #'+assigned+' not in current roster':'No manual target')+'</small></td>'+
-          '<td><select data-leader-duty="'+member.id+'" aria-label="Manual duty for '+esc(member.name)+'">'+
+          '<td data-label="Manual duty"><select data-leader-duty="'+member.id+'" aria-label="Manual duty for '+esc(member.name)+'">'+
           hitterPlanStatuses().map(([value,label])=>'<option value="'+value+'" '+(working===value?'selected':'')+'>'+label+'</option>').join('')+
           '</select><br><small>Leadership entry only</small></td>'+
-          '<td>'+(best?infoButton(best.enemy.name,best.enemy.id)+' '+ffBadge(best.enemy.id)+
+          '<td data-label="Personal option">'+(best?infoButton(best.enemy.name,best.enemy.id)+' '+ffBadge(best.enemy.id)+
             '<br>'+pill(best.category)+
             '<br><small>'+esc(best.reason)+'</small>':'No opponents loaded')+'</td>'+
-          '<td>'+b('Personal shortlist','hitter:'+member.id)+
+          '<td data-label="Actions">'+b('Personal shortlist','hitter:'+member.id)+
           (target?' '+a('Attack (manual)',attackLink(target.id)):'')+'</td></tr>';
       }).join('')+'</tbody></table></div>':empty('No members match the selected roster filter.'))+
       '<p class="ws-small">A manually marked duty can remain set even after the roster status changes. Verify the current official status; an engaged status here is not confirmation of an attack.</p>');
