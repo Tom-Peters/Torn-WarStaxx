@@ -11,7 +11,6 @@ const helpers = `
     value&&typeof value==='object'?value:{}).filter(([key])=>/^\\d+$/.test(key))
     .map(([key,v])=>({id:positive(v.id||key),...v}));
   const unpack=(j,k)=>j?.[k]??j;
-  const officialNumber=value=>value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value))?Number(value):null;
 `;
 function extract(start,end) {
   const begin=source.indexOf('  function '+start+'(');
@@ -20,7 +19,7 @@ function extract(start,end) {
   return source.slice(begin,finish);
 }
 const report = runInNewContext(helpers+extract('report','attacks')+'; report');
-const warHistory = runInNewContext(helpers+extract('warHistory','detectWar')+'; warHistory');
+const warHistory = runInNewContext(helpers+extract('roster','detectWar')+'; warHistory');
 const roster = runInNewContext(helpers+extract('roster','warHistory')+'; roster');
 
 const basicStart=source.indexOf('  function normaliseFactionBasic(');
