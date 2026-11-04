@@ -2189,7 +2189,7 @@
     }
     if(bar.parentNode!==host)host.insertBefore(bar,host.firstChild);
     const self=ourWarReadiness(),score=warScore(),target=bestEfficiencyHit(),
-      opportunities=priorityOpportunities(),defence=turtleWindow(),
+      opportunities=priorityOpportunities(),defence=turtleWindow(),chain=chainStatus(),
       compact=Boolean(cfg.warStripCompact||(state.stripScrolled&&!state.stripExpanded)),
       intent=location.pathname.toLowerCase()==='/item.php'?itemIntent():'',
       sig=[state.data.war.id,score?.our,score?.enemy,self.kind,self.energy,target?.player.id,
@@ -2210,6 +2210,9 @@
       (compact?btn('OPEN','war'):btn('HEAL','heal')+
        btn(cfg.blackSkulls[self.id]?'MY SKULLS':'WAR ROOM',cfg.blackSkulls[self.id]?'skulls':'war')+
        btn('MORE STATS','stats'))+'</div>'+
+      (chain.fresh?'<div class="wsw-meta"><span>Chain #'+fmt(chain.count)+
+        ' | '+chain.remaining+'s | next '+(chain.next===null?'unknown':
+        '#'+fmt(chain.next)+' in '+fmt(chain.nextIn)+' hits')+'</span></div>':'')+
       (opportunities.length?'<div class="wsw-opportunities"><b>AVAILABLE:</b> '+
         opportunities.slice(0,2).map(x=>btn(x.name,'opportunity:'+x.id)).join('')+'</div>':'')+
       (intent?'<div class="wsw-item-controls"><b>'+(intent==='turtle'?'Turtle items:':'Healing items:')+'</b>'+
@@ -2888,7 +2891,13 @@
       stat('Observed Okay',fmt(skulls.filter(p=>memberState(p)==='okay').length),
         'Not proof of 25+ energy')+
       stat('My energy',self.energy===null?'Unknown':fmt(self.energy)+' E','Own bars / manual')+
-      stat('My duty',duty,'Per-war defensive role')+'</div>'+
+      stat('My duty',duty,'Per-war defensive role')+
+      stat('Chain',chainStatus().fresh?'#'+fmt(chainStatus().count):'Unknown','Official Torn chain')+
+      stat('Chain timeout',chainStatus().fresh?chainStatus().remaining+'s':'Unknown',
+        'Observed countdown, verify on Torn')+
+      stat('Next milestone',chainStatus().fresh&&chainStatus().next!==null?
+        '#'+fmt(chainStatus().next):'Unknown',
+        chainStatus().fresh?chainStatus().nextIn+' successful hits remaining':'Unknown')+'</div>'+
       card('My next move',cfg.blackSkulls[myId]?
         '<p><b>Status:</b> '+esc(self.kind)+'</p>'+
         '<p><b>Assigned enemy:</b> '+(chosen?infoButton(chosen.name,chosen.id)+
@@ -2907,7 +2916,10 @@
           '<br><small>'+esc(p.status)+esc(expiry)+'</small></span>'+
           b('Control','control-target:'+p.id)+'</div>';
       }).join(''):empty('No enemy hospital watches currently assigned to your account.'))+
-      card('Heavy hitters duty board',skulls.length?skulls.map(p=>{
+      card('Heavy hitters duty board',
+      '<p>Choose the individual risk. Safe: spy ratio at most 55% and at least one recorded win. '+
+      'Balanced: at most 70%. Aggressive: at most 78%. No profile bypasses fresh spies, known losses or team target conflicts.</p>'+
+      (skulls.length?skulls.map(p=>{
         const read=hitterReadiness(p),assigned=state.data.enemies.find(x=>
           x.id===positive(cfg.assignments[p.id])),
           watches=Object.values(control).filter(id=>positive(id)===p.id).length;
@@ -2916,8 +2928,12 @@
           '<small>Energy '+(read.energy===null?'unknown':fmt(read.energy)+' E')+
           ' | watches '+watches+' | assigned '+(assigned?esc(assigned.name):'none')+
           '</small></div><div class="ws-toolbar">'+b('Matchups','hitter:'+p.id)+
-          b('Hospital control','tab:control')+'</div></div>';
-      }).join(''):empty('Mark Black Skulls in Leadership to populate the board.'))+
+          b('Hospital control','tab:control')+
+          '<label>Risk <select data-skull-risk="'+p.id+'">'+
+          [['safe','Safe'],['balanced','Balanced'],['aggressive','Aggressive']].map(([v,name])=>
+            '<option value="'+v+'" '+(hitterRisk(p.id).mode===v?'selected':'')+'>'+name+'</option>').join('')+
+          '</select></label></div></div>';
+      }).join(''):empty('Mark Black Skulls in Leadership to populate the board.')))+
       '<div class="ws-toolbar">'+b('Leadership','tab:command')+
       b('War room','tab:overview')+b('All targets','tab:targets')+'</div>';
   }
@@ -3784,6 +3800,14 @@
     }
   });
   root.addEventListener('change',e=>{
+    const risk=e.target.closest('[data-skull-risk]');
+    if(risk){
+      const id=positive(risk.dataset.skullRisk),mode=String(risk.value);
+      if(!id||!state.data.ours.some(p=>p.id===id)||!cfg.blackSkulls[id]||
+        !['safe','balanced','aggressive'].includes(mode))return;
+      cfg.hitterRisk[id]={mode,at:Date.now()};saveCfg();markSharedDirty();
+      state.error='Per-player risk saved. Actual win probability remains unknown.';render();return;
+    }
     const control=e.target.closest('[data-control-target]');
     if(control){
       const enemyId=positive(control.dataset.controlTarget),watcher=positive(control.value);
