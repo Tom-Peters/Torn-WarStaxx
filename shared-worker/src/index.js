@@ -21,17 +21,25 @@ function validMap(m,kind){
     if(kind==='black')return v===true;
     if(kind==='risk')return !!v&&typeof v==='object'&&['safe','balanced','aggressive'].includes(v.mode);
     if(kind==='control')return Number.isSafeInteger(v)&&v>0&&v<=9999999999;
+    if(kind==='turtle')return ['auto','strike','turtle','reserve'].includes(v);
+    if(kind==='duty')return ['ready','engaged','monitor','standby','support','needs-spy','complete'].includes(v);
     return false;
   });
 }
 function clean(input){
   if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>
-    !['assignments','blackSkulls','hitterRisk','controlAssignments'].includes(k)))return null;
+    !['assignments','blackSkulls','hitterRisk','controlAssignments','turtlePlan','leaderDuties'].includes(k)))return null;
+  const rawPlan=input.turtlePlan||{};
   const data={assignments:input.assignments||{},blackSkulls:input.blackSkulls||{},
     hitterRisk:Object.fromEntries(Object.entries(input.hitterRisk||{}).map(([id,x])=>
-      [id,{mode:x?.mode}])),controlAssignments:input.controlAssignments||{}};
+      [id,{mode:x?.mode}])),controlAssignments:input.controlAssignments||{},
+    turtlePlan:{mode:rawPlan.mode||'balanced',members:rawPlan.members||{}},
+    leaderDuties:input.leaderDuties||{}};
   return validMap(data.assignments,'assign')&&validMap(data.blackSkulls,'black')&&
-    validMap(data.hitterRisk,'risk')&&validMap(data.controlAssignments,'control')?data:null;
+    validMap(data.hitterRisk,'risk')&&validMap(data.controlAssignments,'control')&&
+    ['balanced','defensive','full'].includes(data.turtlePlan.mode)&&
+    validMap(data.turtlePlan.members,'turtle')&&
+    validMap(data.leaderDuties,'duty')?data:null;
 }
 export default {async fetch(request,env){
   const origin=request.headers.get('Origin')||'';
