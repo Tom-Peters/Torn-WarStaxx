@@ -636,13 +636,13 @@
       'Faction auto-detection unavailable: '+(lastError||'check your Torn PDA API key and its profile permission.');
     return positive(cfg.ourId);
   }
-  async function refreshHistory(){
+  async function refreshHistory(force=false){
     if(!positive(cfg.ourId))return;
     const limit=Math.max(2,Math.min(20,positive(cfg.historyLimit)||12));
     const sides=[['ourWars',cfg.ourId],['enemyWars',cfg.enemyId]];
     for(const [name,fid] of sides){
       if(!positive(fid))continue;
-      try{const j=await call('/faction/'+fid+'/rankedwars?limit='+limit,name,30*MIN);
+      try{const j=await call('/faction/'+fid+'/rankedwars?limit='+limit,name,force?0:30*MIN);
         if(j)state.data[name]=warHistory(j);}catch(e){state.error=String(e.message||e);}
     }
     const ids=[...new Set([...state.data.enemyWars.slice(0,limit),...state.data.ourWars.slice(0,limit)]
@@ -713,7 +713,7 @@
         if(enemy)state.data.enemies=roster(enemy);
         if(own||enemy)snapshot([...(own?['ours']:[]),...(enemy?['enemies']:[])]);
       }
-      await refreshHistory();
+      await refreshHistory(force);
       await refreshAttacks();
       await refreshFF();
       state.lastRefresh=Date.now();
@@ -1140,7 +1140,7 @@
       '<option value="'+p.id+'" '+(p.id===friend.id?'selected':'')+'>'+esc(p.name)+' ['+p.id+']</option>').join('')+'</select></label>'+
       '<p>'+fmt(rows.filter(x=>x.m.known).length)+' of '+fmt(rows.length)+' Okay opponents have both sets of battle stats. Unknown matchups are not marked safe.</p>')+
       '<div class="ws-table-wrap"><table><thead><tr><th>Enemy</th><th>BS score comparison</th><th>Estimated FF</th><th>Observed FF</th><th>Decision</th></tr></thead><tbody>'+
-      rows.map(x=>'<tr><td>'+esc(x.e.name)+'<br><small>L'+fmt(x.e.level)+'</small></td>'+
+      rows.map(x=>'<tr><td>'+infoButton(x.e.name,x.e.id)+'<br><small>L'+fmt(x.e.level)+'</small></td>'+
         '<td>'+pill(x.m.verdict,x.m.known&&x.m.ratio<0.8?'good':'')+'<br><small>'+esc(x.m.confidence)+'</small></td>'+
         '<td>'+esc(x.m.ff===null?'Unknown':x.m.ff.toFixed(2)+'x modelled')+'</td>'+
         '<td>'+esc(x.ff.avg===null?'Not observed':x.ff.avg.toFixed(2)+'x \u00b7 '+x.ff.count+' recorded')+'</td>'+
@@ -1148,6 +1148,7 @@
       '</tbody></table></div>';
   }
   function strategy(){
+    // Compare observed online coverage for both factions; never infer guaranteed availability.
     const ours=sideActivity('ours'),enemy=sideActivity('enemies'),wins=factionWarMetrics('enemies'),
       best=strongHours(),top=perMemberRows('enemies',10).filter(x=>x.last!==null).slice(0,5);
     let html=statusNote()+
@@ -1186,6 +1187,7 @@
     return html;
   }
   function activity(){
+    // Avoid claiming individual player sleep schedules from sparse local observations.
     const ours=sideActivity('ours'),them=sideActivity('enemies'),o=hourlyEvidence('ours'),e=hourlyEvidence('enemies');
     const both=o.map((x,i)=>({hour:i,o:x,e:e[i],difference:x.pct===null||e[i].pct===null?null:x.pct-e[i].pct,
       enough:x.samples>=3&&e[i].samples>=3}));
@@ -1205,11 +1207,11 @@
       stat('Enemies hospitalised',them.total?fmt(them.hospital):'\u2014','Last observed state')+'</div>';
     html+=card('24-hour online coverage | our faction vs enemy',
       '<p>Tap individual hourly cells to see the comparative evidence below. Green means more of our checks were online; red means more of theirs. Faded cells lack sufficient samples.</p>'+
-      '<div class="ws-hour-grid">'+both.map(x=>'<div class="ws-hour '+(!x.enough?'unknown':x.difference>0?'positive':x.difference<0?'negative':'')+
+      '<div class="ws-hour-grid">'+both.map(x=>'<button type="button" data-action="hour:'+x.hour+'" class="ws-hour '+(!x.enough?'unknown':x.difference>0?'positive':x.difference<0?'negative':'')+
       '" title="TCT '+x.hour+':00 | Us '+scoreLabel(x.o.pct)+'% ('+x.o.samples+' samples) | Them '+scoreLabel(x.e.pct)+'% ('+x.e.samples+' samples)">'+
-      '<b>'+String(x.hour).padStart(2,'0')+'</b><small>'+(!x.enough?'?':(x.difference>0?'+':'')+x.difference+'%')+'</small></div>').join('')+'</div>'+
+      '<b>'+String(x.hour).padStart(2,'0')+'</b><small>'+(!x.enough?'?':(x.difference>0?'+':'')+x.difference+'%')+'</small></button>').join('')+'</div>'+
       '<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Hour TCT</th><th>Us: online / samples</th><th>Them: online / samples</th><th>Advantage</th></tr></thead><tbody>'+
-      both.map(x=>'<tr><td>'+String(x.hour).padStart(2,'0')+':00</td><td>'+
+      both.map(x=>'<tr id="ws-hour-row-'+x.hour+'"><td>'+String(x.hour).padStart(2,'0')+':00</td><td>'+
         (x.o.pct===null?'Not observed':x.o.pct+'% | '+x.o.samples+' checks')+'</td><td>'+
         (x.e.pct===null?'Not observed':x.e.pct+'% | '+x.e.samples+' checks')+'</td><td>'+
         (x.enough?((x.difference>0?'+':'')+x.difference+' points'):'Not enough data')+'</td></tr>').join('')+
@@ -1264,8 +1266,8 @@
       (!rows.length?empty('Your faction roster is missing. Refresh to load members.'):
       '<div class="ws-toolbar">'+b('Copy war orders','copy-orders')+'</div>'+ 
       '<div class="ws-table-wrap"><table><thead><tr><th>Our member</th><th>Next assignment</th><th>Reason / confidence</th><th>Actions</th></tr></thead><tbody>'+
-      rows.map(x=>'<tr><td>'+esc(x.friend.name)+(cfg.blackSkulls[x.friend.id]?' '+pill('Black Skull','good'):'')+(isOnline(x.friend)?' '+pill('Online','good'):'')+'</td>'+
-        '<td>'+esc(x.enemy?x.enemy.name:'Scout / Support / Standby')+'</td>'+
+      rows.map(x=>'<tr><td>'+infoButton(x.friend.name,x.friend.id)+(cfg.blackSkulls[x.friend.id]?' '+pill('Black Skull','good'):'')+(isOnline(x.friend)?' '+pill('Online','good'):'')+'</td>'+
+        '<td>'+(x.enemy?infoButton(x.enemy.name,x.enemy.id):'Scout / Support / Standby')+'</td>'+
         '<td>'+esc(x.reason)+(x.details?.known?'<br><small>'+x.details.verdict+'; model FF '+x.details.ff.toFixed(2)+'x</small>':'')+'</td>'+
         '<td>'+(x.enemy?a('Profile',link(x.enemy.id))+' '+a('Attack',attackLink(x.enemy.id)):'')+
           ' '+b(cfg.blackSkulls[x.friend.id]?'Unmark Black Skull':'Mark Black Skull','black-skill:'+x.friend.id)+
@@ -1364,6 +1366,7 @@
   function handle(action){
     if(action==='refresh'){refresh(true);return;}
     if(action==='war-list'){state.selectedWar=0;navigate('history');return;}
+    if(action.startsWith('hour:')){const h=Number(action.slice(5));if(Number.isInteger(h)&&h>=0&&h<24){const tr=$('#ws-hour-row-'+h,root);if(tr){tr.scrollIntoView({block:'center'});tr.style.outline='2px solid #54d7fa';}}return;}
     if(action.startsWith('war:')){navigate('intel');state.selectedWar=positive(action.slice(4));render();return;}
     if(action.startsWith('load-report:')){loadWarReport(positive(action.slice(12)));return;}
     if(action.startsWith('public:')){loadPublicIntel(positive(action.slice(7)));return;}
