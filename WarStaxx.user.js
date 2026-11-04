@@ -740,6 +740,11 @@
   }
   async function refreshOwnReadiness(){
     if(!effectiveKey()||!cfg.autoOwnerReadiness)return;
+    if(!positive(state.data.meta.ownerId)){
+      try{const j=await call('/user/basic','owner-id-readiness',6*HOUR);
+        const id=positive(j?.basic?.id||j?.user?.id||j?.id||j?.player_id);
+        if(id)state.data.meta.ownerId=id;}catch(_){}
+    }
     try{
       const j=await call('/user/bars','own-bars',4*MIN);
       if(j){const parsed=parseOwnBars(j);if(parsed.current!==null)state.data.ownerReadiness.energy=parsed;}
@@ -965,7 +970,7 @@
       const plan=leadershipSummary();
       if(plan.duplicateTargets.length)out.push({id:'overlapping-orders',title:'Overlapping Black Skulls targets',detail:plan.duplicateTargets.length+' opponent targets assigned to multiple hitters; review local leadership orders.',status:'review',priority:67,tab:'command'});
     }
-    return out.slice(0,10);
+    return out.sort((a,b)=>n(b.priority)-n(a.priority)).slice(0,12);
   }
   function event(name,detail){document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}
   function announce(){
@@ -2333,6 +2338,7 @@
       '<label>Automatic refresh<select id="ws-interval">'+[90,120,180,300].map(s=>'<option value="'+s+'" '+(cfg.refreshSeconds===s?'selected':'')+'>'+s+' seconds while visible</option>').join('')+'</select></label>'+
       '<label>Historical wars per side<select id="ws-limit">'+[3,5,8,12,20].map(s=>'<option value="'+s+'" '+(cfg.historyLimit===s?'selected':'')+'>'+s+' wars</option>').join('')+'</select></label>'+
       '<label><input type="checkbox" id="ws-attacks" '+(cfg.enableAttacks?'checked':'')+'> Read my faction attacks for observed fair-fight data (extra API permission)</label>'+ 
+      '<label><input type="checkbox" id="ws-owner-ready" '+(cfg.autoOwnerReadiness!==false?'checked':'')+'> Read my own energy and medical cooldown (only the Torn API-key owner; requires user bars/cooldowns permissions)</label>'+ 
       '<h3>FFScouter \u00b7 optional, independent service</h3><p>When enabled with explicit consent, WarStaxx uses your registered FFScouter key or your existing Torn PDA key if the separate field is empty. It sends that key and target player IDs to FFScouter, not to TornStaxx hub. You must first register the key with FFScouter. Read the <a href="https://ffscouter.com/#data-policy" target="_blank" rel="noopener noreferrer">FFScouter data policy</a>; free and premium plans may offer different data.</p>'+ 
       '<label>Optional FFScouter-specific API key<input id="ws-ffkey" type="password" autocomplete="off" placeholder="'+(cfg.ffKey?'Separate key saved; blank keeps it':effectiveKey()?'Uses your Torn PDA key when opted in':'Enter a registered key or connect Torn PDA key')+'"></label>'+ 
       '<label><input type="checkbox" id="ws-ff-consent" '+(cfg.ffConsent?'checked':'')+'> I have read the FFScouter data policy and knowingly enable this third-party lookup.</label>'+ 
@@ -2352,6 +2358,9 @@
       ' | Verified: '+esc(age(cfg.factionVerifiedAt))+'</p>'+
       '<p>Opponent ID: '+(positive(cfg.enemyId)?'configured':'missing')+'</p>'+
       '<p>Last known roster: '+esc(age(Math.max(n(d.updated.enemies),n(d.updated.ours))))+'</p>'+ 
+      '<p>Own energy/cooldown: '+(cfg.autoOwnerReadiness?'enabled':'disabled')+' | owner ID '+(positive(d.meta?.ownerId)?'detected':'unknown')+
+      ' | energy last read '+esc(age(d.ownerReadiness?.energy?.at))+
+      ' | medical last read '+esc(age(d.ownerReadiness?.cooldown?.at))+'</p>'+ 
       '<p>FFScouter: '+(cfg.ffEnabled?'enabled':'disabled')+' | consent '+(cfg.ffConsent?'yes':'no')+
       ' | registration '+(d.meta?.ffRegistration?.registered?'verified':d.meta?.ffRegistration?.registered===false?'not registered':'unchecked')+
       ' | API bridge '+(typeof PDA_httpGet==='function'?'Torn PDA':typeof GM_xmlhttpRequest==='function'?'GM':'missing')+
@@ -2415,6 +2424,31 @@
   function close(){state.open=false;render();event('panel',{id:ID,open:false});}
   function handle(action){
     if(action==='refresh'){refresh(true);return;}
+    if(action==='refresh-readiness'){refreshOwnReadiness().then(()=>{save();render();});return;}
+    if(action.startsWith('debrief:')){state.selectedDebrief=positive(action.slice(8));navigate('afteraction');return;}
+    if(action.startsWith('debrief-timeline:')){state.selectedTimeline=positive(action.slice(17));navigate('timeline');return;}
+    if(action.startsWith('debrief-pace:')){state.selectedPace=positive(action.slice(14));navigate('pace');return;}
+    if(action.startsWith('review-debrief:')){const id=positive(action.slice(15));const record=state.data.afterActions[id];
+      if(record){record.reviewed=!record.reviewed;save();publish();render();}return;}
+    if(action.startsWith('copy-debrief:')){const id=positive(action.slice(13)),record=state.data.afterActions[id];
+      if(!record)return;
+      const value=afterActionText(record);
+      if(navigator.clipboard?.writeText){navigator.clipboard.writeText(value).then(()=>{state.error='After-action report copied for manual sharing.';render();}).catch(()=>{state.error='Clipboard access denied. Nothing was sent.';render();});}
+      else{const area=document.createElement('textarea');area.value=value;area.style.cssText='position:fixed;left:-9999px';document.body.appendChild(area);area.select();let copied=false;try{copied=document.execCommand('copy');}catch(_){}area.remove();state.error=copied?'After-action report copied.':'Clipboard unavailable.';render();}return;
+    }
+    if(action.startsWith('save-readiness:')){
+      const id=positive(action.slice(15));if(!state.data.ours.some(p=>p.id===id))return;
+      const energyRaw=$('[data-ready-energy="'+id+'"]',root)?.value??'',
+        medRaw=$('[data-ready-medical="'+id+'"]',root)?.value??'';
+      const energy=energyRaw.trim()===''?null:energyValue(energyRaw);
+      const med=medRaw.trim()===''?null:energyValue(medRaw);
+      if(energyRaw.trim()!==''&&(energy===null||energy>1000)||
+         medRaw.trim()!==''&&(med===null||med>720)){
+         state.error='Energy must be 0-1000 E; medical remaining must be 0-720 minutes.';render();return;}
+      if(energy===null&&med===null)delete cfg.manualReadiness[id];
+      else cfg.manualReadiness[id]={energy,medicalUntil:med===null?null:Date.now()+med*MIN,at:Date.now()};
+      saveCfg();state.error='Readiness saved locally for 45 minutes. No teammate API data was accessed.';render();return;
+    }
     if(action==='match-more'){state.showAllMatchups=!state.showAllMatchups;render();return;}
     if(action.startsWith('hitter:')){const id=positive(action.slice(7));if(state.data.ours.some(p=>p.id===id)){state.chosen=id;navigate('matchups');}return;}
     if(action.startsWith('pace-war:')){state.selectedPace=positive(action.slice(9));navigate('pace');return;}
@@ -2479,7 +2513,7 @@
       }
       return;
     }
-    if(action==='clear-key'){cfg.key='';cfg.factionVerifiedAt=0;delete state.data.meta.ffRegistration;state.data.ffstats={};state.data.updated.ffscouter=0;saveCfg();save();render();return;}
+    if(action==='clear-key'){cfg.key='';cfg.factionVerifiedAt=0;delete state.data.meta.ffRegistration;delete state.data.meta.ownerId;state.data.ownerReadiness={};state.data.ffstats={};state.data.updated.ffscouter=0;saveCfg();save();render();return;}
     if(action==='clear-ff-key'){cfg.ffKey='';state.data.ffstats={};delete state.data.meta.ffRegistration;state.data.updated.ffscouter=0;saveCfg();save();state.error='FFScouter will use your Torn PDA key if you enabled and consented to FF lookup.';render();return;}
     if(action==='detect-faction'){
       cfg.factionAuto=true;
@@ -2499,6 +2533,7 @@
     if(action==='reset-orders'){cfg.assignments={};saveCfg();render();return;}
     if(action==='save-settings'){
       const priorFFKey=ffApiKey();
+      const previousOwnerKey=effectiveKey();
       const supplied=$('#ws-key',root)?.value?.trim();if(supplied&&supplied!==cfg.key){cfg.key=supplied;delete state.data.meta.ffRegistration;state.data.updated.ffscouter=0;state.data.ffstats={};}
       const ffSupplied=$('#ws-ffkey',root)?.value?.trim();if(ffSupplied&&ffSupplied!==cfg.ffKey){cfg.ffKey=ffSupplied;delete state.data.meta.ffRegistration;state.data.updated.ffscouter=0;state.data.ffstats={};}
       cfg.ffConsent=Boolean($('#ws-ff-consent',root)?.checked);
@@ -2517,6 +2552,13 @@
       cfg.refreshSeconds=Math.max(90,Math.min(300,positive($('#ws-interval',root)?.value)||120));
       cfg.historyLimit=Math.max(2,Math.min(20,positive($('#ws-limit',root)?.value)||8));
       cfg.enableAttacks=Boolean($('#ws-attacks',root)?.checked);
+      cfg.autoOwnerReadiness=Boolean($('#ws-owner-ready',root)?.checked);
+      if(previousOwnerKey!==effectiveKey()){
+        state.data.ownerReadiness={};delete state.data.meta.ownerId;
+        for(const name of ['own-bars','own-cooldowns','owner-id-readiness']){
+          delete state.data.updated[name];delete state.data.errors[name];delete state.data.backoff[name];
+        }
+      }
       if(priorFFKey!==ffApiKey()){
         state.data.ffstats={};state.data.updated.ffscouter=0;
         delete state.data.meta.ffRegistration;
