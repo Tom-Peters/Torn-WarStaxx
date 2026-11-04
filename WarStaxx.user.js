@@ -1274,27 +1274,39 @@
     return card('Black Skulls target coverage | Skull Capo',
       '<p><b>'+fmt(data.assigned)+' / '+fmt(data.targets.length)+'</b> heavy targets have a saved Black Skull assignment; '+
       fmt(data.verifiedAssigned)+' assigned targets currently pass a verified hitter matchup. '+
-      'Not assigned: <b>'+fmt(data.unassigned)+'</b>. An order does not prove a target is hittable.</p>'+
+      'Not assigned: <b>'+fmt(data.unassigned)+'</b>. '+
+      'Unavailable/unsafe assigned hitters: '+fmt(data.blocked)+
+      ' | verified free replacement suggestions: '+fmt(data.replacements)+
+      '. An order does not prove a target is hittable.</p>'+
       '<p>Heavy policy: '+(cutoff.mode==='min-bss'?
         'minimum BSS '+fmt(cutoff.minBss):
         'top '+fmt(cutoff.percent)+'% of '+fmt(data.bands.known)+' known BSS opponents')+
         '. '+fmt(data.bands.unknown)+' opponents have unknown BSS and need scouting.</p>'+
       (data.targets.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr>'+
-        '<th>High-strength opponent</th><th>BSS</th><th>Current status</th>'+
+        '<th>High-strength opponent</th><th>BSS</th><th>Last war points</th><th>Priority</th>'+
+        '<th>Current status</th>'+
         '<th>Assigned Black Skull</th><th>Coverage / next move</th></tr></thead><tbody>'+
         data.targets.slice(0,maxItems).map(x=>'<tr><td>'+infoButton(x.enemy.name,x.enemy.id)+
           ' '+ffBadge(x.enemy.id)+'<br><small>Lv '+fmt(x.enemy.level)+'</small></td>'+
           '<td>'+fmt(x.bss)+'<br><small>'+esc(x.source)+'</small></td>'+
+          '<td>'+(x.priority?.historyPoints===null?'Unknown':
+            fmt(x.priority.historyPoints)+' in war #'+x.priority.historyWarId)+'</td>'+
+          '<td>'+fmt(x.priority?.score)+' / 100<br><small>'+
+            esc(x.priority?.confidence||'Unrated')+'</small></td>'+
           '<td>'+pill(x.enemy.status,memberState(x.enemy)==='okay'?'good':'')+'</td>'+
           '<td>'+(x.assigned.length?x.assigned.map(p=>infoButton(p.name,p.id)).join(', '):
             pill('UNASSIGNED','bad'))+'</td>'+
-          '<td>'+pill(x.reason,x.verified?'good':x.needsAssignment?'bad':'')+
-            '<br>'+(!x.covered&&x.free.length?
-              b('Assign '+x.free[0].player.name,'skull-assign:'+x.free[0].player.id+':'+x.enemy.id):
-              b('Inspect enemy','player:'+x.enemy.id))+'</td></tr>').join('')+
+          '<td>'+pill(x.reason,x.verified?'good':x.needsAssignment||x.blocked?'bad':'')+
+            '<br>'+(x.replacement?
+              b('Replace '+x.assigned[0].name+' with '+x.replacement.player.name,
+                'skull-replace:'+x.assigned[0].id+':'+x.replacement.player.id+':'+x.enemy.id):
+              !x.covered&&x.free.length?
+                b('Assign '+x.free[0].player.name,'skull-assign:'+x.free[0].player.id+':'+x.enemy.id):
+                b('Inspect enemy','player:'+x.enemy.id))+'</td></tr>').join('')+
         '</tbody></table></div>':empty('No known high-strength targets at this cutoff. Change policy or collect BSS evidence.'))+
       '<div class="ws-toolbar">'+b('Manage cutoff','tab:leader')+
         b('Black Skulls', 'tab:skulls')+
+        b('Copy Black Skulls briefing','copy-skull-chat')+
         b('Manual orders','tab:command')+b('Refresh status','refresh')+'</div>');
   }
   function personalShortlist(friend,limit=8){
@@ -3761,7 +3773,8 @@
       'high-BSS assignments and squad readiness. Regular attackers and defenders appear for wider coordination only.</p>'+
       '<div class="ws-toolbar">'+b('Refresh','refresh')+
         b('Draft role-safe orders','draft-black')+b('Coordinate orders','tab:command')+
-        b('Sync orders','tab:settings')+'</div></div>'+
+        b('Sync orders','tab:settings')+
+        b('Copy squad chat briefing','copy-skull-chat')+'</div></div>'+
       '<div class="ws-grid">'+
       stat('Score',score?fmt(score.our)+' / '+fmt(score.enemy):'Unknown','Official live score')+
       stat('Net lead',score?(score.net>=0?'+':'')+fmt(score.net):'Unknown','Current ranked war')+
@@ -3885,7 +3898,8 @@
             '<option value="'+v+'" '+(hitterRisk(p.id).mode===v?'selected':'')+'>'+name+'</option>').join('')+
           '</select></label></div></div>';
       }).join(''):empty('Mark Black Skulls in Leadership to populate the board.')))+
-      '<div class="ws-toolbar">'+b('Leadership','tab:command')+
+      '<div class="ws-toolbar">'+b('Copy squad chat briefing','copy-skull-chat')+
+        b('Leadership','tab:command')+
       b('War room','tab:overview')+b('All targets','tab:targets')+'</div>';
   }
   function liveWarRoom(){
