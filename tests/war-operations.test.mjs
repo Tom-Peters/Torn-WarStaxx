@@ -86,7 +86,7 @@ test('known past losses make a good BSS ratio a review target, not a safe auto d
   const f=fixture("const MIN=60000,HOUR=3600000;"+
     "const n=v=>Number.isFinite(Number(v))?Number(v):0;const positive=v=>Number(v)||0;"+
     "const fmt=v=>String(v);"+
-    "const state={data:{attacks:[{attacker:1,defender:101,at:Date.now()-HOUR,result:'Lost'}],scoreTimelines:{},ownerReadiness:{},meta:{},ours:[],enemies:[]}};"+
+    "const state={data:{attacks:[{attacker:1,defender:101,at:Date.now()-HOUR,result:'Lost'}],scoreTimelines:{},ownerReadiness:{},meta:{},updated:{ours:Date.now(),enemies:Date.now()},ours:[{id:1}],enemies:[{id:101}]}};"+
     "const cfg={assignments:{},manualReadiness:{},spies:{1:{observedAt:Date.now()},101:{observedAt:Date.now()}}};"+
     "const spy=id=>cfg.spies[id]||null;const bsScore=v=>v?1:null;"+
     "const memberState=p=>p.status;const isOnline=()=>false;const lastKnownMemberScore=()=>250;"+
@@ -133,7 +133,7 @@ test('all five operations are routed and do not automate Torn gameplay',()=>{
     "action.startsWith('save-readiness:')","action.startsWith('review-debrief:')",
     "action.startsWith('copy-debrief:')","id:'enemy-accelerating'","id:'inbound-return'"])
     assert.ok(source.includes(item),'Missing '+item);
-  assert.match(source,/\/\/ @version\s+0\.6\.0/);
+  assert.match(source,/\/\/ @version\s+0\.7\.0/);
   assert.doesNotThrow(()=>new Script(source));
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
 });
