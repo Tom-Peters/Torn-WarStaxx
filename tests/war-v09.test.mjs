@@ -68,7 +68,7 @@ test('hospital hit opens manual medical page; ready hit opens attack link only',
     'const strongestVerifiedHit=()=>({player:{id:55}});',
     "const attackLink=id=>'https://www.torn.com/loader.php?sid=attack&user2ID='+id;"
   ].join('\n');
-  const x=runInNewContext(setup+part('  function itemIntent(){','  function statusNote(){')+
+  const x=runInNewContext(setup+part('  function itemIntent(){','  function renderWarStrip(force=false){')+
     '; ({warQuick,get route(){return route},set status(x){status=x},get opened(){return opened}})');
   x.warQuick('hit');
   assert.equal(x.route,'https://www.torn.com/item.php');
