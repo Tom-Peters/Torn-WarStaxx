@@ -52,10 +52,19 @@ test('installable userscript starts at byte zero with a complete metadata header
 });
 
 
-test('v0.2.1 sideband is restricted to War-TornStaxx and keeps credentials private',()=>{
- assert.match(code,/\/\/ @version\s+0\.2\.1/);
+test('v0.2.2 sideband is restricted to War-TornStaxx and keeps credentials private',()=>{
+ assert.match(code,/\/\/ @version\s+0\.2\.2/);
  assert.match(code,/tornstaxx-war-runtime-v1/);
  assert.match(code,/__tornstaxxBridge:bridge/);
- assert.match(code,/e\.source!==window\|\|e\.origin!==location\.origin/);
+ assert.match(code,/e\.source&&e\.source!==window/);
  assert.match(code,/d\.kind==='open'&&d\.id===ID/);
+});
+
+
+test('full War panel readiness is checked before registration and opening is recovered',()=>{
+ assert.match(code,/if\(!window\.__warStaxxReady\)/);
+ assert.match(code,/if\(!root\.querySelector\('\.ws-panel'\)/);
+ assert.match(code,/window\.__warStaxxReady=true;/);
+ assert.match(code,/Panel could not open/);
+ assert.match(code,/Legacy|malformed legacy/i);
 });
