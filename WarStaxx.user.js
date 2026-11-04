@@ -319,7 +319,8 @@
         a.attacker?.faction?.id??a.attacker?.faction_id);
       const defenderFaction=positive(a.defender_faction??a.defender_faction_id??
         a.defender?.faction?.id??a.defender?.faction_id);
-      const ranked=a.ranked_war===true||a.ranked_war===1||a.ranked_war==='1';
+      const warFlag=a.is_ranked_war??a.ranked_war;
+      const ranked=warFlag===true||warFlag===1||warFlag==='1';
       return {id:positive(a.id||a.attack_id),
         at:epochMs(a.timestamp_ended||a.ended||a.timestamp_started||a.started||a.timestamp||a.start),
         startedAt:epochMs(a.timestamp_started||a.started||a.start),
@@ -328,12 +329,12 @@
         defenderName:String(a.defender?.name||a.defender_name||'').slice(0,80),
         ff:validFF(rawFF),result:String(a.result||'').slice(0,50),
         respect:officialNumber(rawGain),chain:officialNumber(a.chain),
-        chainBonus:officialNumber(a.modifiers?.chain_bonus),
+        chainBonus:officialNumber(a.modifiers?.chain??a.modifiers?.chain_bonus),
         modifierWar:officialNumber(a.modifiers?.war),
         modifierRetaliation:officialNumber(a.modifiers?.retaliation),
         modifierOverseas:officialNumber(a.modifiers?.overseas),
-        modifierGroup:officialNumber(a.modifiers?.group_attack),
-        specialBonus:Boolean(a.modifiers?.warlord_bonus&&Number(a.modifiers.warlord_bonus)>0),
+        modifierGroup:officialNumber(a.modifiers?.group??a.modifiers?.group_attack),
+        specialBonus:Boolean(Number(a.modifiers?.warlord??a.modifiers?.warlord_bonus)>1),
         code:'api'};
     }).filter(a=>a.id&&a.at&&a.attacker&&a.defender);
   }
