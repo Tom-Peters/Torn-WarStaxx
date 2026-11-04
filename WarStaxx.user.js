@@ -778,10 +778,9 @@
       let target=ranked.find(e=>e.id===fixed);
       let reason=target?'Your saved manual order':'';
       if(!target){
-        const safe=ranked.filter(e=>!used.has(e.id)).map(e=>({enemy:e,m:matchup(p,e)}));
-        const confirmed=safe.filter(x=>x.m.known&&x.m.ratio<0.8).sort((a,b)=>evaluate(b.enemy).score-evaluate(a.enemy).score);
+        const confirmed=personalShortlist(p,ranked.length).filter(x=>x.tier===0&&!used.has(x.enemy.id));
         target=confirmed[0]?.enemy||null;
-        reason=target?'Provisional BS-score matchup':'No sufficiently evidenced auto-match; scout first';
+        reason=target?'Favourable comparative manual spies (verify buffs)':'No sufficiently evidenced auto-match; scout first';
       }
       if(target)used.add(target.id);
       return {friend:p,enemy:target,reason,details:target?matchup(p,target):null};
@@ -1801,22 +1800,70 @@
     return html;
   }
   function matchups(){
-    const friends=state.data.ours,enemies=state.data.enemies;
-    if(!friends.length||!enemies.length)return empty('Refresh both rosters to compare your hitters with enemy targets.');
-    const chosen=positive(state.chosen)||friends[0].id;
-    const friend=friends.find(p=>p.id===chosen)||friends[0];
-    const rows=enemies.filter(e=>evaluate(e).ready).map(e=>({e,m:matchup(friend,e),ff:ffObserved(e.id,friend.id)}))
-      .sort((a,b)=>Number(b.m.known)-Number(a.m.known)||(a.m.known?a.m.ratio-b.m.ratio:evaluate(b.e).score-evaluate(a.e).score));
-    return statusNote()+card('Choose your hitter','<label>Friendly player<select id="ws-friend">'+friends.map(p=>
-      '<option value="'+p.id+'" '+(p.id===friend.id?'selected':'')+'>'+esc(p.name)+' ['+p.id+']</option>').join('')+'</select></label>'+
-      '<p>'+fmt(rows.filter(x=>x.m.known).length)+' of '+fmt(rows.length)+' Okay opponents have both sets of battle stats. Blue FF badges are from FFScouter for the API-key owner; the modelled FF column is specific to the selected hitter.</p>')+
-      '<div class="ws-table-wrap"><table><thead><tr><th>Enemy + FFScouter</th><th>BS score comparison</th><th>Selected hitter FF model</th><th>Hitter observed FF</th><th>Decision</th></tr></thead><tbody>'+
-      rows.map(x=>'<tr><td>'+infoButton(x.e.name,x.e.id)+' '+ffBadge(x.e.id)+'<br><small>L'+fmt(x.e.level)+'</small></td>'+
-        '<td>'+pill(x.m.verdict,x.m.known&&x.m.ratio<0.8?'good':'')+'<br><small>'+esc(x.m.confidence)+'</small></td>'+
-        '<td>'+esc(x.m.ff===null?'Unknown':x.m.ff.toFixed(2)+'x modelled')+'</td>'+
-        '<td>'+esc(x.ff.avg===null?'Not observed':x.ff.avg.toFixed(2)+'x \u00b7 '+x.ff.count+' recorded')+'</td>'+
-        '<td>'+b('Set manual order','assign:'+friend.id+':'+x.e.id)+' '+b('Spy','player:'+x.e.id)+' '+a('Attack',attackLink(x.e.id))+'</td></tr>').join('')+
-      '</tbody></table></div>';
+    const friends=state.data.ours.slice().sort((a,b)=>
+      Number(Boolean(cfg.blackSkulls[b.id]))-Number(Boolean(cfg.blackSkulls[a.id]))||a.name.localeCompare(b.name));
+    const enemies=state.data.enemies;
+    if(!friends.length||!enemies.length)return statusNote()+
+      empty('Refresh both faction rosters before generating a personalised target list. Unknown matchups will remain unverified.');
+    const chosen=positive(state.chosen)||friends[0].id,friend=friends.find(p=>p.id===chosen)||friends[0];
+    const rows=personalShortlist(friend,state.showAllMatchups?enemies.length:25),
+      verified=rows.filter(x=>x.tier===0).length;
+    const friendly=state.hitterFilter==='black'?friends.filter(p=>cfg.blackSkulls[p.id]):
+      state.hitterFilter==='ready'?friends.filter(p=>memberState(p)==='okay'):friends;
+    let html=statusNote()+'<div class="ws-lead"><span class="ws-data-label">PERSONALISED TARGET INTELLIGENCE | EACH HITTER</span>'+
+      '<h2>Who should each member consider attacking?</h2>'+
+      '<p>Ranked by battle-stat matchup evidence first, then opponent availability and historical war contribution. An FFScouter badge relates to the API-key owner, not automatically the selected hitter.</p>'+
+      '<div class="ws-toolbar">'+b('Leadership command','tab:command')+b('Opponent dossier','tab:intel')+
+      b('Update rosters','refresh')+'</div></div>'+
+      card('Choose hitter',
+      '<label>Our faction member<select id="ws-friend">'+friends.map(p=>
+        '<option value="'+p.id+'" '+(p.id===friend.id?'selected':'')+'>'+esc(p.name)+
+        (cfg.blackSkulls[p.id]?' [BLACK SKULL]':'')+' ['+p.id+']</option>').join('')+'</select></label>'+
+      '<div class="ws-inline-metrics"><span>Current status '+esc(friend.status)+'</span>'+
+      '<span>Battle stats '+(bsScore(spy(friend.id))===null?'Missing':'Manual spy saved')+'</span>'+
+      '<span>Confirmed favourable '+verified+' in the displayed sample</span>'+
+      '<span>Active manual target '+(positive(cfg.assignments[friend.id])?'#'+cfg.assignments[friend.id]:'none')+'</span></div>'+
+      '<p class="ws-small">The strongest recommendation requires two comparable manual battle-stat records; even then, buffs, equipment, player actions and stat age can change the outcome. FF models are not win probabilities.</p>');
+    html+=card('All our hitters | open an individual shortlist',
+      '<div class="ws-toolbar"><label>Show<select id="ws-hitter-filter">'+
+      [['all','Everyone'],['black','Black Skulls only'],['ready','Okay status only']].map(([value,label])=>
+        '<option value="'+value+'" '+(state.hitterFilter===value?'selected':'')+'>'+label+'</option>').join('')+
+      '</select></label></div>'+
+      (friendly.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Hitter</th><th>Status</th><th>Top evidenced option</th><th>Matchup evidence</th><th>Open</th></tr></thead><tbody>'+
+      friendly.map(p=>{
+        const top=personalShortlist(p,1)[0];
+        const confirmed=top?.tier===0;
+        return '<tr><td>'+infoButton(p.name,p.id)+(cfg.blackSkulls[p.id]?' '+pill('Black Skull','good'):'')+
+          '</td><td>'+pill(p.status,memberState(p)==='okay'?'good':'')+'</td>'+
+          '<td>'+(top?infoButton(top.enemy.name,top.enemy.id)+' '+ffBadge(top.enemy.id):'No enemy loaded')+
+          '</td><td>'+(top?pill(top.category,confirmed?'good':'')+'<br><small>'+esc(top.reason)+'</small>':'Unknown')+
+          '</td><td>'+b('Personal shortlist','hitter:'+p.id)+'</td></tr>';
+      }).join('')+'</tbody></table></div>':empty('No hitters match this filter.')));
+    html+=card('Personal target shortlist | '+friend.name,
+      '<p>'+(memberState(friend)==='okay'?'Member currently Okay.':'Member currently unavailable for hits; assignments below are for future planning.')+
+      ' Results are advisory and require manual confirmation in Torn.</p>'+
+      '<div class="ws-toolbar">'+b(state.showAllMatchups?'Show top 25':'Show all opponents','match-more')+
+      b('Open leadership board','tab:command')+'</div>'+
+      '<div class="ws-table-wrap"><table><thead><tr><th>Opponent + FF</th><th>Recommendation</th><th>Individual hitter model</th><th>Historical war score</th><th>Current status</th><th>Actions</th></tr></thead><tbody>'+
+      rows.map(x=>{
+        const actual=ffObserved(x.enemy.id,friend.id);
+        const evidence=x.match.known?'BS score ratio '+fmt(x.match.ratio)+' | '+esc(x.match.confidence):
+          'Relative battle stats unavailable';
+        return '<tr><td>'+infoButton(x.enemy.name,x.enemy.id)+' '+ffBadge(x.enemy.id)+
+          '<br><small>Lv '+fmt(x.enemy.level)+' | #'+x.enemy.id+'</small></td>'+
+          '<td>'+pill(x.category,x.tier===0?'good':x.tier===4?'bad':'')+
+          '<br><small>'+esc(x.reason)+(x.conflict?' | Already assigned elsewhere':'')+'</small></td>'+
+          '<td>'+(x.ffForHitter===null?'Unknown':x.ffForHitter.toFixed(2)+'x modelled')+
+          '<br><small>'+evidence+
+          (actual.avg!==null?'<br>Observed for this hitter '+actual.avg.toFixed(2)+'x ('+actual.count+')':'')+
+          '</small></td><td>'+scoreLabel(x.official)+
+          '<br><small>'+esc(x.official===null?'No official player score':'Stored war report')+'</small></td>'+
+          '<td>'+pill(x.enemy.status,memberState(x.enemy)==='okay'?'good':'')+
+          '<br><small>'+esc(x.enemy.lastAction)+'</small></td>'+
+          '<td>'+b('Save manual target','assign:'+friend.id+':'+x.enemy.id)+
+          ' '+infoButton('Full intel',x.enemy.id)+' '+a('Attack (manual)',attackLink(x.enemy.id))+'</td></tr>';
+      }).join('')+'</tbody></table></div>');
+    return html;
   }
   function strategy(){
     // Compare observed online coverage for both factions; never infer guaranteed availability.
