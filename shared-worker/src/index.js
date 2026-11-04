@@ -67,6 +67,10 @@ export default {async fetch(request,env){
   if(!request.headers.has('If-Match')||!Number.isSafeInteger(expected)||expected<0)
     return reply({error:'If-Match revision required'},428,origin);
   let body;try{body=await request.json();}catch(_){return reply({error:'Invalid JSON'},400,origin);}
+  // An empty room is revision 0. Never allow an unexpected revision to
+  // create a new record: the UPSERT check only runs on existing rows.
+  if(expected>0&&!(await read()))
+    return reply({error:'revision conflict',revision:0},409,origin);
   const data=clean(body?.data),payload=data?JSON.stringify(data):'';
   if(!data)return reply({error:'Invalid shared orders data'},400,origin);
   if(payload.length>80000)return reply({error:'Payload too large'},413,origin);
