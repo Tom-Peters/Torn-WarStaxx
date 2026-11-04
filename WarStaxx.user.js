@@ -1947,6 +1947,7 @@
       return db;
     },{})).map(p=>({...p,perEnergy:p.attacks?p.score/(p.attacks*25):null}))
       .sort((a,b)=>(b.perEnergy??-1)-(a.perEnergy??-1)||b.score-a.score).slice(0,10);
+    const squads={black:squadWarSummary(w.id,'black'),regular:squadWarSummary(w.id,'regular')};
     const outcome=positive(w.winner)?w.winner===ourId?'Won':'Lost':'Undecided';
     const lessons=[];
     if(enemyTop3Pct!==null&&enemyContributors.length>=4&&enemyTop3Pct>=65)
@@ -1978,7 +1979,7 @@
       ownTop3Pct:oursTop3Pct,enemyTop3Pct,ownSamples:ownObserved.checks,enemySamples:enemyObserved.checks,
       ourOnlinePct:ownObserved.onlinePct,enemyOnlinePct:enemyObserved.onlinePct,
       enemyTravelPct:enemyObserved.awayPct,paceSamples:pace?.samples||0,
-      hitEvidence,topTargets:targets,maxObservedChain,
+      hitEvidence,topTargets:targets,maxObservedChain,squads,
       lessons,computedAt:Date.now()};
   }
   function buildAfterActions(){
@@ -2013,6 +2014,13 @@
           ' ('+x.topTargets[0].score.toFixed(1)+' respect / '+x.topTargets[0].attacks+
           ' attempts)':'not captured')+'\n'+
       'Max observed chain: '+(x.maxObservedChain??'unknown')+'\n'+
+      ['black','regular'].map(k=>{
+        const y=x.squads?.[k];
+        return (k==='black'?'Black Skulls':'Regular members')+
+          ' official earned: '+(y?.points??'unknown')+
+          ' | Enemy points conceded (partial): '+(y?.enemyPointsReceived??'unknown')+
+          ' | Net swing proxy: '+(y?.netProxy??'unknown');
+      }).join('\n')+'\n'+
       'Review:\n'+x.lessons.map((z,i)=>(i+1)+'. '+z).join('\n')+'\n'+
       'Sources: official completed-war results and optional local foreground observations. No gameplay actions were performed.';
   }
@@ -2842,7 +2850,8 @@
        empty('No locally tagged Black Skulls. Mark hitters under Leadership to compare their recorded scores.'))+
       '<p class="ws-small">Scoring totals are official when the report exists. Earlier-wars comparisons use only fetched report rows, with unknown values preserved. Prior battle stats or combat wins cannot be inferred from scoring alone.</p>';
     html+=card('Black Skulls | individual post-war scorecards',scorecard)+
-      blackSkullsPerformanceCard(r.id);
+      blackSkullsPerformanceCard(r.id)+squadReportCard(r.id,'black')+
+      squadReportCard(r.id,'regular');
     return html;
   }
   function command(){
@@ -3302,7 +3311,7 @@
   // ranked-war score, not deductions from the defender's personal score.
   function inboundWarImpact(warId=positive(state.data.war?.id)){
     const rows=warAttackRows(warId).filter(a=>a.side==='enemies'),
-      known=Boolean(rows.length||n(state.data.updated.attacks)>0),
+      known=rows.length>0,
       byMember={},safePoints=a=>officialNumber(a.respect)!==null?
         Math.max(0,n(a.respect)):0;
     for(const a of rows){
@@ -3434,19 +3443,58 @@
       reason:'Reserve a verified in-war target; the milestone hit must defeat an opponent in the rival faction.'};
   }
 
+
+  function squadReportCard(warId,side){
+    const data=squadWarSummary(warId,side),label=side==='black'?
+      'Black Skulls | heavy-hitter war report':'Regular members | war report';
+    return card(label,
+      '<p><b>Group:</b> '+esc(label)+' | <b>Group evidence:</b> '+
+      esc(data.squadSource)+'. <b>Score:</b> '+esc(data.source)+'.</p>'+
+      '<div class="ws-grid">'+
+      stat('Official points earned',data.points===null?'Unknown':fmt(data.points),
+        'Official scorecard points summed for this group')+
+      stat('Official attacks',data.attacks===null?'Unknown':fmt(data.attacks),
+        'Reported attacks by these members')+
+      stat('Points per attack',data.perHit===null?'Unknown':fmt(data.perHit),
+        'Official score / official attacks')+
+      stat('Enemy points from hits received',data.enemyPointsReceived===null?
+        'Unknown':fmt(data.enemyPointsReceived),
+        'Only enemy ranked-war scoring attacks captured by this device')+
+      stat('Group net swing proxy',data.netProxy===null?'Unknown':fmt(data.netProxy),
+        'Official earned - partial enemy score conceded')+'</div>'+
+      '<p class="ws-small">Opponents earn score by hitting us. These are not personal point deductions. '+
+      'The incoming attack feed may be incomplete, so a net proxy is not a verified group net score.</p>'+
+      (data.rows.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr>'+
+        '<th>Member</th><th>Official earned</th><th>Official attacks</th>'+
+        '<th>Enemy points from hits received</th><th>Enemy scoring hits received</th></tr></thead><tbody>'+
+        data.rows.map(p=>'<tr><td>'+infoButton(p.name||('Player '+p.id),p.id)+'</td>'+
+          '<td>'+scoreLabel(p.score)+'</td><td>'+scoreLabel(p.attacks)+'</td>'+
+          '<td>'+(p.received===null?'Unknown':fmt(p.received)+' (partial)')+'</td>'+
+          '<td>'+(p.incomingHits===null?'Unknown':fmt(p.incomingHits))+'</td></tr>').join('')+
+        '</tbody></table></div>':
+        empty('Official per-member war scorecard not loaded yet. Do not infer zero output.')));
+  }
   function leaderboardCard(limit=8,warId=positive(state.data.war?.id)){
-    const rows=performanceLeaderboard(warId).filter(x=>x.hits!==null);
-    return card('Live hitter performance | source-qualified leaderboard',
+    const rows=performanceLeaderboard(warId).filter(x=>x.hits!==null||x.enemyScoringHits!==null);
+    return card('Attacking vs defending | observed net-impact leaderboard',
       '<p>During war, totals use the captured optional faction-attack feed and can be incomplete. '+
       'After war, the completed official report takes precedence when available. '+
-      'Points / attack and historical comparisons are not a guarantee of battle strength.</p>'+
+      'Points earned stay distinct from the opposing faction points earned by hitting a member. '+
+      'Concessions are sourced from a partial enemy attack feed, not a personal point deduction. '+
+      'A net-impact calculation is only a proxy, not an official personal Torn stat.</p>'+
       (rows.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr>'+
-        '<th>Member</th><th>Captured points</th><th>Attacks</th><th>Points / attack</th><th>Own baseline</th><th>Trend</th></tr></thead><tbody>'+
+        '<th>Member</th><th>Points earned</th><th>Enemy points conceded</th><th>Net impact proxy</th>'+
+        '<th>Attacks made</th><th>Enemy scoring hits received</th>'+
+        '<th>Earned / attack</th><th>Own baseline</th><th>Trend</th></tr></thead><tbody>'+
         rows.slice(0,limit).map(x=>'<tr><td>'+infoButton(x.player.name,x.player.id)+
           (cfg.blackSkulls[x.player.id]?' '+pill('BLACK SKULL','good'):'')+
           '<br><small>'+esc(x.source)+'</small></td>'+
           '<td>'+(x.points===null?'Unknown':fmt(x.points))+'</td>'+
-          '<td>'+fmt(x.hits)+'</td><td>'+(x.perHit===null?'Unknown':fmt(x.perHit))+'</td>'+
+          '<td>'+(x.enemyPointsReceived===null?'Unknown':fmt(x.enemyPointsReceived)+' (partial)')+'</td>'+
+          '<td>'+(x.netProxy===null?'Unknown':fmt(x.netProxy)+' (proxy)')+'</td>'+
+          '<td>'+(x.hits===null?'Unknown':fmt(x.hits))+'</td>'+
+          '<td>'+(x.enemyScoringHits===null?'Unknown':fmt(x.enemyScoringHits))+'</td>'+
+          '<td>'+(x.perHit===null?'Unknown':fmt(x.perHit))+'</td>'+
           '<td>'+(x.baseline===null?'Unknown':fmt(x.baseline)+' ('+x.priorWars+' wars)')+'</td>'+
           '<td>'+pill(x.status,x.flag?'bad':x.ratio!==null&&x.ratio>=1.15?'good':'')+
           '</td></tr>').join('')+
