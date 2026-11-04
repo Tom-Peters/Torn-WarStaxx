@@ -3188,6 +3188,67 @@
 
 
 
+
+  function ownHistoricalEfficiency(memberId,excludeWar=0){
+    const list=state.data.ourWars.filter(w=>w.end&&positive(w.id)!==positive(excludeWar))
+      .sort((a,b)=>n(b.end)-n(a.end));
+    const samples=[];
+    for(const w of list){
+      const member=state.data.reports[String(w.id)]?.factions
+        ?.find(x=>x.id===positive(cfg.ourId))?.members?.find(x=>x.id===positive(memberId));
+      if(!member||officialNumber(member.score)===null||
+        officialNumber(member.attacks)===null||member.attacks<3)continue;
+      samples.push({warId:w.id,score:n(member.score),attacks:n(member.attacks),
+        ratio:n(member.score)/n(member.attacks)});
+      if(samples.length===3)break;
+    }
+    const points=samples.reduce((z,x)=>z+x.score,0),
+      attacks=samples.reduce((z,x)=>z+x.attacks,0);
+    return {samples:samples.length,history:samples,
+      perHit:attacks?points/attacks:null};
+  }
+  function memberPerformance(player,warId=positive(state.data.war?.id)){
+    if(!player||!positive(warId))return null;
+    const report=state.data.reports[String(warId)]?.factions
+        ?.find(x=>x.id===positive(cfg.ourId))?.members?.find(p=>p.id===positive(player.id)),
+      ledger=warHitLedger(warId).ours.players[positive(player.id)]||null,
+      source=report?'Official completed-war report':ledger?'Partial captured attack feed':'Unknown',
+      hits=report?officialNumber(report.attacks):ledger?.hits??null,
+      points=report?officialNumber(report.score):ledger?.respect??null,
+      base=ownHistoricalEfficiency(player.id,warId),
+      perHit=hits&&points!==null?points/hits:null;
+    let status='Insufficient comparable evidence',ratio=null;
+    if(base.samples>=2&&hits!==null&&hits>=5&&perHit!==null&&base.perHit!==null&&base.perHit>0){
+      ratio=perHit/base.perHit;
+      status=ratio<0.7?'Below own historical points per attack':
+        ratio>=1.15?'Above own historical average':
+          'In line with own historical average';
+    }
+    return {player,hits,points,perHit,baseline:base.perHit,priorWars:base.samples,
+      ratio,status,source,limited:!report,flag:ratio!==null&&ratio<0.7};
+  }
+  function performanceLeaderboard(warId=positive(state.data.war?.id)){
+    return state.data.ours.map(p=>memberPerformance(p,warId))
+      .filter(Boolean).sort((a,b)=>(b.points??-1)-(a.points??-1)||
+        (b.perHit??-1)-(a.perHit??-1)||a.player.id-b.player.id);
+  }
+  function bonusHitRecommendation(){
+    const chain=chainStatus(),self=ourWarReadiness();
+    if(!activeWarNow()||!chain.fresh||chain.nextIn===null||
+      chain.nextIn<1||chain.nextIn>3||self.kind!=='okay'||
+      !self.player||!rosterFresh('enemies'))return null;
+    const band=enemyRoleBands(),candidates=state.data.enemies
+      .filter(enemy=>memberState(enemy)==='okay'&&roleAllows(self.player,enemy,band))
+      .map(enemy=>({enemy,evidence:roleMatch(self.player,enemy,band),
+        strength:enemyBattleEstimate(enemy)}))
+      .filter(x=>x.evidence)
+      .sort((a,b)=>
+        Number(b.evidence.encounters.wins>0)-Number(a.evidence.encounters.wins>0)||
+        a.evidence.match.ratio-b.evidence.match.ratio||
+        n(b.enemy.level)-n(a.enemy.level));
+    return {chain,target:candidates[0]||null,available:candidates.length,
+      reason:'Reserve a verified in-war target; the milestone hit must defeat an opponent in the rival faction.'};
+  }
   function enemyScreen(){
     const enemy=sideActivity('enemies'),history=factionWarMetrics('enemies'),
       bands=enemyRoleBands(),threat=enemyThreatRows().slice(0,5),
