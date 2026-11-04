@@ -1,6 +1,6 @@
 {
   "name": "torn-warstaxx",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "private": true,
   "description": "Ranked-war intelligence for Torn PDA",
   "scripts": {
