@@ -771,11 +771,48 @@
       source:recentEnergy?'Own Torn API':manual?'Manual (<45m)':'Unknown',
       medicalSource:recentMed?'Own Torn API':manual?'Manual (<45m)':'Unknown',okay};
   }
+  function attackHistoryFor(friendId,enemyId,at=Date.now()){
+    const recent=(state.data.attacks||[]).filter(x=>positive(x.attacker)===positive(friendId)&&
+      positive(x.defender)===positive(enemyId)&&n(x.at)>at-30*24*HOUR&&n(x.at)<=at);
+    let wins=0,losses=0,unknown=0;
+    for(const a of recent){
+      const result=String(a.result||'').toLowerCase();
+      if(/hospitali[sz]ed|mugged|left|victory|won/.test(result))wins++;
+      else if(/lost|defeated|stalemate|timeout|escaped|escape/.test(result))losses++;
+      else unknown++;
+    }
+    return {wins,losses,unknown,total:recent.length,last:recent.length?Math.max(...recent.map(x=>x.at)):0};
+  }
+  function scoreAcceleration(id=positive(state.data.war?.id),now=Date.now()){
+    const line=state.data.scoreTimelines[String(positive(id))];
+    const points=(line?.points||[]).filter(x=>n(x.at)&&x.at<=now).slice().sort((a,b)=>a.at-b.at);
+    if(points.length<3)return null;
+    const last=points[points.length-1];
+    if(now-last.at>10*MIN)return null;
+    const boundary=last.at-15*MIN,mid=[...points].reverse().find(x=>x.at<=boundary);
+    if(!mid)return null;
+    const old=[...points].reverse().find(x=>x.at<=mid.at-10*MIN&&x.at>=mid.at-60*MIN);
+    if(!old)return null;
+    const recentDuration=(last.at-mid.at)/HOUR,oldDuration=(mid.at-old.at)/HOUR;
+    if(recentDuration<10/60||recentDuration>35/60||oldDuration<10/60||oldDuration>60/60)return null;
+    const recentEnemy=Math.max(0,n(last.enemy)-n(mid.enemy))/recentDuration;
+    const previousEnemy=Math.max(0,n(mid.enemy)-n(old.enemy))/oldDuration;
+    const recentOurs=Math.max(0,n(last.our)-n(mid.our))/recentDuration;
+    const previousOurs=Math.max(0,n(mid.our)-n(old.our))/oldDuration;
+    const increase=recentEnemy-previousEnemy;
+    const accelerating=recentEnemy>=60&&increase>=35&&
+      (previousEnemy<1||recentEnemy/previousEnemy>=1.35);
+    return {recentEnemy,previousEnemy,recentOurs,previousOurs,increase,
+      accelerating,observedAt:last.at,coverage:[old.at,mid.at,last.at],
+      label:accelerating?'Enemy scoring accelerating':increase>0?'Enemy scoring rising':'Enemy scoring steady or slowing'};
+  }
   function matchEvidence(friend,enemy){
     const m=matchup(friend,enemy),official=lastKnownMemberScore('enemies',enemy.id);
     const enemySpy=spy(enemy.id),friendSpy=spy(friend.id);
     const latest=enemySpy?.observedAt||0;
     const manuallyConfirmed=bsScore(friendSpy)!==null&&bsScore(enemySpy)!==null;
+    const encounters=attackHistoryFor(friend.id,enemy.id);
+    const knownLoss=encounters.losses>0;
     const freshSpies=manuallyConfirmed&&n(latest)>0&&n(friendSpy?.observedAt)>0&&
       Date.now()-latest<30*24*HOUR&&Date.now()-n(friendSpy?.observedAt)<30*24*HOUR;
     const externalOnly=m.known&&!manuallyConfirmed;
@@ -787,8 +824,9 @@
     else if(m.known&&m.ratio>=1.15){category='Avoid';reason='Enemy modelled battle strength is higher';tier=4;}
     else if(manuallyConfirmed&&m.known&&m.ratio<0.8&&!freshSpies){
       category='Recheck old spies';reason='One or both spy records are older than 30 days or undated';tier=2;
+    }else if(knownLoss){category='Reassess losses';reason=encounters.losses+' recent recorded loss(es) for this hitter';tier=4;
     }else if(manuallyConfirmed&&m.known&&m.ratio<0.7){
-      category='Strong candidate';reason='Recent comparative manual stats; check buffs and equipment';tier=0;
+      category='Strong candidate';reason='Recent favourable manual spies'+(encounters.wins?' + '+encounters.wins+' confirmed recent win(s)':'')+'; verify buffs';tier=0;
     }else if(manuallyConfirmed&&m.known&&m.ratio<0.8){
       category='Possible';reason='Recent manual BSS margin; verify fight conditions';tier=1;
     }else if(externalOnly&&m.known&&m.ratio<0.8){
@@ -797,8 +835,13 @@
     const threat=null; // History influences ranking below; avoid quadratic roster-wide threat recalculation.
     const statusBonus=isOnline(enemy)?5:0;
     const points=official===null?0:Math.min(18,Math.round(Math.log10(official+1)*4));
-    const score=Math.max(0,100-tier*18+points+statusBonus-(conflict?12:0));
-    return {friend,enemy,match:m,category,reason,tier,score,threat,
+    const score=Math.max(0,100-tier*18+points+statusBonus-(conflict?12:0)+
+      (encounters.wins&&!knownLoss?Math.min(22,encounters.wins*8):0)-
+      (knownLoss?25:0)-(m.known?Math.round(Math.min(20,m.ratio*16)):0));
+    const reliability=tier===0&&encounters.wins>=2?'Repeat observed wins':
+      tier===0?'Favourable current spies':tier===1?'Plausible, verify':
+      knownLoss?'Past losses recorded':tier===2?'Evidence needs checking':'Not demonstrated';
+    return {friend,enemy,match:m,category,reason,tier,score,threat,reliability,encounters,
       official,conflict,verified:manuallyConfirmed,estimated:externalOnly,
       ffForHitter:m.known?m.ff:null};
   }
@@ -909,6 +952,9 @@
     }
     if(w&&(!t||Date.now()-t>5*MIN))out.push({id:'stale-roster',title:'Refresh opponent statuses',detail:'Last observed status is stale; refresh before hitting.',status:'soon',priority:75,tab:'overview'});
     if(w){const pace=warPace();
+      const acceleration=scoreAcceleration();
+      if(acceleration?.accelerating)
+        out.push({id:'enemy-accelerating',title:'Enemy scoring is accelerating',detail:'Scoring increased from '+fmt(acceleration.previousEnemy)+' to '+fmt(acceleration.recentEnemy)+' pts/hour across sampled windows. Recheck coverage and assignments.',status:'review',priority:91,tab:'pace'});
       if(pace&&pace.measurable&&pace.span>=20&&Date.now()-pace.last.at<10*MIN&&pace.netRate<-20)
         out.push({id:'score-pace-falling',title:'Enemy gaining score momentum',detail:'Observed net pace '+fmt(pace.netRate)+' points/hour; review your hitters and coverage.',status:'review',priority:79,tab:'pace'});
       const plan=leadershipSummary();
