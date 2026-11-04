@@ -879,18 +879,24 @@
   function turtleAssessment(at=Date.now()){
     const plan=turtlePlan(),ownFresh=rosterFresh('ours',at),enemyFresh=rosterFresh('enemies',at),
       all=state.data.ours,enemy=state.data.enemies;
-    let exposed=0,sheltered=0,unclear=0,dueSoon=0;
+    let exposed=0,sheltered=0,unclear=0,dueSoon=0,reviveWarnings=0;
     const rows=all.map(p=>{
       const kind=memberState(p),readiness=hitterReadiness(p,at);
-      const expiry=kind==='hospital'||kind==='away'?n(p.until):0;
+      const raw=String(p.status||'').toLowerCase();
+      const airborne=kind==='away'&&raw.includes('trav');
+      const abroad=kind==='away'&&!airborne;
+      const expiry=kind==='hospital'||airborne?n(p.until):0;
       const approaching=expiry>at&&expiry-at<=15*MIN;
       const assigned=String(plan.members[p.id]||'auto');
-      const observed=kind==='away'?'Travelling / abroad':kind==='hospital'?'Hospital timer':kind==='okay'?'Exposed (Okay)':kind==='jail'?'In jail':'Unknown';
-      const cover=ownFresh&&(kind==='away'||kind==='hospital'||kind==='jail');
-      const danger=ownFresh&&kind==='okay';
+      const observed=airborne?'Flying':abroad?'Abroad (may be hittable)':
+        kind==='hospital'?'Hospital timer':kind==='okay'?'Exposed (Okay)':
+        kind==='jail'?'In jail':'Unknown';
+      const cover=ownFresh&&(airborne||kind==='hospital'||kind==='jail');
+      const danger=ownFresh&&(kind==='okay'||abroad);
       if(cover)sheltered++;else if(danger)exposed++;else unclear++;
       if(approaching)dueSoon++;
-      return {p,observed,kind,assigned,cover,danger,expiry,approaching,readiness};
+      if(ownFresh&&kind==='hospital'&&p.revivable===true)reviveWarnings++;
+      return {p,observed,kind,airborne,abroad,assigned,cover,danger,expiry,approaching,readiness};
     });
     const online=all.filter(isOnline).length,enemyOnline=enemy.filter(isOnline).length;
     const pace=warPace(),score=warScore();
@@ -902,7 +908,7 @@
         'High exposure against a more online opposition; consider a controlled defensive phase':
       score&&score.net>0?'Lead protection may help, but do not surrender all scoring capability':
       'Balance safe, evidenced hits with protection for members who cannot contribute right now';
-    return {plan,rows,ownFresh,enemyFresh,exposed,sheltered,unclear,dueSoon,
+    return {plan,rows,ownFresh,enemyFresh,exposed,sheltered,unclear,dueSoon,reviveWarnings,
       online,enemyOnline,pace,score,suggestion};
   }
   function controlTargets(at=Date.now()){
@@ -2360,9 +2366,11 @@
       b('Black Skulls targets','tab:matchups')+'</div></div>'+
       '<div class="ws-grid">'+
       stat('Exposed (Okay)',x.ownFresh?fmt(x.exposed):'Unknown','May be hittable; official current status')+
-      stat('Hospital / away / jail',x.ownFresh?fmt(x.sheltered):'Unknown','Observed defensive states; expiry/revive can change exposure')+
+      stat('Hospital / flight / jail',x.ownFresh?fmt(x.sheltered):'Unknown','Airborne only; abroad after landing is NOT counted protected')+
       stat('Unknown coverage',fmt(x.unclear),'Missing or stale roster state')+
       stat('Expiries within 15m',x.ownFresh?fmt(x.dueSoon):'Unknown','Time-limited Torn roster statuses')+'</div>';
+    if(x.reviveWarnings)h+=card('Revive exposure warning',
+      '<p>'+fmt(x.reviveWarnings)+' hospitalised member(s) currently appear revivable. If your faction intends to turtle in hospital, coordinate revive settings and hospital exits in Torn. WarStaxx will not change revival permissions.</p>');
     h+=card('Choose a coordinated team posture',
       '<p><b>Current:</b> '+pill(p.mode==='full'?'Full turtle':p.mode==='defensive'?'Defensive':'Balanced')+
       '. This is a local leadership instruction, not an automated game state.</p>'+
