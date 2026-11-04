@@ -1819,7 +1819,7 @@
       '<h2>Ranked war command centre</h2>'+
       '<p>Manage Black Skulls, set individual targets and monitor live Torn roster statuses alongside locally assigned duties. Nothing is automatically posted to faction chat or executed.</p>'+
       '<div class="ws-toolbar">'+b('Refresh war intelligence','refresh')+b('Copy leadership briefing','copy-leader-brief')+
-      b('View war pace','tab:pace')+b('Player shortlists','tab:matchups')+b('War timelines','tab:timeline')+'</div></div>'+
+      b('Operations queue','tab:operations')+b('View war pace','tab:pace')+b('Player shortlists','tab:matchups')+b('War timelines','tab:timeline')+'</div></div>'+
       '<div class="ws-grid">'+
       stat('Black Skulls ready',plan.skullReady+' / '+plan.skulls,'Current Okay status / tagged Black Skulls')+
       stat('Known attack energy',readyE+' / '+plan.skulls,'25+ E known, fresh owner or manual reading')+
@@ -1882,6 +1882,147 @@
       b('Copy command briefing','copy-leader-brief')+'</div>');
     return html+watchlistPanel();
   }
+  function operationalQueue(at=Date.now()){
+    const items=[],add=(group,id,priority,title,detail,action,source,dueAt=0)=>{
+      if(!items.some(x=>x.id===id))items.push({group,id,priority,title,detail,action,source,dueAt});
+    };
+    const ownFresh=rosterFresh('ours',at),enemyFresh=rosterFresh('enemies',at);
+    const active=Boolean(positive(state.data.war?.id));
+    if(!effectiveKey())add('now','connect',100,'Connect your Torn API key',
+      'Without a valid personal key, war roster and score facts are unavailable.','tab:settings','Connection');
+    if(!positive(cfg.ourId))add('now','faction',98,'Detect your faction',
+      'Auto-detect your official faction ID from your key.','detect-faction','Torn API');
+    if(!positive(cfg.enemyId))add('now','opponent',90,'Choose an opponent',
+      'No opposing faction is selected or detected.','tab:settings','Local war setup');
+    if(!ownFresh||!enemyFresh)add('now','stale-rosters',96,'Refresh faction rosters',
+      'Our roster '+age(state.data.updated.ours)+'; opponent '+age(state.data.updated.enemies)+
+      '. Live availability and reliable draft targets are blocked until both are under five minutes old.',
+      'refresh','Official roster freshness');
+    const accel=active?scoreAcceleration(positive(state.data.war.id),at):null;
+    if(accel?.accelerating)add('now','scoring',92,'Opposition scoring rate has accelerated',
+      'Enemy pace rose from '+fmt(accel.previousEnemy)+' to '+fmt(accel.recentEnemy)+
+      ' points/hour over independently observed windows. Review available hitters.',
+      'tab:pace','Observed official scores',accel.observedAt);
+    const plan=leadershipSummary();
+    if(plan.duplicateTargets.length)add('now','double-booked',88,
+      'Resolve '+plan.duplicateTargets.length+' duplicate target assignments',
+      'The same opponent is assigned to multiple hitters. Review deliberately before updating local orders.',
+      'tab:command','Local assignments');
+    if(ownFresh){
+      const skulls=state.data.ours.filter(p=>cfg.blackSkulls[p.id]&&memberState(p)==='okay');
+      const low=skulls.filter(p=>hitterReadiness(p,at).energyEnough===false);
+      const unknown=skulls.filter(p=>hitterReadiness(p,at).energyEnough===null);
+      if(low.length)add('now','low-energy',76,low.length+' Black Skulls below known attack-energy requirement',
+        'Based only on fresh owned/manual energy readings. Check regeneration before assigning an attack.',
+        'tab:command','Owned or manual readings');
+      if(unknown.length)add('intel','energy-unknown',58,unknown.length+' Black Skulls with unknown energy',
+        'Check permitted personal bars or enter a recent manual reading; other members have no automatic energy lookup.',
+        'tab:command','Unverified energy');
+    }
+    if(enemyFresh){
+      const interest=watchedTargetIds();
+      const hospitals=state.data.enemies.map(p=>enemyHospitalExit(p,at)).filter(Boolean)
+        .filter(x=>x.eta>=at&&x.minutes<=90).sort((a,b)=>a.eta-b.eta);
+      const near=hospitals.filter(x=>interest.has(x.player.id));
+      for(const x of near.slice(0,6))add(x.minutes<=15?'now':'soon','hospital-'+x.player.id,
+        x.minutes<=15?89:73,x.player.name+' hospital expiry '+flightCountdown(x.eta,at),
+        'Torn roster hospital timer, not confirmation that the player is Okay. Refresh before considering any hit.',
+        'player:'+x.player.id,'Official roster status',x.eta);
+      const flights=inboundReturns().filter(x=>x.flight.eta&&x.flight.eta>=at&&x.flight.eta-at<=90*MIN)
+        .sort((a,b)=>a.flight.eta-b.flight.eta);
+      for(const x of flights.filter(x=>interest.has(x.player.id)).slice(0,5)){
+        const minutes=Math.ceil((x.flight.eta-at)/MIN);
+        add(minutes<=15?'now':'soon','inbound-'+x.player.id,minutes<=15?87:70,
+          x.player.name+' inbound ETA '+flightCountdown(x.flight.eta,at),
+          'Explicitly inbound from Torn status. Arrival timing is an estimate; do not treat as an attack-ready state.',
+          'player:'+x.player.id,'Torn inbound status',x.flight.eta);
+      }
+      const watchers=state.data.enemies.filter(p=>cfg.watchlist[p.id]).length;
+      if(watchers&&!near.length&&!flights.length)add('soon','watchlist',45,
+        'Monitor '+watchers+' watched opponents','Your saved watchlist is active. Check status when new roster data arrives.',
+        'watched-list','Local watchlist');
+    }
+    if(ownFresh&&enemyFresh){
+      const draft=suggestedDraft(at);
+      if(draft.length)add('now','draft',86,draft.length+' strong hitter-target pairs available',
+        'Unique provisional matches use favourable comparative manual spies and currently Okay statuses.'+
+        ' Preview and review every suggestion before writing local orders.',
+        'tab:operations','Manual spy evidence + fresh rosters');
+      const noIntel=state.data.ours.filter(p=>cfg.blackSkulls[p.id]&&memberState(p)==='okay'&&
+        !positive(cfg.assignments[p.id])&&personalShortlist(p,1)[0]?.tier!==0);
+      if(noIntel.length)add('intel','spy-needed',56,noIntel.length+' unassigned Black Skulls need better target evidence',
+        'No first-choice, fresh, favourable manual matchup. Request recent comparative spies rather than assuming a high FF means easy.',
+        'tab:matchups','Evidence gaps');
+      const bad=[];
+      for(const p of state.data.ours){
+        const target=state.data.enemies.find(e=>e.id===positive(cfg.assignments[p.id]));
+        if(!target)continue;
+        const x=matchEvidence(p,target);
+        if(x.tier>=2)bad.push({p,x});
+      }
+      if(bad.length)add('now','review-assignments',78,bad.length+' saved manual target orders need review',
+        'The latest status or matchup evidence is unavailable, stale or unfavourable. Existing orders are preserved.',
+        'tab:command','Local assignments + official roster');
+    }
+    const unread=Object.values(state.data.afterActions).filter(x=>x.newFromObservedWar&&!x.reviewed);
+    if(unread.length)add('intel','debrief',48,unread.length+' new ranked-war debrief(s) to review',
+      'Examine actual contributors, score pace and observation coverage for lessons.',
+      'tab:afteraction','Official reports + local samples');
+    return items.sort((a,b)=>b.priority-a.priority||(a.dueAt||Infinity)-(b.dueAt||Infinity)||a.id.localeCompare(b.id));
+  }
+  function operationalBrief(at=Date.now()){
+    const tasks=operationalQueue(at),groups=[['now','NOW'],['soon','WATCH NEXT'],['intel','INTELLIGENCE GAPS']];
+    return 'WarStaxx operations briefing | '+new Date(at).toISOString()+'\n'+
+      'War '+(state.data.war?.id||'not active')+' | enemy faction '+(positive(cfg.enemyId)||'unknown')+'\n'+
+      'Our roster '+age(state.data.updated.ours)+' | enemy roster '+age(state.data.updated.enemies)+'\n'+
+      groups.map(([id,label])=>label+'\n'+tasks.filter(x=>x.group===id).map(x=>
+        '- '+x.title+' | '+x.detail+' | '+x.source).join('\n')).join('\n\n')+
+      '\n\nInformation is read-only or local. Timers are last observed estimates; no Torn action is performed.';
+  }
+  function operations(){
+    const tasks=operationalQueue(),groups=[
+      ['now','Do now','Most important current checks and opportunities'],
+      ['soon','Watch next','Estimated status changes; verify again at the time'],
+      ['intel','Close information gaps','Get the evidence needed for safer assignments']];
+    const draft=suggestedDraft();
+    const haveFresh=rosterFresh('ours')&&rosterFresh('enemies');
+    let html=statusNote()+'<div class="ws-lead"><span class="ws-data-label">RANKED WAR | ACTIONABLE DECISION SUPPORT</span>'+
+      '<h2>Operations: what needs doing now?</h2>'+
+      '<p>A prioritised command queue based on official roster freshness, observed score momentum, manual matchup evidence and leadership orders. No unattended polling, automatic attacks or faction chat posting.</p>'+
+      '<div class="ws-toolbar">'+b('Refresh official intelligence','refresh')+
+      b('Copy operations briefing','copy-ops')+b('Leadership board','tab:command')+
+      b('Player matchups','tab:matchups')+'</div></div>'+
+      '<div class="ws-grid">'+
+      stat('Immediate',fmt(tasks.filter(x=>x.group==='now').length),'Current actions or checks')+
+      stat('Watch next',fmt(tasks.filter(x=>x.group==='soon').length),'Forecast, not confirmed availability')+
+      stat('Intel gaps',fmt(tasks.filter(x=>x.group==='intel').length),'Missing evidence')+
+      stat('Verified draft pairs',fmt(draft.length),haveFresh?'Fresh rosters and recent comparative spies':'Both rosters must be refreshed')+'</div>';
+    for(const [id,title,desc] of groups){
+      const rows=tasks.filter(x=>x.group===id);
+      html+=card(title,'<p>'+desc+'.</p>'+
+        (rows.length?rows.slice(0,12).map(x=>
+          '<div class="ws-row"><span><b>'+esc(x.title)+'</b><br><small>'+
+          esc(x.detail)+'</small><br><small>Source: '+esc(x.source)+
+          (x.dueAt&&x.dueAt>Date.now()?' | TCT '+esc(stamp(x.dueAt)):'')+
+          '</small></span>'+b('Review',x.action)+'</div>').join(''):
+          empty(id==='now'?'No new immediate interventions are evidenced.':
+            id==='soon'?'No watched opponents with approaching confirmed roster timers.':
+            'No additional actionable gaps in the current sample.')));
+    }
+    html+=card('Black Skulls | collision-aware draft preview',
+      '<p>Unique proposals prioritise getting more hitters a fresh, favourable manual matchup, not reserving the best opponent for the first hitter in the roster. The preview changes nothing in Torn or your saved assignments.</p>'+
+      (draft.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Hitter</th><th>Target</th><th>Evidence</th><th>Decision</th></tr></thead><tbody>'+
+      draft.map(x=>'<tr><td>'+infoButton(x.friend.name,x.friend.id)+'</td><td>'+
+        infoButton(x.enemy.name,x.enemy.id)+' '+ffBadge(x.enemy.id)+'</td><td>'+
+        esc(x.evidence||'Current manual spies')+'</td><td>'+
+        b('Review matchup','hitter:'+x.friend.id)+' '+b('Save this order','assign:'+x.friend.id+':'+x.enemy.id)+
+        '</td></tr>').join('')+'</tbody></table></div>':
+        empty(haveFresh?'No unique strong proposals. Confirm battle stats, status and existing orders first.':
+          'Drafting is blocked while either roster is missing or older than five minutes.'))+
+      '<div class="ws-toolbar">'+b('Draft all '+draft.length+' unique orders locally','draft-black',
+        draft.length?'':'disabled')+b('Review manual assignments','tab:command')+'</div>');
+    return html+flightWatchPanel();
+  }
   function overview(){
     const w=state.data.war,score=warScore(),our=sideActivity('ours'),them=sideActivity('enemies');
     const ff=ffCoverage();
@@ -1894,7 +2035,7 @@
       '<p>'+(score?'Official score: Our faction '+fmt(score.our)+' / Opponent '+fmt(score.enemy)+' | Net '+fmt(score.net):
         'Live ranked-war score not available. Historical scouting remains available.')+'</p>'+
       '<div class="ws-toolbar">'+b('Enemy intelligence','tab:intel')+b('Players and targets','tab:targets')+
-      b('Previous wars','tab:history')+b('After-action reports','tab:afteraction')+b('Our war orders','tab:assignments')+
+      b('Previous wars','tab:history')+b('What to do now','tab:operations')+b('After-action reports','tab:afteraction')+b('Our war orders','tab:assignments')+
       b('Leadership board','tab:command')+b('Live points/hour','tab:pace')+b('War timelines','tab:timeline')+'</div></div>'+
       '<div class="ws-grid">'+
       statAction('Enemy online now',them.total?fmt(them.online)+' / '+them.total:'\u2014',
