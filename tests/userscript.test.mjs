@@ -27,13 +27,14 @@ test('conservative war intelligence boundaries',()=>{
 });
 
 test('missing opponent battle stats never become an auto-safe matchup',()=>{
-  assert.match(code,/sb=manual!==null\?manual:\(third&&positive\(third\.bss\)\?positive\(third\.bss\):null\)/);
+  assert.match(code,/sb=manual!==null\?manual:\(third&&!ffIsStale\(third\)/);
+  assert.match(code,/Number\(third\.bss\)>0/);
   assert.match(code,/if\(sa===null\|\|sb===null\)/);
   assert.match(code,/return score>0\?score:null/);
 });
 test('optional FFScouter must be explicitly enabled and use a separate entered registered key',()=>{
   assert.match(code,/\/\/ @connect\s+ffscouter\.com/);
-  assert.match(code,/if\(!cfg\.ffEnabled\|\|!cfg\.ffConsent\|\|!cfg\.ffKey/);
+  assert.match(code,/if\(!cfg\.ffEnabled\|\|!cfg\.ffConsent\|\|!ffApiKey\(\)/);
   assert.match(code,/cfg\.ffEnabled=Boolean\(\$\('#ws-ff-enable'/);
   assert.match(code,/get-stats\?key=/);
   assert.match(code,/public BSS/);
@@ -52,8 +53,8 @@ test('installable userscript starts at byte zero with a complete metadata header
 });
 
 
-test('v0.2.7 sideband is restricted to War-TornStaxx and keeps credentials private',()=>{
- assert.match(code,/\/\/ @version\s+0\.2\.7/);
+test('current version sideband is restricted to War-TornStaxx and keeps credentials private',()=>{
+ assert.match(code,/\/\/ @version\s+1\.5\.2/);
  assert.match(code,/tornstaxx-war-runtime-v1/);
  assert.match(code,/__tornstaxxBridge:bridge/);
  assert.match(code,/e\.source&&e\.source!==window/);
