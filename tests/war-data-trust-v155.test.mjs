@@ -40,7 +40,7 @@ test('new array shaped wars work and missing scores remain unknown',()=>{
   assert.equal(parsed.officialNumber(undefined),null);
   assert.equal(parsed.officialNumber(''),null);
   assert.equal(parsed.parseArray([null,{id:1}]).length,1);
-  assert.equal(parsed.parseArray({42:null,43:{id:0,name:'ok'}})[0].id,43);
+  assert.deepEqual(Array.from(parsed.parseArray({42:null,43:{id:0,name:'ok'}}),x=>x.id),[42,43]);
 });
 
 test('official detailed report does not fabricate missing per-player values',()=>{
