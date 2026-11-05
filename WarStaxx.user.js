@@ -2020,7 +2020,7 @@
       captureAttackBssObservations();
       await refreshOwnReadiness();
       await refreshBattleIntel();
-      await refreshPublicIntel();
+      await refreshPublicIntel(activeWarNow()?3:2);
       await refreshFF();
       if(sharedEndpoint()&&sharedScope())sharedPull(false);
       state.lastRefresh=Date.now();
@@ -2168,11 +2168,83 @@
     }
     return out.slice(0,100);
   }
+  function publicIntelCoverage(at=Date.now()){
+    const players=Array.isArray(state.data.enemies)?state.data.enemies:[],
+      result={total:players.length,profile:0,stats:0,complete:0,restricted:0,fresh:0};
+    for(const player of players){
+      const item=state.data.publicIntel[positive(player.id)];
+      if(!item)continue;
+      const profile=item.profile||{},metrics=publicMetricItems(item.stats||{});
+      const hasProfile=Boolean(profile.rank||profile.age!==null&&profile.age!==undefined||
+        profile.awards!==null&&profile.awards!==undefined);
+      const hasStats=metrics.length>0;
+      result.profile+=Number(hasProfile);
+      result.stats+=Number(hasStats);
+      result.complete+=Number(hasProfile&&hasStats);
+      result.restricted+=Number(Boolean(item.restricted));
+      result.fresh+=Number(item.at>0&&at>=item.at&&at-item.at<6*HOUR);
+    }
+    return result;
+  }
+  function publicCombatHighlights(stats){
+    const names={attackswon:'Attacks won',attackslost:'Attacks lost',
+      defendswon:'Defends won',defendslost:'Defends lost',
+      rankedwarwins:'Ranked-war wins',rankedwarhits:'Ranked-war hits',
+      factionrespect:'Faction respect',attackdamage:'Total attack damage'};
+    const found=new Map();
+    for(const x of publicMetricItems(stats||{})){
+      const key=x.name.split(' / ').pop().toLowerCase().replace(/[^a-z0-9]/g,'');
+      if(Object.hasOwn(names,key)&&!found.has(key))found.set(key,x.value);
+    }
+    return Object.entries(names).filter(([key])=>found.has(key)).map(([key,label])=>
+      ({label,value:found.get(key)}));
+  }
+  function apiSources(){
+    const sources=[['War state','wars',10*MIN],['Our roster','ours',5*MIN],
+      ['Opponent roster','enemies',5*MIN],['Our history','ourWars',40*MIN],
+      ['Opponent history','enemyWars',40*MIN],['Own exact battle stats','own-battlestats',30*MIN],
+      ['Personal spy reports','user-stat-reports',40*MIN],
+      ['Faction spy reports','faction-stat-reports',40*MIN]];
+    const at=Date.now();
+    return sources.map(([label,key,ttl])=>{
+      const updated=n(state.data.updated[key]),error=String(state.data.errors[key]||''),
+        until=n(state.data.backoff[key]?.until);
+      return {label,key,updated,error,until,
+        status:until>at?'Retry delayed':error?'Error':updated&&at-updated<=ttl?'Fresh':
+          updated?'Older data':'Not collected'};
+    });
+  }
+  function apiCoverageCard(){
+    const x=publicIntelCoverage(),history=historyCoverage(),sources=apiSources();
+    return card('AUTOMATIC API COVERAGE | KNOW WHAT IS VERIFIED',
+      '<p>Current opponent profiles '+x.profile+' / '+x.total+
+      ' | Public lifetime stats '+x.stats+' / '+x.total+
+      ' | Both '+x.complete+' / '+x.total+
+      ' | History reports '+history.complete+' / '+history.total+'.</p>'+
+      '<p class="ws-small">Torn profile and popular lifetime counters are public and do not reveal hidden battle stats. Up to three opponent dossiers are checked automatically per active-war refresh; older data and failed calls obey a six-hour cache / API backoff.</p>'+
+      '<div class="ws-toolbar">'+b(state.scanning?'Scouting public API...':'Scout up to 6 more players',
+        'scan-public',state.scanning||state.loading?'disabled':'')+
+      b('Official API diagnostics','tab:diagnostics')+
+      b('Find a player','find')+'</div>'+
+      sources.map(x=>'<div class="ws-health-row"><span><strong>'+esc(x.label)+'</strong>'+
+        '<small>Last successful read: '+esc(age(x.updated))+
+        (x.error?' | '+esc(x.error):'')+
+        (x.until>Date.now()?' | retry '+esc(stamp(x.until)):'')+'</small></span>'+
+        pill(x.status,x.status==='Fresh'?'good':x.status==='Error'||x.status==='Retry delayed'?'bad':'')+
+        '</div>').join('')+
+      (x.restricted?'<p class="ws-small">'+x.restricted+
+        ' recent player reads returned no permitted public data. These are unknown, not zero.</p>':''));
+  }
   function publicStatsHtml(id){
     const item=state.data.publicIntel[id];
     if(!item)return empty('Public profile and personal statistics are being collected automatically from Torn.');
     const p=item.profile||{},stats=publicMetricItems(item.stats||{}).slice(0,65);
-    return '<p>Last checked '+esc(age(item.at))+' | Torn public API. These may be lifetime stats, not ranked-war totals.</p>'+
+    const highlights=publicCombatHighlights(item.stats||{});
+    return '<p>Last checked '+esc(age(item.at))+
+      ' | Torn public API. Popular lifetime counters are not battle stats or current-war performance.</p>'+
+      (highlights.length?'<div class="ws-inline-metrics">'+
+        highlights.map(x=>'<span>'+esc(x.label)+': <b>'+fmt(x.value)+'</b></span>').join('')+
+        '</div>':'')+
       '<div class="ws-grid">'+
       stat('Profile rank',p.rank||'\u2014','Torn public profile')+
       stat('Account age',p.age===null||p.age===undefined?'\u2014':fmt(p.age)+' days','Torn public profile')+
@@ -2183,17 +2255,24 @@
   }
   // Public player details are API-backed. Fetch a small rotating batch in the
   // background rather than requiring individual profile clicks or manual fields.
-  async function refreshPublicIntel(){
-    if(!effectiveKey()||!state.data.enemies.length)return;
-    const now=Date.now(),candidates=state.data.enemies.slice()
-      .sort((a,b)=>n(state.data.publicIntel[a.id]?.at)-n(state.data.publicIntel[b.id]?.at))
-      .filter(p=>!state.data.publicIntel[p.id]||
-        now-n(state.data.publicIntel[p.id].at)>6*HOUR)
-      .slice(0,2);
+  // Collect automatically from the official public profile and popular-stats
+  // endpoints. Prioritise assigned and watched targets; no extra API key needed.
+  async function refreshPublicIntel(batch=2){
+    if(!effectiveKey()||!state.data.enemies.length)return 0;
+    const now=Date.now(),assigned=new Set(Object.values(cfg.assignments||{}).map(positive)),
+      importance=p=>(assigned.has(p.id)?100:0)+(cfg.watchlist?.[p.id]?70:0),
+      candidates=state.data.enemies.slice().filter(p=>
+        !state.data.publicIntel[p.id]||now-n(state.data.publicIntel[p.id].at)>=6*HOUR)
+        .sort((a,b)=>importance(b)-importance(a)||
+          n(state.data.publicIntel[a.id]?.at)-n(state.data.publicIntel[b.id]?.at))
+        .slice(0,Math.max(1,Math.min(8,Math.floor(Number(batch)||2))));
+    let scanned=0;
     for(const p of candidates){
       const id=positive(p.id);
       if(!id)continue;
-      const obj={profile:{},stats:{},at:now};
+      const prior=state.data.publicIntel[id]||{},
+        obj={profile:prior.profile||{},stats:prior.stats||{},at:now,
+          profileAt:n(prior.profileAt),statsAt:n(prior.statsAt)};
       let obtained=false;
       try{
         const profile=await call('/user/'+id+'/profile','public-profile-'+id,6*HOUR);
@@ -2201,21 +2280,23 @@
           const pr=profile.profile||profile;
           obj.profile={rank:String(pr.rank||''),age:officialNumber(pr.age),
             awards:officialNumber(pr.awards)};
+          obj.profileAt=Date.now();
           obtained=true;
         }
       }catch(_){}
       try{
         const stats=await call('/user/'+id+'/personalstats?cat=popular',
           'public-stats-'+id,6*HOUR);
-        if(stats){obj.stats=stats.personalstats||stats;obtained=true;}
+        if(stats){obj.stats=stats.personalstats||stats;obj.statsAt=Date.now();obtained=true;}
       }catch(_){}
-      // Cache a completed attempt, including restricted responses, to avoid
-      // retrying inaccessible selections on every 90-second roster refresh.
-      state.data.publicIntel[id]=obtained?obj:{...obj,restricted:true};
+      state.data.publicIntel[id]={...obj,restricted:!obtained&&
+        !Object.keys(obj.profile).length&&!publicMetricItems(obj.stats).length};
+      scanned++;
     }
     const ids=Object.keys(state.data.publicIntel).sort((a,b)=>
       n(state.data.publicIntel[b]?.at)-n(state.data.publicIntel[a]?.at));
     for(const id of ids.slice(100))delete state.data.publicIntel[id];
+    return scanned;
   }
   async function loadPublicIntel(id){
     if(!positive(id)||state.loading)return;
