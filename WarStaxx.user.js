@@ -1230,6 +1230,33 @@
 
   // FFScouter BSS is a public statistical estimate; never confuse it with
   // the API-key owner's personal FF multiplier or a verified spy.
+  function battleIntelSummary(){
+    const total=state.data.enemies.length;
+    let exact=0,estimated=0;
+    for(const p of state.data.enemies){
+      if(bsScore(spy(p.id))!==null){exact++;continue;}
+      const f=ffscouter(p.id);
+      if(f&&!ffIsStale(f)&&Number.isFinite(Number(f.bss))&&Number(f.bss)>0)
+        estimated++;
+    }
+    return {total,exact,estimated,unknown:total-exact-estimated,
+      ownKnown:state.data.ours.filter(p=>bsScore(spy(p.id))!==null).length};
+  }
+  function battleIntelCard(){
+    const x=battleIntelSummary();
+    return card('AUTOMATIC BATTLE INTELLIGENCE | DATA QUALITY',
+      '<div class="ws-inline-metrics"><span>Enemy exact: '+fmt(x.exact)+'</span>'+
+      '<span>Enemy estimates: '+fmt(x.estimated)+'</span>'+
+      '<span>Enemy unknown: '+fmt(x.unknown)+'</span>'+
+      '<span>Own exact: '+fmt(x.ownKnown)+' / '+fmt(state.data.ours.length)+'</span></div>'+
+      '<p class="ws-small">Exact: own authorised Torn battlestats and readable spy reports. Public FFScouter BSS is an estimate. Hidden enemy stats are not obtainable from a public player request.</p>'+
+      '<p class="ws-small">Own API '+esc(age(state.data.updated['own-battlestats']))+
+      ' | Personal reports '+esc(age(state.data.updated['user-stat-reports']))+
+      ' | Faction reports '+esc(age(state.data.updated['faction-stat-reports']))+
+      ' | FFScouter '+esc(age(state.data.updated.ffscouter))+'</p>'+
+      '<div class="ws-toolbar">'+b('Modelled matchups','tab:matchups')+
+      b('Source diagnostics','tab:diagnostics')+'</div>');
+  }
   function enemyBattleEstimate(enemy){
     if(!enemy)return {value:null,source:'Unknown',verified:false};
     const report=spy(enemy.id),known=bsScore(report),
@@ -2105,7 +2132,7 @@
   async function loadPublicIntel(id){
     if(!positive(id)||state.loading)return;
     const item=state.data.publicIntel[id];
-    if(item&&Date.now()-n(item.at)<6*HOUR){state.error='Public lookup is cached '+age(item.at)+'. Refresh after six hours.';render();return;}
+    if(item&&Date.now()-n(item.at)<6*HOUR){confirmed('Public Torn profile cached '+age(item.at)+'. Latest existing data shown.');render();return;}
     state.loading=true;state.error='';render();
     const obj={profile:item?.profile||{},stats:item?.stats||{},at:Date.now()};
     try{
@@ -2397,7 +2424,7 @@
         ev.encounters.wins<risk.minWins)return null;
       const ff=ev.match?.ff;
       if(!Number.isFinite(ff)||ff<1||ff>3)return null;
-      // Current Torn base respect: 1.00 at level 1, 1.50 at level 100.
+      // Torn base respect is (ln(target level) + 1) / 4; actual war points vary.
       const lvl=Math.max(1,Math.min(100,n(player.level))),
         base=(Math.log(lvl)+1)/4,model=base*2*ff,
         learned=learnedYield(friend,player,model,observed);
@@ -4343,7 +4370,7 @@
         'Official chain API','tab:skulls')+'</div>'+
       '<div class="ws-toolbar">'+b('TURTLE','fast-turtle')+b(own.kind==='hospital'?'HEAL TO HIT':'HIT','fast-hit')+
       b('HEAL','fast-heal')+b('Refresh','refresh')+b('Black Skulls','fast-skulls')+'</div>'+
-      missionPanel()+commandPulse()+
+      missionPanel()+battleIntelCard()+commandPulse()+
       '<div class="ws-grid">'+
       statAction('Enemy Okay',fresh?fmt(enemies.okay)+' / '+fmt(enemies.total):'Unknown','Current roster','tab:targets')+
       statAction('Enemy hospital',fresh?fmt(enemies.hospital):'Unknown','Watch expiry windows','tab:control')+
@@ -4705,10 +4732,10 @@
         '<option value="'+p.id+'" '+(p.id===friend.id?'selected':'')+'>'+esc(p.name)+
         (cfg.blackSkulls[p.id]?' [BLACK SKULL]':'')+' ['+p.id+']</option>').join('')+'</select></label>'+
       '<div class="ws-inline-metrics"><span>Current status '+esc(friend.status)+'</span>'+
-      '<span>Battle stats '+(bsScore(spy(friend.id))===null?'Missing':'Manual spy saved')+'</span>'+
+      '<span>Battle stats '+(bsScore(spy(friend.id))===null?'Unknown':esc(spy(friend.id)?.source||'Existing local spy'))+'</span>'+
       '<span>Confirmed favourable '+verified+' in the displayed sample</span>'+
       '<span>Active manual target '+(positive(cfg.assignments[friend.id])?'#'+cfg.assignments[friend.id]:'none')+'</span></div>'+
-      '<p class="ws-small">The strongest recommendation requires two comparable manual battle-stat records; even then, buffs, equipment, player actions and stat age can change the outcome. FF models are not win probabilities.</p>');
+      '<p class="ws-small">Confirmed matchups require two recent exact stat records from the Torn API or existing reports. FFScouter public BSS estimates also provide provisional models for both factions without typing stats. Win probabilities remain unknown.</p>');
     html+=card('All our hitters | open an individual shortlist',
       '<div class="ws-toolbar"><label>Show<select id="ws-hitter-filter">'+
       [['all','Everyone'],['black','Black Skulls only'],['ready','Okay status only']].map(([value,label])=>
@@ -4933,6 +4960,8 @@
       '<p>Opponent ID: '+(positive(cfg.enemyId)?'configured':'missing')+'</p>'+
       '<p>Last known roster: '+esc(age(Math.max(n(d.updated.enemies),n(d.updated.ours))))+'</p>'+ 
       '<p>Own energy/cooldown: '+(cfg.autoOwnerReadiness?'enabled':'disabled')+' | owner ID '+(positive(d.meta?.ownerId)?'detected':'unknown')+
+      ' | exact owner stats '+esc(age(d.autoSpies?.[positive(d.meta?.ownerId)]?.observedAt))+
+      ' | cached exact stat readings '+fmt(Object.keys(d.autoSpies||{}).length)+
       ' | energy last read '+esc(age(d.ownerReadiness?.energy?.at))+
       ' | medical last read '+esc(age(d.ownerReadiness?.cooldown?.at))+'</p>'+ 
       '<p>FFScouter: '+(cfg.ffEnabled?'enabled':'disabled')+' | consent '+(cfg.ffConsent?'yes':'no')+
