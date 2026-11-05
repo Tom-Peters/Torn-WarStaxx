@@ -95,7 +95,7 @@ test('live strip supports automatic compact mode, alert links, skull orders and 
     "cfg.priorityNotifications=Boolean($('#ws-priority-notifications'"]){
     assert.ok(source.includes(term),'Missing integration '+term);
   }
-  assert.match(source,/\/\/ @version\s+1\.5\.1/);
+  assert.match(source,/\/\/ @version\s+1\.5\.2/);
   assert.ok(source.startsWith('// ==UserScript==\n'));
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
