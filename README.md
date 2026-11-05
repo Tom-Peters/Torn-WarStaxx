@@ -1,5 +1,18 @@
 > **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v1.0.0). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
 
+## v1.5.1 - Full functionality and mobile usability audit (5 November 2026)
+
+- Fixed two-sided roster freshness on the main status banner and stale enemy "Okay" hub metrics.
+- Restored a real ten-second chain display update in the permanent Torn strip.
+- Prevented previous faction's current war, rosters or chain from appearing after changing the manual faction ID.
+- Hardened incomplete cached member objects and null entries in numeric-keyed API lists.
+- Improved the mobile UI with larger touch targets, a compact header, proper search/refresh labels, focus handling, Escape / Tab support and background-scroll locking.
+- Player spy fields and local notes no longer disappear during an ordinary rerender of the same player; changing player or explicitly clearing spies does not preserve stale drafts.
+- Repaired outdated version pins and isolated historical regression fixtures; added `tests/war-audit-v151.test.mjs`.
+- The independent TornStaxx hub and original installer URL are unchanged. No automatic attacks or medical-item usage were added.
+- Full audit, exact corrected/remaining issues and device test checklist: [QA audit 2026-11-05](docs/QA-AUDIT-2026-11-05.md).
+- **Verification boundary:** JavaScript syntax, ASCII and isolated test checks were performed; real Torn PDA/WebView device rendering, API permissions and external Worker are still unverified.
+
 ## v1.5.0 - Mission-first live war command (5 November 2026)
 
 - **My Mission** is at the top of the live war screen: own status, energy, assigned target, verified matchup evidence, any blocker, and next action. A local assignment takes precedence over the highest-scoring model suggestion.
