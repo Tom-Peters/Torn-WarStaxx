@@ -138,11 +138,11 @@ test('four-layer navigation and existing advanced pages remain functional',()=>{
    "function blackSkullsPerformanceCard(",
    "function bonusHitRecommendation()",
    "function roleMatch(",
-   "markSharedDirty();state.error='Manual duty",
+   "markSharedDirty();confirmed('Manual duty",
    "const pages={overview,enemy:enemyScreen,reports:reportsScreen,leader:leaderScreen",
    "function warQuick(action)"
  ])assert.ok(source.includes(token),'Missing '+token);
- assert.match(source,/\/\/ @version\s+1\.4\.0/);
+ assert.match(source,/\/\/ @version\s+1\.5\.2/);
  assert.doesNotMatch(source,/[^\x00-\x7f]/);
  assert.doesNotThrow(()=>new Script(source));
 });
