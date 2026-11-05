@@ -69,6 +69,7 @@ test('synced orders include turtle strategy and leadership statuses, never API s
    'const state={data:{ours:[{id:10},{id:11}]}};',
    'const currentPlanKey=()=> "war:1",hitterRisk=()=>({mode:"safe"});',
    'const turtlePlan=()=>({mode:"full",members:{11:"turtle"}});',
+   'const heavyRule=(value)=>value||{mode:"percent",percent:40,minBss:0};',
    'const hitterPlanStatus=id=>id===10?"engaged":"not-set";'
  ].join('\n');
  const x=fixture(setup,'  function sharedPayload(){','  function sharedHasLocalOrders(){',
@@ -88,7 +89,8 @@ test('shared role sync applies only scoped war duties without deleting other war
      'controlAssignments:{},turtlePlans:{"war:2":{mode:"defensive",members:{77:"turtle"}}},'+
      'planStatus:{"war:2:member:88":"support","war:1:member:10":"ready"},enemyId:20};',
    'const state={data:{war:{id:1}}};',
-   'const currentPlanKey=()=> "war:1",saveCfg=()=>true;'
+   'const currentPlanKey=()=> "war:1",saveCfg=()=>true;',
+   'const heavyRule=(value)=>value||{mode:"percent",percent:40,minBss:0};'
  ].join('\n');
  const x=fixture(setup,'  function applySharedOrders(data){','  async function sharedPull(',
    '({applySharedOrders,cfg})');
@@ -111,7 +113,8 @@ test('past-war hitter comparison needs two comparable reports and five attacks',
        '8:{factions:[{id:1,members:[{id:10,score:100,attacks:10}]}]},'+
        '9:{factions:[{id:1,members:[{id:10,score:35,attacks:10}]}]}'+
      '},ours:[{id:10,name:"Skull"}]}};',
-   'const warHitLedger=()=>({ours:{players:{}}});'
+   'const warHitLedger=()=>({ours:{players:{}}});',
+   'const inboundWarImpact=()=>({known:false,byMember:{}});'
  ].join('\n');
  const f=fixture(setup,'  function ownHistoricalEfficiency(','  function bonusHitRecommendation(',
    '({ownHistoricalEfficiency,memberPerformance})');
