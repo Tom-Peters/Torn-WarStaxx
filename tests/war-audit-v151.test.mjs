@@ -16,8 +16,24 @@ test('older or malformed cached roster states fail closed rather than crashing',
   assert.equal(x.memberState({status:'Hospital'}),'hospital');
   assert.equal(x.memberState({}), 'unknown');
   assert.equal(x.memberState(null),'unknown');
-  assert.equal(x.isOnline({}),'false'==='true');
+  assert.equal(x.isOnline({}),false);
   assert.equal(x.isOnline({lastAction:'Online'}),true);
+});
+test('numeric-object API parsing tolerates sparse or null members',()=>{
+  const code=region('  const parseArray=(value)=>','  const unpack=(j,k)=>');
+  const x=runInNewContext('const positive=v=>Number(v)||0;\n'+code+';({parseArray})');
+  const values=x.parseArray({'31':null,'32':{name:'Valid',id:32},'skip':{name:'Ignored'}});
+  assert.equal(values.length,2);
+  assert.equal(values[0].id,31);
+  assert.equal(values[1].name,'Valid');
+});
+test('unsaved player notes and stats survive same-profile refresh, but not opponent switching or explicit clear',()=>{
+  const code=region('  function render(){','  function navigate(tab,focus){');
+  assert.match(code,/state\.renderedPlayerId===positive\(state\.chosen\)/);
+  assert.match(code,/!state\.skipDraftRestore/);
+  assert.match(code,/Array\.from\(content\.querySelectorAll\('\[data-spy\],#ws-note'\)\)/);
+  assert.match(code,/state\.renderedPlayerId=state\.tab==='targets'/);
+  assert.match(source,/state\.skipDraftRestore=true;render\(\);return/);
 });
 test('permanent strip refreshes chain countdown at 10s ticks rather than freezing up to a minute',()=>{
   const code=region('  function renderWarStrip(force=false){','  function statusNote(){');
