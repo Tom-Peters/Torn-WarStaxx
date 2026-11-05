@@ -18,7 +18,7 @@ function extract(start,end) {
   assert.ok(begin>0&&finish>begin, 'Expected adjacent source parsers: '+start+' / '+end);
   return source.slice(begin,finish);
 }
-const report = runInNewContext(helpers+extract('report','attacks')+'; report');
+const report = runInNewContext(helpers+'const officialNumber=value=>value!==null&&value!==undefined&&value!==\'\'&&Number.isFinite(Number(value))?Number(value):null;\n'+extract('report','attacks')+'; report');
 const warHistory = runInNewContext(helpers+extract('roster','detectWar')+'; warHistory');
 const roster = runInNewContext(helpers+extract('roster','warHistory')+'; roster');
 
