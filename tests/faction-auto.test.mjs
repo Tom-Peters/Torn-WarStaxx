@@ -4,13 +4,13 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 const code=readFileSync(new URL('../WarStaxx.user.js',import.meta.url),'utf8');
 const start=code.indexOf('  function ownFactionFrom(');
-const end=code.indexOf('  async function refreshHistory()',start);
+const end=code.indexOf('  async function refreshHistory(force=false){',start);
 assert.ok(start>0&&end>start,'Faction identity logic found');
 const extract=code.slice(start,end);
 function simulate({cfg={},responses={},fail=[],now=1762250000000}={}){
  const calls=[];
  const data={ours:[{id:77}],enemies:[{id:88}],ourWars:[{id:11}],enemyWars:[{id:22}],
-   war:{id:9},updated:{wars:1,ours:1,enemies:1},errors:{},backoff:{}};
+   war:{id:9},updated:{wars:1,ours:1,enemies:1},errors:{},backoff:{},meta:{}};
  const config={factionAuto:true,ourId:0,factionSource:'',factionVerifiedAt:0,enemyId:22,...cfg};
  let saves=0;
  const sandbox={cfg:config,state:{data},Date:{now:()=>now},HOUR:3600000,
@@ -81,7 +81,7 @@ test('temporary API failure preserves previous verified id',async()=>{
  assert.equal(a.saves,0);
 });
 test('metadata, old settings and safety contract remain intact',()=>{
- assert.match(code,/\/\/ @version\s+0\.2\.7/);
+ assert.match(code,/\/\/ @version\s+1\.5\.2/);
  assert.match(code,/factionAuto:true/);
  assert.match(code,/Detect my faction now/);
  assert.match(code,/id="ws-auto-faction"/);
