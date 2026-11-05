@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.4.0
+// @version      1.5.0
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.4.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.5.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -1614,7 +1614,7 @@
   }
   function event(name,detail){document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}
   function announce(){
-    event('register',{id:ID,label:'War-TornStaxx',icon:'WS',desc:'Ranked wars \u00b7 Live targets \u00b7 Matchups',trendMetric:'Hittable enemies',freshnessMs:300000,sections:sections.map(id=>({id,label:labels[id]}))});
+    event('register',{id:ID,label:'War-TornStaxx',icon:'WS',desc:'Ranked wars \u00b7 Live targets \u00b7 Matchups',trendMetric:'Enemy Okay',freshnessMs:300000,sections:sections.map(id=>({id,label:labels[id]}))});
   }
   function publish(){
     const a=currentAlerts();state.alerts=a;
@@ -1628,7 +1628,7 @@
         {label:state.data.war?'Net pace per hour':'Last war points',value:state.data.war?
           observedPace?.netRate===null||!observedPace?'--':fmt(observedPace.netRate):
           enemyHistory.lastScore===null?'--':fmt(enemyHistory.lastScore)},
-        {label:'Hittable enemies',value:String(hittable)}]});
+        {label:'Enemy Okay',value:rosterFresh('enemies')?String(hittable):'--'}]});
     event('actions',{id:ID,updated:observed||0,items:a.map(x=>({id:x.id,title:x.title,detail:x.detail,status:x.status,priority:x.priority,reviewMinutes:2}))});
     event('notice',{id:ID,count:a.filter(x=>x.status==='now'||x.status==='urgent').length,
       level:a.some(x=>x.status==='urgent')?'urgent':'warning',summary:a.length?a[0].title:'No verified war alerts',
@@ -2317,6 +2317,107 @@
     const self=ourWarReadiness();
     return self.kind==='okay'&&self.player?efficiencyHits(self.player,1)[0]||null:null;
   }
+  // The quick hit button respects a Skull Capo / locally saved order.
+  // A stale or unsafe order must NEVER silently redirect to another opponent.
+  function myMission(){
+    const self=ourWarReadiness(),assignedId=positive(cfg.assignments[self.id]),
+      assigned=state.data.enemies.find(p=>p.id===assignedId)||null,
+      recommended=bestEfficiencyHit();
+    let target=assignedId?null:recommended,issue='',evidence=null;
+    if(assignedId){
+      if(!assigned)issue='The assigned opponent is missing from the current roster.';
+      else if(!self.player||self.kind!=='okay')issue='Your official status is not confirmed Okay.';
+      else if(!rosterFresh('ours')||!rosterFresh('enemies'))
+        issue='An official roster is older than five minutes.';
+      else if(memberState(assigned)!=='okay')
+        issue='The assigned opponent is '+memberState(assigned)+', not Okay.';
+      else if(!roleAllows(self.player,assigned))
+        issue='The assigned opponent is outside your Black Skulls / regular BSS bracket.';
+      else{
+        evidence=matchEvidence(self.player,assigned);
+        target=efficiencyHits(self.player,state.data.enemies.length)
+          .find(hit=>hit.player.id===assignedId)||null;
+        if(!target)issue='Assignment requires a new matchup check: '+evidence.reason+
+          '. Verify manual spy age, observed losses, risk settings and energy.';
+      }
+    }
+    if(self.energy!==null&&self.energy<25){
+      target=null;issue='Your last known energy is below 25 E.';
+    }
+    return {self,assignedId,assigned,recommended,target,issue,evidence,
+      hasOrder:Boolean(assignedId)};
+  }
+  function missionPanel(){
+    const m=myMission(),self=m.self,
+      role=cfg.blackSkulls[self.id]?'Black Skull':'Regular attacker',
+      target=m.target?.player||null,
+      buttonAction=m.hasOrder&&!m.target?(self.id?'hitter:'+self.id:'tab:matchups'):
+        target?'fast-hit':'tab:matchups',
+      buttonText=m.hasOrder&&!m.target?'REVIEW ORDER':target?
+        m.hasOrder?'HIT MY ORDER':'HIT SUGGESTED TARGET':'FIND VERIFIED MATCHUP';
+    return card('MY MISSION | '+role,
+      '<div class="ws-row"><span><b>My status: '+esc(self.kind)+'</b>'+
+      '<br><small>Energy '+(self.energy===null?'unknown':fmt(self.energy)+' E')+
+      ' | own roster '+esc(age(state.data.updated.ours))+'</small></span>'+
+      pill(m.hasOrder?'SAVED ORDER':'NO SAVED ORDER',m.hasOrder?'good':'')+'</div>'+
+      '<p><b>Assigned opponent:</b> '+(m.assigned?
+        infoButton(m.assigned.name,m.assigned.id)+' '+ffBadge(m.assigned.id):
+        m.assignedId?'#'+m.assignedId+' (not in roster)':'None')+'</p>'+
+      '<p><b>Decision:</b> '+(m.hasOrder?(target?
+        'Saved assignment is currently eligible under your local verified risk checks.':
+        'Do not use a quick-hit shortcut until this assignment is reviewed.'):
+        target?'No manual order. A verified provisional option is available.':
+        'No eligible verified option has been identified.')+'</p>'+
+      (m.issue?'<div class="ws-note ws-warn">'+esc(m.issue)+'</div>':'')+
+      (target?'<p><b>Hit candidate:</b> '+infoButton(target.name,target.id)+
+        ' | '+fmt(m.target.pointsPer25)+' estimated / sampled points per 25 E'+
+        '<br><small>'+esc(m.target.source)+' | '+esc(m.target.evidence.reliability)+
+        '. Buffs and live availability still require checking.</small></p>':
+        m.recommended&&m.hasOrder?
+          '<p class="ws-small">A different verified opportunity exists ('+
+          esc(m.recommended.player.name)+'), but your saved assignment will not be bypassed.</p>':'')+
+      '<div class="ws-toolbar">'+b(buttonText,buttonAction)+
+      (m.assigned?b('Inspect assigned enemy','player:'+m.assigned.id):'')+
+      b('My matchups',self.id?'hitter:'+self.id:'tab:matchups')+
+      b('Squad orders','tab:command')+'</div>');
+  }
+  function commandPulse(){
+    const fresh=rosterFresh('ours')&&rosterFresh('enemies'),
+      squad=blackSkullsCoverage(),actions=operationalQueue().filter(x=>x.group==='now').slice(0,4),
+      holes=squad.targets.filter(x=>x.needsAssignment||x.blocked).slice(0,3);
+    return card('SKULL CAPO | 30-SECOND WAR BRIEF',
+      '<div class="ws-inline-metrics"><span>Heavy targets: '+fmt(squad.targets.length)+'</span>'+
+      '<span>Unassigned: '+fmt(squad.unassigned)+'</span>'+
+      '<span>Blocked orders: '+fmt(squad.blocked)+'</span>'+
+      '<span>Matchup-verified coverage: '+fmt(squad.verifiedAssigned)+'</span>'+
+      '<span>Unknown enemy BSS: '+fmt(squad.bands.unknown)+'</span></div>'+
+      '<p class="ws-small">'+(fresh?
+        'Fresh official rosters. Coverage comes from local orders and verified manual comparative matchups.':
+        'STALE ROSTERS: all live availability and replacement recommendations require a new refresh.')+
+      '</p>'+
+      '<h3>What needs action</h3>'+
+      (actions.length?actions.map(x=>'<div class="ws-row"><span><b>'+esc(x.title)+
+        '</b><br><small>'+esc(x.detail)+'</small></span>'+
+        b('Review',x.action)+'</div>').join(''):
+        empty('No urgent intervention evidenced; continue monitoring.'))+
+      '<h3>High-strength targets needing coverage</h3>'+
+      (holes.length?holes.map(x=>'<div class="ws-row"><span>'+
+        infoButton(x.enemy.name,x.enemy.id)+' '+ffBadge(x.enemy.id)+
+        '<br><small>BSS '+fmt(x.bss)+' | '+esc(x.reason)+
+        ' | '+esc(x.priority?.confidence||'BSS only')+'</small></span>'+
+        (fresh&&x.replacement?
+          b('Replace hitter','skull-replace:'+x.assigned[0].id+':'+
+            x.replacement.player.id+':'+x.enemy.id):
+        fresh&&!x.covered&&x.free.length?
+          b('Assign hitter','skull-assign:'+x.free[0].player.id+':'+x.enemy.id):
+          b('Inspect','player:'+x.enemy.id))+'</div>').join(''):
+        empty(squad.targets.length?'No heavy-target gaps identified in the saved local orders.':
+          'No known high-BSS targets yet. Collect BSS or adjust the heavy cutoff.'))+
+      '<div class="ws-toolbar">'+b('Full Black Skulls coverage','tab:leader')+
+        b('All operations','tab:operations')+
+        b('Copy squad brief','copy-skull-chat')+
+        b('Refresh official statuses','refresh')+'</div>');
+  }
   function turtleWindow(at=Date.now()){
     const self=ourWarReadiness(),t=turtleAssessment(at),score=t.score,
       skull=Boolean(cfg.blackSkulls[self.id]),
@@ -2597,7 +2698,12 @@
     if(self.energy!==null&&self.energy<25){
       open({section:'overview'});state.error='Hit unavailable: last known energy is below 25 E.';render();return;
     }
-    const target=bestEfficiencyHit();
+    const mission=myMission(),target=mission.target;
+    if(mission.hasOrder&&!target){
+      open({section:'overview'});
+      state.error='Saved order blocked: '+mission.issue+' Open MY MISSION to review or change the local assignment.';
+      render();return;
+    }
     if(!target){
       open({section:'overview'});state.error='No verified favourable target. Open Matchups and obtain recent comparable spies; FFScouter alone cannot confirm a win.';render();return;
     }
@@ -2708,12 +2814,12 @@
       return;
     }
     bar.classList.remove('wsw-standby');
-    const self=ourWarReadiness(),score=warScore(),target=bestEfficiencyHit(),
+    const mission=myMission(),self=mission.self,score=warScore(),target=mission.target,
       opportunities=priorityOpportunities(),defence=turtleWindow(),chain=chainStatus(),
       compact=Boolean(cfg.warStripCompact||(state.stripScrolled&&!state.stripExpanded)),
       intent=location.pathname.toLowerCase()==='/item.php'?itemIntent():'',
       sig=[state.data.war.id,score?.our,score?.enemy,self.kind,self.energy,target?.player.id,
-        intent,compact,opportunities.map(x=>x.id+':'+x.at).join(','),state.quickHitPending,location.pathname,Math.floor(Date.now()/MIN)].join(':');
+        intent,compact,mission.assignedId,mission.issue,opportunities.map(x=>x.id+':'+x.at).join(','),state.quickHitPending,location.pathname,Math.floor(Date.now()/MIN)].join(':');
     if(!force&&bar.dataset.signature===sig)return;
     bar.dataset.signature=sig;
     bar.innerHTML='<div class="wsw-top"><span class="wsw-kicker">RANKED WAR LIVE</span>'+
@@ -2721,11 +2827,13 @@
       '<strong>Net '+(score?(score.net>=0?'+':'')+fmt(score.net):'?')+'</strong>'+
       btn(compact?'Expand':'Minimise','compact')+'</div>'+
       (compact?'':'<div class="wsw-meta"><span>Your status: '+esc(self.kind)+' | '+(self.energy===null?'Energy unknown':fmt(self.energy)+' E')+'</span>'+
-        '<span>'+(target?'Best points / E: '+esc(target.player.name)+' ('+fmt(target.pointsPer25)+' pts / 25 E proxy)':'No verified safe hit')+'</span>'+
+        '<span>'+(mission.hasOrder?'MY ORDER: '+(mission.assigned?esc(mission.assigned.name):'#'+mission.assignedId)+
+          (target?' | verified for quick-hit':' | REVIEW: '+esc(mission.issue)):
+          target?'Suggested: '+esc(target.player.name)+' ('+fmt(target.pointsPer25)+' pts / 25 E proxy)':'No verified safe hit')+'</span>'+
         '<span>Suggested cover '+(defence.minutes===null?'Review':defence.minutes+'m')+
         ' | War '+esc(age(state.data.updated.wars))+' | roster '+esc(age(state.data.updated.ours))+'</span></div>')+
       '<div class="wsw-actions">'+btn('TURTLE','turtle')+
-      btn(state.quickHitPending?'CHECKING...':self.kind==='hospital'?'HEAL TO HIT':'HIT','hit')+
+      btn(state.quickHitPending?'CHECKING...':self.kind==='hospital'?'HEAL TO HIT':mission.hasOrder&&!target?'REVIEW ORDER':'HIT','hit')+
       (compact?btn('OPEN','war'):btn('HEAL','heal')+
        btn(cfg.blackSkulls[self.id]?'MY SKULLS':'WAR ROOM',cfg.blackSkulls[self.id]?'skulls':'war')+
        btn('MORE STATS','stats'))+'</div>'+
@@ -3091,6 +3199,25 @@
           'tab:turtle','Observed net pace + fresh faction rosters');
     }
     const plan=leadershipSummary();
+    if(active&&ownFresh&&enemyFresh){
+      const coverage=blackSkullsCoverage(at);
+      if(!coverage.skulls.length)add('intel','skulls-unset',65,
+        'Mark your Black Skulls heavy-hitter squad',
+        'No hitters are locally tagged as Black Skulls. Assign squad members before drafting heavy-target coverage.',
+        'tab:leader','Local leadership roster');
+      if(coverage.unassigned)add('now','heavy-unassigned',91,
+        coverage.unassigned+' high-BSS targets without a squad order',
+        'Review top-strength opponent priorities. Only verified free Black Skulls can receive a suggested local order.',
+        'tab:leader','Known enemy BSS + local orders');
+      if(coverage.blocked)add('now','heavy-blocked',93,
+        coverage.blocked+' heavy-target order(s) currently blocked',
+        'Assigned hitter availability or matchup no longer supports a safe quick recommendation. Review replacements.',
+        'tab:leader','Current rosters + verified matchup checks');
+      if(coverage.missingEvidence)add('intel','heavy-intel',62,
+        coverage.missingEvidence+' uncovered heavy targets need comparative spies',
+        'Missing evidence is not a weak target; obtain recent comparable battle stats to identify a suitable hitter.',
+        'tab:matchups','Missing verified matchup evidence');
+    }
     if(plan.duplicateTargets.length)add('now','double-booked',88,
       'Resolve '+plan.duplicateTargets.length+' duplicate target assignments',
       'The same opponent is assigned to multiple hitters. Review deliberately before updating local orders.',
@@ -4102,15 +4229,7 @@
         'Official chain API','tab:skulls')+'</div>'+
       '<div class="ws-toolbar">'+b('TURTLE','fast-turtle')+b(own.kind==='hospital'?'HEAL TO HIT':'HIT','fast-hit')+
       b('HEAL','fast-heal')+b('Refresh','refresh')+b('Black Skulls','fast-skulls')+'</div>'+
-      card('Your next action','<p><b>Official status:</b> '+esc(own.kind)+
-        ' | <b>Energy:</b> '+(own.energy===null?'Unknown':fmt(own.energy)+' E')+'</p>'+
-        (own.kind==='hospital'?'<p>Heal manually on Torn items, then tap HIT again.</p>':
-        target?'<p><b>Best verified points / energy:</b> '+infoButton(target.player.name,target.player.id)+
-          ' '+ffBadge(target.player.id)+' | Lv '+fmt(target.player.level)+
-          ' | '+fmt(target.pointsPer25)+' modelled/observed pts per 25 E</p><small>'+
-          esc(target.source)+' | '+esc(target.evidence.reliability)+'. Check status and buffs before attacking.</small>':
-          '<p>No recent verified favourable matchup. Review your manual spies rather than guessing a winning fight.</p>'+
-          b('Open matchups','tab:matchups')))+
+      missionPanel()+commandPulse()+
       '<div class="ws-grid">'+
       statAction('Enemy Okay',fresh?fmt(enemies.okay)+' / '+fmt(enemies.total):'Unknown','Current roster','tab:targets')+
       statAction('Enemy hospital',fresh?fmt(enemies.hospital):'Unknown','Watch expiry windows','tab:control')+
