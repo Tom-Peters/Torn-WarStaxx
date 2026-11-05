@@ -4265,7 +4265,7 @@
       '<p>Strength, activity, travel, previous wars and who scores their points. '+
       'FFScouter BSS is an estimate, not a confirmed spy or an individual hitter FF.</p>'+
       '<div class="ws-toolbar">'+b('Refresh','refresh')+
-      b('Detailed enemy dossiers','tab:targets')+b('Last wars','tab:history')+'</div></div>'+
+      b('Detailed enemy dossiers','tab:targets')+b('Find player','find')+b('Last wars','tab:history')+'</div></div>'+
       '<div class="ws-grid">'+
       statAction('Enemy available',active?enemy.okay+' / '+enemy.total:'Stale',
         'Observed Okay status','tab:targets')+
@@ -4283,6 +4283,7 @@
         bands.unknown+' need a fresh BSS estimate / spy','tab:targets')+
       statAction('FFScouter FF coverage',ff.total?ff.covered+' / '+ff.total:'Unknown',
         'Registered user-key FF, not per-faction-member','tab:settings')+'</div>'+
+      apiCoverageCard()+
       card('Enemy strength partition | who should tackle whom',
         '<p><b>Black Skulls:</b> '+bands.heavyCount+
         ' toughest opponents among the '+bands.known+
@@ -4333,7 +4334,7 @@
       '<p>Dig into the evidence, plan future wars, manage settings, inspect hit logs and review completed wars.</p>'+
       '<div class="ws-toolbar">'+b('Latest after-action report','tab:afteraction')+
         b('Skull Capo squad command','tab:leader')+
-        b('Torn and FF settings','tab:settings')+'</div></div>'+
+        b('Torn and FF settings','tab:settings')+b('Find player','find')+'</div></div>'+
       '<div class="ws-grid">'+
       statAction('Latest after-action',last?'#'+last.id:'No report',
         last?last.outcome+' / '+(last.detail?'official detail':'summary only'):'Refresh after a war ends','tab:afteraction')+
@@ -4345,7 +4346,7 @@
         'Past official wars','tab:history')+
       statAction('Detailed reports ready',coverage.total?coverage.complete+' / '+coverage.total:'No completed wars',
         coverage.missing+' missing; '+coverage.waiting+' on API backoff','tab:history')+'</div>';
-    h+=leaderboardCard(24);
+    h+=apiCoverageCard()+leaderboardCard(24);
     const groups=[
       ['OPERATIONS & ORDERS',[
         ['Skull Capo command','leader'],['Black Skulls','skulls'],
@@ -5329,6 +5330,22 @@
   }
   function handle(action){
     if(action==='refresh'){refresh(true);return;}
+    if(action==='scan-public'){
+      if(state.scanning||state.loading)return;
+      if(!effectiveKey()||!state.data.enemies.length){
+        state.error='Official public scouting needs a Torn API key and a loaded opponent roster.';
+        render();return;
+      }
+      state.scanning=true;state.loading=true;state.spinner='Scanning public Torn profiles';
+      const before=publicIntelCoverage();render();
+      refreshPublicIntel(6).then(count=>{
+        const after=publicIntelCoverage();
+        confirmed('Checked '+count+' opponent(s) with the public Torn API. Complete public dossiers '+
+          before.complete+' to '+after.complete+' / '+after.total+'. Restricted data stays unknown.');
+      }).catch(e=>{state.error='Public scouting failed: '+String(e.message||e).slice(0,120);})
+        .finally(()=>{state.scanning=false;state.loading=false;state.spinner='';save();publish();render();});
+      return;
+    }
     if(action==='shared-pull'){sharedPull(false);return;}
     if(action==='shared-adopt'){sharedPull(true);return;}
     if(action==='shared-push'){sharedPush();return;}
