@@ -41,6 +41,13 @@ test('permanent strip refreshes chain countdown at 10s ticks rather than freezin
   assert.match(code,/chain\.fresh\?chain\.count:0/);
   assert.match(source,/setInterval\(\(\)=>\{if\(!document\.hidden\)renderWarStrip\(\);\},10000\)/);
 });
+test('roster freshness banner requires both factions, not merely the newer timestamp',()=>{
+  const sourcePart=region('  function statusNote(){','  function scoreSpark(p){');
+  assert.match(sourcePart,/rosterFresh\('ours'\)&&rosterFresh\('enemies'\)/);
+  assert.match(sourcePart,/One or both rosters need refresh/);
+  assert.match(sourcePart,/Our roster/);
+  assert.match(sourcePart,/opponent/);
+});
 test('hub no longer labels expired enemy roster data as current available opponents',()=>{
   assert.match(source,/const hittable=rosterFresh\('enemies'\)\?state\.data\.enemies\.filter/);
   assert.match(source,/trendMetric:'Enemy Okay'/);
