@@ -20,7 +20,6 @@ test('highest reliable points per 25 energy outranks level and excludes unavaila
       "{id:101,status:'Okay',level:95},{id:102,status:'Okay',level:20},"+
       "{id:103,status:'Hospital',level:100}]}};",
     'const memberState=p=>p.status.toLowerCase();',
-    'const enemyRoleBands=()=>({heavy:new Set([101])});',
     'const activeWarNow=()=>true,rosterFresh=()=>true;',
     'const bsScore=x=>x?100:null,spy=id=>({id});',
     'let blocked=new Set();',
@@ -70,6 +69,7 @@ test('high-priority transition alerts require observed state change and stay war
     "const state={data:{war:{id:500},enemies:[{id:101,name:'Watcher',status:'Okay'}],availabilityEvents:{}}};",
     'const memberState=p=>p.status.toLowerCase();',
     'const watchedTargetIds=()=>new Set([101]),enemyThreatRows=()=>[];',
+    'const enemyRoleBands=()=>({heavy:new Set([101])});',
     'const activeWarNow=()=>true,rosterFresh=()=>true;'
   ].join('\n');
   const x=fixture(setup,'  function availabilityTransitions(','  function strongestVerifiedHit(',
