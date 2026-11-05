@@ -41,7 +41,7 @@ function targetFixture(){
     'const attackHistoryFor=()=>({wins:0,losses:0,unknown:0,total:0,last:0});',
     'const hitterReadiness=()=>({energyEnough:null});',
     'const hitterRisk=()=>({mode:"balanced",maxRatio:.70,minWins:0});',
-    "const matchup=(friend,enemy)=>enemy.ratio===null?{known:false,ratio:null,ff:null}:{known:true,ratio:enemy.ratio,ff:2.2,confidence:'model'};"
+    "const matchup=(friend,enemy)=>enemy.ratio===null?{known:false,ratio:null,ff:null}:{known:true,ratio:enemy.ratio,ff:2.2,exact:[101,103].includes(enemy.id),confidence:'model'};"
   ].join('\n');
   return runInNewContext(setup+extract('  function rosterFresh(','  function assignments(){')+
     '; ({cfg,state,matchEvidence,personalShortlist,hitterPlanKey,hitterPlanStatus,leadershipSummary,suggestedDraft})');
@@ -96,7 +96,7 @@ test('per-hitter shortlist separates confirmed, estimates, unknown, danger and u
   const items=f.personalShortlist(friend,10),byId=id=>items.find(x=>x.enemy.id===id);
   assert.equal(byId(101).category,'Strong candidate');
   assert.equal(byId(101).tier,0);
-  assert.equal(byId(102).category,'Verify estimate');
+  assert.equal(byId(102).category,'Estimate only');
   assert.equal(byId(102).tier,2);
   assert.equal(byId(104).category,'Scout');
   assert.equal(byId(103).category,'Unavailable');
