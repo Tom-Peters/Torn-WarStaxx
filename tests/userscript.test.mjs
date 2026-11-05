@@ -27,7 +27,8 @@ test('conservative war intelligence boundaries',()=>{
 });
 
 test('missing opponent battle stats never become an auto-safe matchup',()=>{
-  assert.match(code,/sb=manual!==null\?manual:\(third&&!ffIsStale\(third\)/);
+  assert.match(code,/if\(own===null\|\|opponent===null\)/);
+  assert.match(code,/const estimate=x=>x&&!ffIsStale\(x\)/);
   assert.match(code,/Number\(third\.bss\)>0/);
   assert.match(code,/if\(sa===null\|\|sb===null\)/);
   assert.match(code,/return score>0\?score:null/);
