@@ -222,7 +222,7 @@
     cfg.shared&&typeof cfg.shared==='object'?cfg.shared:{});
   const freshData=()=>({autoSpies:{},ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},factionBasic:{},publicIntel:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},scoreTimelines:{},warTimelines:{},afterActions:{},ownerReadiness:{},availabilityEvents:{},chain:{},squadSnapshots:{},attackBssSnapshots:{},sampleCount:0});
   const state={data:Object.assign(freshData(),safeRead(DATA,{})),open:false,tab:'overview',showMore:false,
-    filter:'all',sort:'warScore',search:'',commanderFilter:'black',controlFocus:0,loading:false,ffLoading:false,spinner:'',error:'',notice:null,scanning:false,alerts:[],chosen:0,
+    filter:'all',sort:'warScore',search:'',publicRequested:{},commanderFilter:'black',controlFocus:0,loading:false,ffLoading:false,spinner:'',error:'',notice:null,scanning:false,alerts:[],chosen:0,
     lastRefresh:0,historicalRead:0,localKeyError:false,sharedBusy:false,sharedDirty:false,sharedRevision:0,sharedSyncAt:0,sharedEditVersion:0,sharedError:'',warMore:false,quickHitPending:false,stripScrolled:false,stripExpanded:false,warExpected:false,selectedWar:0,selectedTimeline:0,selectedPace:0,selectedDebrief:0,detailFrom:'targets',leaderFilter:'all',hitterFilter:'all',renderedPlayerId:0,skipDraftRestore:false};
   state.data.reports=state.data.reports||{};
   state.data.squadSnapshots=state.data.squadSnapshots||{};
@@ -4606,6 +4606,14 @@
       current=state.data[side].some(x=>x.id===id),currentStatus=current?memberState(p):'unknown';
     const last=records.find(x=>x.covered&&x.member)||null;
     const note=cfg.notes[id]||'';
+    if(!state.loading&&(!state.data.publicIntel[id]||
+      Date.now()-n(state.data.publicIntel[id].at)>6*HOUR)&&
+      Date.now()-n(state.publicRequested[id])>15*MIN){
+      state.publicRequested[id]=Date.now();
+      setTimeout(()=>{if(root.isConnected&&state.open&&!state.loading&&
+        state.tab==='targets'&&positive(state.chosen)===positive(id))
+        loadPublicIntel(id);},100);
+    }
     let html=statusNote()+
       '<div class="ws-toolbar">'+b('Back to enemy players','tab:targets')+b('Opponent dossier','tab:intel')+
       a('Torn profile',link(id))+(side==='enemies'?a('Attack page',attackLink(id)):'')+'</div>'+
@@ -4655,16 +4663,21 @@
     html+=card('Battle strength and fair-fight evidence',
       '<p><b>FFScouter for your registered key:</b> '+(third&&third.ff!==null?third.ff.toFixed(2)+'x estimated':'no estimate')+
       ' | Public BSS estimate: '+(third&&third.bss?fmt(third.bss):'unknown')+
-      ' | Manual battle stats: '+(s?'saved':'not known')+'</p>'+ 
+      ' | Exact battle stats: '+(bsScore(s)===null?'unknown':esc(s.source||'Legacy spy'))+'</p>'+ 
       '<p>FFScouter data source '+esc(third?.source||'unknown')+' | Public estimate updated '+esc(third?.updatedAt?age(third.updatedAt):'unknown')+
-      ' | Retrieved '+esc(third?.at?age(third.at):'never')+' | Estimated total stats '+esc(third?.bsHuman||'unknown')+'.</p>'+
-      '<p>Enter all four stats only when verified from a spy. FFScouter estimates are relative to your registered API-key owner, while the matchup page calculates individual hitter models. Estimates do not guarantee a win.</p>'+
-      ['strength','speed','defense','dexterity'].map(k=>'<label>'+esc(k)+
+      ' | Retrieved '+esc(third?.at?age(third.at):'never')+
+      ' | Approximate total stats '+esc(third?.bsHuman||'unknown')+'.</p>'+
+      '<p><b>Exact-source BSS:</b> '+(bsScore(s)===null?'Unknown':fmt(bsScore(s)))+
+      ' | Source '+esc(s?.source||'not available')+
+      ' | Observation '+esc(s?.observedAt?age(s.observedAt):'unknown')+
+      '. Exact enemy stats require an authorised existing Torn spy report.</p>'+
+      '<p>Auto-loaded: own exact battle stats, readable Torn personal/faction spy reports and consented FFScouter public estimates. Missing stats remain unknown. Fair Fight is not a win probability.</p>'+
+      '<details><summary>Legacy manual spy correction (optional)</summary>'+['strength','speed','defense','dexterity'].map(k=>'<label>'+esc(k)+
         '<input type="number" min="0" step="1" data-spy="'+esc(k)+'" value="'+esc(s&&s[k]!==undefined?s[k]:'')+'"></label>').join('')+
-      '<div class="ws-toolbar">'+b('Save battle stats','spy:'+id)+b('Clear spy','clear-spy:'+id)+b('Matchups','tab:matchups')+b(cfg.watchlist[id]?'Unwatch player':'Watch player','watch:'+id)+'</div>');
+      '<div class="ws-toolbar">'+b('Save legacy spy','spy:'+id)+b('Clear legacy spy','clear-spy:'+id)+'</div></details>'+      '<div class="ws-toolbar">'+b('Refresh Torn API intel','refresh')+b('Matchups','tab:matchups')+b(cfg.watchlist[id]?'Unwatch player':'Watch player','watch:'+id)+'</div>');
     html+=card('Public Torn profile and personal stats',
-      '<p>Additional publicly available profile and lifetime counters are fetched only when requested. A public stat is not an exact hidden battle stat.</p>'+
-      b(state.loading?'Loading...':'Load public stats','public:'+id)+publicStatsHtml(id));
+      '<p>Public Torn profile and lifetime counters load automatically on opening this dossier, cached for six hours. They are not hidden battle stats.</p>'+
+      b(state.loading?'Checking official profile...':'Refresh public stats','public:'+id)+publicStatsHtml(id));
     html+=card('Local player notes',
       '<label>Useful observations / tactical notes<textarea id="ws-note" maxlength="500">'+esc(note)+'</textarea></label>'+
       '<div class="ws-toolbar">'+b('Save note','note:'+id)+a('Open profile',link(id))+
