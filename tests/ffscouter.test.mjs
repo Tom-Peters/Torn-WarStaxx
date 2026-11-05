@@ -93,7 +93,7 @@ test('FF is next to player names and remains distinct from team-specific matchup
   assert.match(source,/infoButton\(p\.name,p\.id\)\+' '\+ffBadge\(p\.id\)/);
   assert.match(source,/infoButton\(x\.enemy\.name,x\.enemy\.id\)\+' '\+ffBadge\(x\.enemy\.id\)/);
   assert.match(source,/individual hitter/);
-  assert.match(source,/const sb=manual!==null/);
+  assert.match(source,/const own=ownExact!==null/);
   assert.match(source,/action==='refresh-ff'/);
   assert.match(source,/action==='check-ff-key'/);
   assert.match(source,/function threatRating\(/);
