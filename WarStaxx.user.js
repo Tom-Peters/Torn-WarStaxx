@@ -5070,6 +5070,59 @@
         '<tr><td>'+esc(k)+'</td><td>'+esc(age(d.updated[k]))+'</td><td>'+esc(d.errors[k]||'\u2014')+'</td></tr>').join('')+
       '</tbody></table></div><p class="ws-small">This diagnostic screen deliberately excludes keys, imported spy values, saved notes and individual activity samples.</p>');
   }
+  // Local-only search across current rosters, stored reports and tool sections.
+  function finderMatches(term){
+    const q=String(term||'').trim().toLowerCase();
+    if(q.length<2)return [];
+    const out=[],seen=new Set(),max=14;
+    const addPlayer=(p,side,live)=>{
+      const id=positive(p?.id),name=String(p?.name||('Player '+id));
+      if(!id||seen.has(id)||!(name.toLowerCase().includes(q)||String(id).includes(q)))return;
+      seen.add(id);
+      out.push({kind:'player',id,label:name+' ['+id+']',
+        detail:live?(side==='ours'?'Our faction':'Opponent')+
+          (rosterFresh(side)?' | '+String(p.status||'Unknown'):' | cached status (stale)'):
+          'Stored official war report (not current roster)'});
+    };
+    for(const side of ['ours','enemies'])for(const p of state.data[side]||[]){
+      if(out.length>=max)break;
+      addPlayer(p,side,true);
+    }
+    if(out.length<max)for(const record of Object.values(state.data.reports||{})){
+      for(const faction of record?.factions||[]){
+        for(const p of faction.members||[]){
+          if(out.length>=max)break;
+          addPlayer(p,'',false);
+        }
+        if(out.length>=max)break;
+      }
+      if(out.length>=max)break;
+    }
+    const tabs=sections.filter(id=>String(labels[id]||id).toLowerCase().includes(q)||id.includes(q))
+      .map(id=>({kind:'tab',id,label:labels[id]||id,detail:'WarStaxx screen'}));
+    return [...out,...tabs].slice(0,max);
+  }
+  function drawFinder(){
+    const field=$('#ws-find-input',root),results=$('#ws-finder-results',root),panel=$('#ws-finder',root);
+    if(!field||!results||!panel||panel.hidden)return;
+    const query=String(field.value||'').trim();
+    if(query.length<2){
+      results.innerHTML='<small>Type at least two characters to find stored players or WarStaxx screens.</small>';
+      return;
+    }
+    const found=finderMatches(query);
+    results.innerHTML=found.length?found.map(x=>
+      '<button type="button" class="ws-finder-result" data-action="finder-'+x.kind+':'+esc(x.id)+'">'+
+      '<span><strong>'+esc(x.label)+'</strong><small>'+esc(x.detail)+'</small></span>'+
+      '<span aria-hidden="true">View</span></button>').join(''):
+      '<small>No stored matches. Refresh rosters or collect more official history.</small>';
+  }
+  function closeFinder(){
+    const panel=$('#ws-finder',root),field=$('#ws-find-input',root),results=$('#ws-finder-results',root);
+    if(panel)panel.hidden=true;
+    if(field)field.value='';
+    if(results)results.textContent='';
+  }
   let previousBodyOverflow=null,previousModalFocus=null;
   function render(){
     if(!root.isConnected)return;
@@ -5138,6 +5191,7 @@
           same.setSelectionRange(focusData.selection,focusData.selection);
       }catch(_){}
     }
+    drawFinder();
     $('.ws-sync',root).textContent=state.loading?'Checking Torn\u2026':Math.max(n(state.data.updated.enemies),n(state.data.updated.ours))?'Last observation '+age(Math.max(n(state.data.updated.enemies),n(state.data.updated.ours))):'Not connected yet';
     $('.ws-head [data-action="refresh"]',root).disabled=state.loading;
   }
@@ -5372,7 +5426,25 @@
     if(action.startsWith('war:')){navigate('intel');state.selectedWar=positive(action.slice(4));render();return;}
     if(action.startsWith('load-report:')){loadWarReport(positive(action.slice(12)));return;}
     if(action.startsWith('public:')){loadPublicIntel(positive(action.slice(7)));return;}
-    if(action==='find'){close();event('find',{});return;}
+    if(action==='find'){
+      const panel=$('#ws-finder',root);
+      if(!panel)return;
+      panel.hidden=!panel.hidden;
+      if(panel.hidden)closeFinder();
+      else{drawFinder();$('#ws-find-input',root)?.focus({preventScroll:true});}
+      return;
+    }
+    if(action==='finder-close'){closeFinder();return;}
+    if(action.startsWith('finder-player:')){
+      const id=positive(action.slice(14));
+      if(id){closeFinder();handle('player:'+id);}
+      return;
+    }
+    if(action.startsWith('finder-tab:')){
+      const tab=action.slice(11);
+      if(sections.includes(tab)){closeFinder();navigate(tab);}
+      return;
+    }
     if(action==='more'){state.showMore=!state.showMore;render();return;}
     if(action.startsWith('tab:')){navigate(action.slice(4));event('visit',{id:ID,section:state.tab});return;}
     if(action.startsWith('alert:')){const x=currentAlerts().find(a=>a.id===action.slice(6));if(x?.targetId){focusOpportunity(x.targetId);return;}navigate(x?.tab||'alerts');return;}
@@ -5495,7 +5567,7 @@
   }
   document.addEventListener('keydown',e=>{
     if(!state.open)return;
-    if(e.key==='Escape'){e.preventDefault();close();return;}
+    if(e.key==='Escape'){e.preventDefault();if(!$('#ws-finder',root)?.hidden){closeFinder();return;}close();return;}
     if(e.key!=='Tab')return;
     const focusable=Array.from(root.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled])'))
       .filter(x=>!x.hidden&&typeof x.getClientRects==='function'&&x.getClientRects().length);
@@ -5570,12 +5642,19 @@
     if(e.target.id==='ws-sort'){state.sort=e.target.value;render();}
   });
   root.addEventListener('input',e=>{
+    if(e.target.id==='ws-find-input'){drawFinder();return;}
     if(e.target.id==='ws-search'){
       state.search=e.target.value;
       const pos=e.target.selectionStart,scroll=$('.ws-content',root).scrollTop;
       render();const input=$('#ws-search',root);
       if(input){input.focus();try{input.setSelectionRange(pos,pos);}catch(_){}}
       $('.ws-content',root).scrollTop=scroll;
+    }
+  });
+  root.addEventListener('keydown',e=>{
+    if(e.target?.id==='ws-find-input'&&e.key==='Enter'){
+      const first=$('#ws-finder-results [data-action]',root);
+      if(first){e.preventDefault();first.click();}
     }
   });
   document.addEventListener('staxx:open',e=>{if(e.detail?.id===ID)open(e.detail);});
