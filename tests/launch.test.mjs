@@ -6,7 +6,7 @@ const code=readFileSync(new URL('../WarStaxx.user.js',import.meta.url),'utf8');
 const marker="(function () {\n  'use strict';\n  if (typeof document === 'undefined'";
 const appStart=code.lastIndexOf(marker);
 class FakeElement {
-  constructor(tag){this.tagName=tag;this.style={};this.listeners={};this.attributes={};this.nodes={};this.isConnected=false;this.innerHTML='';this.textContent='';this.scrollTop=0;this.firstChild=null;this.dataset={};}
+  constructor(tag){this.tagName=tag;this.style={};this.listeners={};this.attributes={};this.nodes={};this.isConnected=false;this.innerHTML='';this.textContent='';this.scrollTop=0;this.classList={add:()=>{},remove:()=>{}};this.firstChild=null;this.dataset={};}
   appendChild(node){node.isConnected=true;this.child=node;return node;}
   append(node){return this.appendChild(node);}
   insertBefore(node){node.isConnected=true;this.child=node;return node;}
@@ -49,11 +49,11 @@ function start(path='/factions.php'){
   runInNewContext(code.slice(appStart),sandbox,{timeout:3500});
   return {doc,body,host,events,timers};
 }
-test('WarStaxx boots on a faction page without API key, registers with StaxxHub and exposes inline launcher',()=>{
+test('WarStaxx boots on a faction page without API key, registers with StaxxHub and exposes the always-on command strip',()=>{
   const {doc,body,host,events,timers}=start();
   assert.ok(body.child && body.child.id==='warstaxx-root','panel root mounted');
-  assert.ok(host.child && host.child.id==='warstaxx-faction-open','non-floating faction shortcut mounted');
-  assert.ok(host.child.child && host.child.child.textContent.includes('Open WarStaxx'),'faction button text');
+  assert.ok(host.child && host.child.id==='warstaxx-live-strip','always-on Torn command strip mounted');
+  assert.match(host.child.innerHTML,/WARSTAXX \| STANDBY/,'safe standby heading shown without an API key');
   assert.ok(events.some(e=>e.type==='staxx:register'&&e.detail.id==='war'),'registered on startup');
   assert.ok(events.some(e=>e.type==='staxx:notice'&&e.detail.id==='war'),'published alerts');
   assert.ok(timers.some(t=>t.delay===2500),'delayed registration retry scheduled');
@@ -63,7 +63,7 @@ test('WarStaxx boots on a faction page without API key, registers with StaxxHub 
 });
 test('No extra floating button on normal Torn page; StaxxHub registration still works',()=>{
  const {body,host,events}=start('/index.php');
- assert.equal(host.child ?? null,null);
+ assert.equal(host.child?.id,'warstaxx-live-strip','strip available on ordinary Torn pages');
  assert.ok(body.child && body.child.id==='warstaxx-root');
  assert.ok(events.some(e=>e.type==='staxx:register'&&e.detail.id==='war'));
 });
