@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.5.0
+// @version      1.5.1
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.5.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.5.1', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -498,7 +498,7 @@
     }
   }
   function memberState(p){
-    const s=p.status.toLowerCase();
+    const s=String(p?.status||'').toLowerCase();
     if(s.includes('hospital'))return 'hospital';
     if(s.includes('trav')||s.includes('abroad'))return 'away';
     if(s.includes('jail')||s.includes('federal'))return 'jail';
@@ -506,7 +506,7 @@
     if(s.includes('okay'))return 'okay';
     return 'unknown';
   }
-  function isOnline(p){return p.lastAction.toLowerCase()==='online';}
+  function isOnline(p){return String(p?.lastAction||'').toLowerCase()==='online';}
   function flightEvidence(p,at=Date.now()){
     if(!p||memberState(p)!=='away')return {kind:'not-travelling',eta:null,source:'roster'};
     const desc=String(p.statusText||'')+' '+String(p.statusDetails||'');
@@ -1620,7 +1620,7 @@
     const a=currentAlerts();state.alerts=a;
     announce();
     const observed=Math.max(n(state.data.updated.wars),n(state.data.updated.enemies),n(state.data.updated.ours));
-    const hittable=state.data.enemies.filter(e=>evaluate(e).ready).length;
+    const hittable=rosterFresh('enemies')?state.data.enemies.filter(e=>evaluate(e).ready).length:0;
     const enemyActivity=sideActivity('enemies'),enemyHistory=factionWarMetrics('enemies');
     const observedPace=warPace();
     if(observed)event('summary',{id:ID,headline:state.data.war?'Ranked war detected':'War scouting / standby',
@@ -1884,7 +1884,7 @@
   }));
   root.innerHTML='<div class="ws-veil" data-close></div><section class="ws-panel" role="dialog" aria-label="WarStaxx command centre" aria-modal="true">'+
     '<header class="ws-head"><div><strong>War<span>Staxx</span></strong><small>RANKED WAR INTELLIGENCE \u00b7 v'+VER+'</small></div>'+
-    '<div class="ws-head-buttons"><button type="button" data-action="refresh">\u21bb Refresh</button><button type="button" data-action="find">\u2315</button><button type="button" data-close aria-label="Close">\u00d7</button></div></header>'+
+    '<div class="ws-head-buttons"><button type="button" data-action="refresh" aria-label="Refresh war intelligence" title="Refresh official war intelligence">\u21bb <span class="ws-refresh-label">Refresh</span></button><button type="button" data-action="find" aria-label="Open TornStaxx search" title="Search TornStaxx">\u2315</button><button type="button" data-close aria-label="Close WarStaxx">\u00d7</button></div></header>'+
     '<nav class="ws-tabs" aria-label="WarStaxx sections"></nav><main class="ws-content"></main>'+
     '<footer class="ws-footer"><span class="ws-sync"></span><span>Observations, not automated attacks</span></footer></section>';
   root.appendChild(domBridge);
@@ -1956,6 +1956,8 @@
     '@media(max-width:600px){#warstaxx-root .ws-commander-member{display:block}#warstaxx-root .ws-commander-member .ws-toolbar{margin:9px 0 0}#warstaxx-root .ws-commander-member .ws-toolbar .ws-btn{flex:1}#warstaxx-root .ws-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#warstaxx-root .ws-stat-action{min-width:0}}',
     '@media(max-width:640px){#warstaxx-root .ws-panel{height:100dvh;bottom:auto}#warstaxx-root .ws-hour-grid{grid-template-columns:repeat(8,minmax(0,1fr))}#warstaxx-root .ws-stat-action{min-height:112px}#warstaxx-root .ws-lead{padding:10px}#warstaxx-root .ws-score{font-size:19px}}',
     '@media(max-width:640px){#warstaxx-root .ws-panel{top:0;bottom:0;width:100%;border-radius:0}#warstaxx-root .ws-head{padding:8px}#warstaxx-root .ws-head strong{font-size:18px}#warstaxx-root .ws-head small{font-size:8px}#warstaxx-root .ws-content{padding:8px}#warstaxx-root .ws-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}#warstaxx-root .ws-card{padding:9px}#warstaxx-root .ws-number{font-size:21px}}'
+    , '@media(pointer:coarse){#warstaxx-root button,#warstaxx-root a.ws-btn{min-height:44px}#warstaxx-root .ws-ff-button{min-height:40px}}'
+    , '@media(max-width:420px){#warstaxx-root .ws-head-buttons{flex-shrink:0}#warstaxx-root .ws-head-buttons button{padding:6px 9px;min-width:42px}#warstaxx-root .ws-refresh-label{display:none}#warstaxx-root .ws-head strong{font-size:17px}#warstaxx-root .ws-head small{letter-spacing:0;font-size:8px}#warstaxx-root .ws-row{align-items:flex-start}}'
   ].join('');
   function card(title,body){return '<section class="ws-card"><h2>'+esc(title)+'</h2>'+body+'</section>';}
   function stat(name,value,detail){return card(name,'<div class="ws-number">'+esc(value)+'</div><small>'+esc(detail||'')+'</small>');}
@@ -2499,7 +2501,7 @@
     const node=rows.filter(el=>!el.closest('#warstaxx-live-strip,#warstaxx-root,#staxx-hub-root')&&
       rule.test((el.textContent||'').slice(0,260))).sort((a,b)=>(a.textContent||'').length-(b.textContent||'').length)[0];
     if(!node){if(info)info.textContent='Not found in loaded items. Open Medical or check stock, then retry.';return;}
-    node.scrollIntoView({block:'center',behavior:'smooth'});
+    node.scrollIntoView({block:'center',behavior:window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches?'auto':'smooth'});
     const old=node.style.outline;
     node.style.outline='3px solid #58dfff';
     setTimeout(()=>{if(node.isConnected)node.style.outline=old;},5000);
@@ -2819,7 +2821,7 @@
       compact=Boolean(cfg.warStripCompact||(state.stripScrolled&&!state.stripExpanded)),
       intent=location.pathname.toLowerCase()==='/item.php'?itemIntent():'',
       sig=[state.data.war.id,score?.our,score?.enemy,self.kind,self.energy,target?.player.id,
-        intent,compact,mission.assignedId,mission.issue,opportunities.map(x=>x.id+':'+x.at).join(','),state.quickHitPending,location.pathname,Math.floor(Date.now()/MIN)].join(':');
+        intent,compact,mission.assignedId,mission.issue,opportunities.map(x=>x.id+':'+x.at).join(','),state.quickHitPending,location.pathname,Math.floor(Date.now()/10000),chain.fresh?chain.count:0].join(':');
     if(!force&&bar.dataset.signature===sig)return;
     bar.dataset.signature=sig;
     bar.innerHTML='<div class="wsw-top"><span class="wsw-kicker">RANKED WAR LIVE</span>'+
@@ -4818,6 +4820,7 @@
         '<tr><td>'+esc(k)+'</td><td>'+esc(age(d.updated[k]))+'</td><td>'+esc(d.errors[k]||'\u2014')+'</td></tr>').join('')+
       '</tbody></table></div><p class="ws-small">This diagnostic screen deliberately excludes keys, imported spy values, saved notes and individual activity samples.</p>');
   }
+  let previousBodyOverflow=null,previousModalFocus=null;
   function render(){
     if(!root.isConnected)return;
     root.style.display=state.open?'block':'none';
@@ -4836,6 +4839,15 @@
     const pages={overview,enemy:enemyScreen,reports:reportsScreen,leader:leaderScreen,skulls:blackSkullsRoom,commander,operations,ledger,threats,control,turtle,command,pace,afteraction,intel,targets,matchups,timeline,strategy,activity,history,assignments:orders,alerts:alertView,settings,diagnostics};
     const content=$('.ws-content',root);
     const scroll=content.scrollTop;
+    const active=document.activeElement;
+    // Preserve keyboard focus when polling redraws the current view.
+    const focusData=active&&content.contains(active)?{
+      id:active.id||'',action:active.getAttribute('data-action')||'',
+      field:['data-spy','data-ready-energy','data-ready-medical','data-leader-target',
+        'data-leader-duty','data-skull-risk','data-control-target','data-turtle-duty']
+        .map(name=>[name,active.getAttribute(name)]).find(([,value])=>value!==null),
+      selection:typeof active.selectionStart==='number'?active.selectionStart:null
+    }:null;
     const form=state.tab==='settings'?Array.from(content.querySelectorAll('input,select,textarea')).map(x=>({id:x.id,checked:x.checked,value:x.value,type:x.type})):null;
     const priorLeaderNote=state.tab==='command'&&$('#ws-leader-note',content)?$('#ws-leader-note',content).value:null;
     try{
@@ -4849,6 +4861,17 @@
       if(!field)continue;if(prior.type==='checkbox')field.checked=prior.checked;else field.value=prior.value;}
     if(priorLeaderNote!==null&&$('#ws-leader-note',content))$('#ws-leader-note',content).value=priorLeaderNote;
     content.scrollTop=scroll;
+    if(focusData){
+      const controls=Array.from(content.querySelectorAll('button,input,select,textarea,a[href]'));
+      const same=controls.find(x=>(focusData.id&&x.id===focusData.id)||
+        (focusData.action&&x.getAttribute('data-action')===focusData.action)||
+        (focusData.field&&x.getAttribute(focusData.field[0])===focusData.field[1]));
+      if(same)try{
+        same.focus({preventScroll:true});
+        if(focusData.selection!==null&&typeof same.setSelectionRange==='function')
+          same.setSelectionRange(focusData.selection,focusData.selection);
+      }catch(_){}
+    }
     $('.ws-sync',root).textContent=state.loading?'Checking Torn\u2026':Math.max(n(state.data.updated.enemies),n(state.data.updated.ours))?'Last observation '+age(Math.max(n(state.data.updated.enemies),n(state.data.updated.ours))):'Not connected yet';
     $('.ws-head [data-action="refresh"]',root).disabled=state.loading;
   }
@@ -4862,6 +4885,14 @@
   function open(detail={}){
     try{
       if(!root.isConnected)document.body.appendChild(root);
+      const wasClosed=!state.open;
+      if(wasClosed){
+        previousModalFocus=document.activeElement;
+        if(document.body){
+          previousBodyOverflow=document.body.style.overflow;
+          document.body.style.overflow='hidden';
+        }
+      }
       state.open=true;
       root.style.display='block';
       root.style.visibility='visible';
@@ -4873,6 +4904,8 @@
         }else navigate(alert?.tab||'alerts',detail.alertId);
       }
       else navigate(sections.includes(detail.section)?detail.section:state.tab);
+      // Take focus into the dialog on first open; do not jump focus on internal navigation.
+      if(wasClosed)try{$('.ws-tabs button',root)?.focus({preventScroll:true});}catch(_){}
       // Announce opening only after mounting the real visible UI.
       event('panel',{id:ID,open:true});
       if(effectiveKey() && !state.loading && Date.now()-state.lastRefresh>90*1000)refresh(false);
@@ -4885,7 +4918,14 @@
       event('panel',{id:ID,open:true});
     }
   }
-  function close(){state.open=false;render();event('panel',{id:ID,open:false});}
+  function close(){
+    state.open=false;render();
+    if(previousBodyOverflow!==null&&document.body)document.body.style.overflow=previousBodyOverflow;
+    previousBodyOverflow=null;
+    if(previousModalFocus?.isConnected)try{previousModalFocus.focus({preventScroll:true});}catch(_){}
+    previousModalFocus=null;
+    event('panel',{id:ID,open:false});
+  }
   function handle(action){
     if(action==='refresh'){refresh(true);return;}
     if(action==='shared-pull'){sharedPull(false);return;}
@@ -5126,7 +5166,7 @@
     if(action==='reset-orders'){cfg.assignments={};if(positive(cfg.enemyId))cfg.ordersByEnemy[String(positive(cfg.enemyId))]={};saveCfg();markSharedDirty();render();return;}
     if(action==='save-settings'){
       const priorFFKey=ffApiKey();
-      const previousOwnerKey=effectiveKey();
+      const previousOwnerKey=effectiveKey(),previousFactionId=positive(cfg.ourId);
       const supplied=$('#ws-key',root)?.value?.trim();if(supplied&&supplied!==cfg.key){cfg.key=supplied;delete state.data.meta.ffRegistration;state.data.updated.ffscouter=0;state.data.ffstats={};}
       const ffSupplied=$('#ws-ffkey',root)?.value?.trim();if(ffSupplied&&ffSupplied!==cfg.ffKey){cfg.ffKey=ffSupplied;delete state.data.meta.ffRegistration;state.data.updated.ffscouter=0;state.data.ffstats={};}
       cfg.ffConsent=Boolean($('#ws-ff-consent',root)?.checked);
@@ -5140,6 +5180,13 @@
         cfg.ourId=manualId;
         cfg.factionSource=manualId?'Manual override':'Not set';
         cfg.factionVerifiedAt=0;
+      }
+      if(!cfg.factionAuto&&previousFactionId!==positive(cfg.ourId)){
+        // Never show the last faction's roster or score as the new manual identity.
+        state.data.ours=[];state.data.ourWars=[];state.data.enemies=[];state.data.enemyWars=[];
+        state.data.war=null;state.data.chain={};
+        for(const key of ['ours','ourWars','enemies','enemyWars','wars','chain'])
+          state.data.updated[key]=0;
       }
       if(setOpponent(positive($('#ws-enemy',root)?.value)))state.data.war=null;
       cfg.refreshSeconds=Math.max(90,Math.min(300,positive($('#ws-interval',root)?.value)||120));
@@ -5180,6 +5227,19 @@
       save();publish();navigate('overview');refresh(true);return;
     }
   }
+  document.addEventListener('keydown',e=>{
+    if(!state.open)return;
+    if(e.key==='Escape'){e.preventDefault();close();return;}
+    if(e.key!=='Tab')return;
+    const focusable=Array.from(root.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled])'))
+      .filter(x=>!x.hidden&&typeof x.getClientRects==='function'&&x.getClientRects().length);
+    if(!focusable.length)return;
+    const first=focusable[0],last=focusable[focusable.length-1],active=document.activeElement;
+    if(!root.contains(active)||e.shiftKey&&active===first){
+      e.preventDefault();(e.shiftKey?last:first).focus();return;
+    }
+    if(!e.shiftKey&&active===last){e.preventDefault();first.focus();}
+  });
   root.addEventListener('click',e=>{
     if(e.target.closest('[data-close]')){close();return;}
     const tab=e.target.closest('[data-tab]');if(tab){navigate(tab.dataset.tab);event('visit',{id:ID,section:state.tab});return;}
