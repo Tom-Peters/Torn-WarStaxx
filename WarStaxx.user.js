@@ -223,7 +223,7 @@
   const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},factionBasic:{},publicIntel:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},scoreTimelines:{},warTimelines:{},afterActions:{},ownerReadiness:{},availabilityEvents:{},chain:{},squadSnapshots:{},attackBssSnapshots:{},sampleCount:0});
   const state={data:Object.assign(freshData(),safeRead(DATA,{})),open:false,tab:'overview',showMore:false,
     filter:'all',sort:'warScore',search:'',commanderFilter:'black',controlFocus:0,loading:false,ffLoading:false,spinner:'',error:'',scanning:false,alerts:[],chosen:0,
-    lastRefresh:0,historicalRead:0,localKeyError:false,sharedBusy:false,sharedDirty:false,sharedRevision:0,sharedSyncAt:0,sharedEditVersion:0,sharedError:'',warMore:false,quickHitPending:false,stripScrolled:false,stripExpanded:false,warExpected:false,selectedWar:0,selectedTimeline:0,selectedPace:0,selectedDebrief:0,detailFrom:'targets',leaderFilter:'all',hitterFilter:'all'};
+    lastRefresh:0,historicalRead:0,localKeyError:false,sharedBusy:false,sharedDirty:false,sharedRevision:0,sharedSyncAt:0,sharedEditVersion:0,sharedError:'',warMore:false,quickHitPending:false,stripScrolled:false,stripExpanded:false,warExpected:false,selectedWar:0,selectedTimeline:0,selectedPace:0,selectedDebrief:0,detailFrom:'targets',leaderFilter:'all',hitterFilter:'all',renderedPlayerId:0,skipDraftRestore:false};
   state.data.reports=state.data.reports||{};
   state.data.squadSnapshots=state.data.squadSnapshots||{};
   state.data.attackBssSnapshots=state.data.attackBssSnapshots||{};
@@ -251,7 +251,7 @@
     state.data.attacks=(state.data.attacks||[]).slice(-200);
     try{localStorage.setItem(DATA,JSON.stringify(state.data));return true;}catch(e){state.error='Local storage is full; observations cannot be saved.';return false;}
   }};
-  const parseArray=(value)=>Array.isArray(value)?value:Object.entries(value&&typeof value==='object'?value:{}).filter(([key])=>/^\d+$/.test(key)).map(([key,v])=>({id:positive(v.id||key),...v}));
+  const parseArray=(value)=>Array.isArray(value)?value:Object.entries(value&&typeof value==='object'?value:{}).filter(([key])=>/^\d+$/.test(key)).map(([key,v])=>({id:positive(v?.id||key),...(v&&typeof v==='object'?v:{})}));
   const unpack=(j,k)=>j?.[k]??j;
   function roster(j){
     const list=parseArray(unpack(j,'members'));
@@ -1955,9 +1955,9 @@
     '#warstaxx-root .ws-commander-member .ws-toolbar{margin:0}',
     '@media(max-width:600px){#warstaxx-root .ws-commander-member{display:block}#warstaxx-root .ws-commander-member .ws-toolbar{margin:9px 0 0}#warstaxx-root .ws-commander-member .ws-toolbar .ws-btn{flex:1}#warstaxx-root .ws-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#warstaxx-root .ws-stat-action{min-width:0}}',
     '@media(max-width:640px){#warstaxx-root .ws-panel{height:100dvh;bottom:auto}#warstaxx-root .ws-hour-grid{grid-template-columns:repeat(8,minmax(0,1fr))}#warstaxx-root .ws-stat-action{min-height:112px}#warstaxx-root .ws-lead{padding:10px}#warstaxx-root .ws-score{font-size:19px}}',
-    '@media(max-width:640px){#warstaxx-root .ws-panel{top:0;bottom:0;width:100%;border-radius:0}#warstaxx-root .ws-head{padding:8px}#warstaxx-root .ws-head strong{font-size:18px}#warstaxx-root .ws-head small{font-size:8px}#warstaxx-root .ws-content{padding:8px}#warstaxx-root .ws-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}#warstaxx-root .ws-card{padding:9px}#warstaxx-root .ws-number{font-size:21px}}'
-    , '@media(pointer:coarse){#warstaxx-root button,#warstaxx-root a.ws-btn{min-height:44px}#warstaxx-root .ws-ff-button{min-height:40px}}'
-    , '@media(max-width:420px){#warstaxx-root .ws-head-buttons{flex-shrink:0}#warstaxx-root .ws-head-buttons button{padding:6px 9px;min-width:42px}#warstaxx-root .ws-refresh-label{display:none}#warstaxx-root .ws-head strong{font-size:17px}#warstaxx-root .ws-head small{letter-spacing:0;font-size:8px}#warstaxx-root .ws-row{align-items:flex-start}}'
+    '@media(max-width:640px){#warstaxx-root .ws-panel{top:0;bottom:0;width:100%;border-radius:0}#warstaxx-root .ws-head{padding:8px}#warstaxx-root .ws-head strong{font-size:18px}#warstaxx-root .ws-head small{font-size:8px}#warstaxx-root .ws-content{padding:8px}#warstaxx-root .ws-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}#warstaxx-root .ws-card{padding:9px}#warstaxx-root .ws-number{font-size:21px}}',
+    '@media(pointer:coarse){#warstaxx-root button,#warstaxx-root a.ws-btn{min-height:44px}#warstaxx-root .ws-ff-button{min-height:40px}}',
+    '@media(max-width:420px){#warstaxx-root .ws-head-buttons{flex-shrink:0}#warstaxx-root .ws-head-buttons button{padding:6px 9px;min-width:42px}#warstaxx-root .ws-refresh-label{display:none}#warstaxx-root .ws-head strong{font-size:17px}#warstaxx-root .ws-head small{letter-spacing:0;font-size:8px}#warstaxx-root .ws-row{align-items:flex-start}}'
   ].join('');
   function card(title,body){return '<section class="ws-card"><h2>'+esc(title)+'</h2>'+body+'</section>';}
   function stat(name,value,detail){return card(name,'<div class="ws-number">'+esc(value)+'</div><small>'+esc(detail||'')+'</small>');}
@@ -4850,6 +4850,14 @@
     }:null;
     const form=state.tab==='settings'?Array.from(content.querySelectorAll('input,select,textarea')).map(x=>({id:x.id,checked:x.checked,value:x.value,type:x.type})):null;
     const priorLeaderNote=state.tab==='command'&&$('#ws-leader-note',content)?$('#ws-leader-note',content).value:null;
+    // Do not lose manually typed spy readings and notes when a refresh redraws
+    // the same profile. Never carry a draft to a DIFFERENT opponent.
+    const samePlayer=state.tab==='targets'&&state.playerOpen&&
+      state.renderedPlayerId===positive(state.chosen);
+    const playerDraft=samePlayer&&!state.skipDraftRestore?
+      Array.from(content.querySelectorAll('[data-spy],#ws-note')).map(x=>({
+        id:x.id||'',stat:x.getAttribute('data-spy'),value:x.value
+      })):null;
     try{
       const detail=!primary.includes(state.tab)?
         '<div class="ws-toolbar">'+b('Back to '+(detailGroup==='enemy'?'Opponent':'Reports'),
@@ -4860,6 +4868,14 @@
     if(form)for(const prior of form){if(!prior.id)continue;const field=content.querySelector('#'+prior.id);
       if(!field)continue;if(prior.type==='checkbox')field.checked=prior.checked;else field.value=prior.value;}
     if(priorLeaderNote!==null&&$('#ws-leader-note',content))$('#ws-leader-note',content).value=priorLeaderNote;
+    if(playerDraft)for(const old of playerDraft){
+      const field=old.stat!==null?
+        Array.from(content.querySelectorAll('[data-spy]')).find(x=>x.getAttribute('data-spy')===old.stat):
+        old.id==="ws-note"?$('#ws-note',content):null;
+      if(field)field.value=old.value;
+    }
+    state.renderedPlayerId=state.tab==='targets'&&state.playerOpen?positive(state.chosen):0;
+    state.skipDraftRestore=false;
     content.scrollTop=scroll;
     if(focusData){
       const controls=Array.from(content.querySelectorAll('button,input,select,textarea,a[href]'));
@@ -5122,7 +5138,7 @@
       }
       cfg.spies[id]=s;saveCfg();navigate('targets');return;
     }
-    if(action.startsWith('clear-spy:')){delete cfg.spies[positive(action.slice(10))];saveCfg();render();return;}
+    if(action.startsWith('clear-spy:')){delete cfg.spies[positive(action.slice(10))];saveCfg();state.skipDraftRestore=true;render();return;}
     if(action.startsWith('note:')){cfg.notes[positive(action.slice(5))]=String($('#ws-note',root)?.value||'').slice(0,500);saveCfg();render();return;}
     if(action.startsWith('assign:')){const [friend,enemy]=action.slice(7).split(':').map(positive);
       if(friend&&enemy){
