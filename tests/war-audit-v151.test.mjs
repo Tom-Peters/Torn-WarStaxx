@@ -57,7 +57,7 @@ test('small-screen use, keyboard navigation and reduced-motion respect stay wire
   assert.match(source,/@media\(max-width:420px\)/);
   assert.match(source,/@media\(pointer:coarse\)/);
   assert.match(source,/ws-refresh-label/);
-  assert.match(source,/aria-label="Open TornStaxx search"/);
+  assert.match(source,/aria-label="Find a player or WarStaxx section"/);
   assert.match(source,/e\.key==='Escape'/);
   assert.match(source,/e\.key!=='Tab'/);
   assert.match(source,/previousModalFocus\.focus/);
@@ -76,10 +76,10 @@ test('manual faction identity change invalidates live rosters, score and chain, 
 });
 test('public script preserves pinned installer, suite ownership and read-only Torn API',()=>{
   assert.ok(source.startsWith('// ==UserScript==\n'));
-  assert.match(source,/^\/\/ @version\s+1\.5\.5$/m);
+  assert.match(source,/^\/\/ @version\s+1\.5\.6$/m);
   assert.match(source,/^\/\/ @author\s+IamEEKY$/m);
   assert.match(source,/^\/\/ @downloadURL\s+https:\/\/raw\.githubusercontent\.com\/Tom-Peters\/Torn-WarStaxx\/main\/WarStaxx\.user\.js/m);
-  assert.match(source,/const ID='war', VER='1\.5\.5'/);
+  assert.match(source,/const ID='war', VER='1\.5\.6'/);
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
 });

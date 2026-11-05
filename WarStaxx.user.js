@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.5.5
+// @version      1.5.6
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='1.5.5';
+  const id='war', version='1.5.6';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.5.5', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.5.6', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -2020,7 +2020,7 @@
       captureAttackBssObservations();
       await refreshOwnReadiness();
       await refreshBattleIntel();
-      await refreshPublicIntel();
+      await refreshPublicIntel(activeWarNow()?3:2);
       await refreshFF();
       if(sharedEndpoint()&&sharedScope())sharedPull(false);
       state.lastRefresh=Date.now();
@@ -2043,8 +2043,10 @@
   }));
   root.innerHTML='<div class="ws-veil" data-close></div><section class="ws-panel" role="dialog" aria-label="WarStaxx command centre" aria-modal="true">'+
     '<header class="ws-head"><div><strong>War<span>Staxx</span></strong><small>RANKED WAR INTELLIGENCE \u00b7 v'+VER+'</small></div>'+
-    '<div class="ws-head-buttons"><button type="button" data-action="refresh" aria-label="Refresh war intelligence" title="Refresh official war intelligence">\u21bb <span class="ws-refresh-label">Refresh</span></button><button type="button" data-action="find" aria-label="Open TornStaxx search" title="Search TornStaxx">\u2315</button><button type="button" data-close aria-label="Close WarStaxx">\u00d7</button></div></header>'+
-    '<nav class="ws-tabs" aria-label="WarStaxx sections"></nav><main class="ws-content"></main>'+
+    '<div class="ws-head-buttons"><button type="button" data-action="refresh" aria-label="Refresh war intelligence" title="Refresh official war intelligence">\u21bb <span class="ws-refresh-label">Refresh</span></button><button type="button" data-action="find" aria-label="Find a player or WarStaxx section" title="Find a player or section">\u2315</button><button type="button" data-close aria-label="Close WarStaxx">\u00d7</button></div></header>'+
+    '<nav class="ws-tabs" aria-label="WarStaxx sections"></nav>'+ 
+    '<div id="ws-finder" class="ws-finder" hidden><div class="ws-finder-row"><input id="ws-find-input" type="search" autocomplete="off" placeholder="Search players, IDs or tools" aria-label="Find players or tools"><button type="button" data-action="finder-close" aria-label="Close search">Close</button></div><div id="ws-finder-results" class="ws-finder-results" aria-live="polite"></div></div>'+ 
+    '<main class="ws-content"></main>'+
     '<footer class="ws-footer"><span class="ws-sync"></span><span>Observations, not automated attacks</span></footer></section>';
   root.appendChild(domBridge);
   const css=el('style');css.textContent=[
@@ -2060,6 +2062,13 @@
     '#warstaxx-root .ws-tabs{display:flex;gap:4px;overflow-x:auto;white-space:nowrap;flex-shrink:0;background:#0a233c;padding:7px 9px;border-bottom:1px solid #244d6e}',
     '#warstaxx-root .ws-tabs button{background:#13334f;border:1px solid #244e6f;border-radius:7px;padding:7px 10px;font-size:12px}',
     '#warstaxx-root .ws-tabs button.on{background:#066caa;border-color:#54d7fa;color:white}',
+    '#warstaxx-root .ws-finder[hidden]{display:none}#warstaxx-root .ws-finder{background:#0b2944;border-bottom:1px solid #326184;padding:8px 12px;flex-shrink:0}',
+    '#warstaxx-root .ws-finder-row{display:flex;gap:8px;align-items:center}#warstaxx-root .ws-finder-row input{flex:1;max-width:none;min-width:0}',
+    '#warstaxx-root .ws-finder-row button{border:1px solid #497a9b;background:#153b5c;border-radius:8px;padding:8px 12px}',
+    '#warstaxx-root .ws-finder-results{max-height:36vh;overflow-y:auto;overscroll-behavior:contain;margin-top:7px}',
+    '#warstaxx-root .ws-finder-result{display:flex;align-items:center;justify-content:space-between;width:100%;gap:10px;padding:10px;border:1px solid #294e69;background:#123551;border-radius:7px;margin:4px 0;text-align:left}',
+    '#warstaxx-root .ws-finder-result small{font-size:11px;white-space:normal}',
+    '#warstaxx-root .ws-finder-result strong{font-size:12px;color:#e1f5ff}',
     '#warstaxx-root .ws-content{flex:1;overflow:auto;overscroll-behavior:contain;padding:12px;min-height:0}',
     '#warstaxx-root .ws-footer{display:flex;justify-content:space-between;gap:6px;padding:7px 12px;border-top:1px solid #254765;background:#071a2d;color:#92b4cf;font-size:10px}',
     '#warstaxx-root .ws-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:9px}',
@@ -2085,6 +2094,9 @@
     '#warstaxx-root .ws-warn{border-left-color:#ff8094}#warstaxx-root .ws-success{border-left-color:#51cabc;background:#0b353b;color:#d7fff8}#warstaxx-root .ws-small{font-size:11px;color:#a8c4d7}',
     '#warstaxx-root .ws-pct{height:8px;background:#132a44;border-radius:8px;overflow:hidden;margin:9px 0}#warstaxx-root .ws-pct i{display:block;height:100%;background:#2eafd6}',
     '#warstaxx-root .ws-stat-action{display:flex;flex-direction:column;align-items:flex-start;text-align:left;color:#e5f5ff;gap:4px;min-height:106px;width:100%;cursor:pointer}',
+    '#warstaxx-root .ws-health-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;border-bottom:1px solid #30536e;gap:8px;padding:7px 0}',
+    '#warstaxx-root .ws-health-row small{font-size:11px;display:block}',
+    '#warstaxx-root .ws-health-row strong{color:#d9f4ff;font-size:12px}',
     '#warstaxx-root .ws-stat-action:active{background:#15436b}#warstaxx-root .ws-stat-title{color:#acd7ec;font-weight:700;font-size:12px}#warstaxx-root .ws-stat-link{color:#63d9f6;font-size:11px;margin-top:auto}',
     '#warstaxx-root .ws-lead{padding:14px;background:linear-gradient(110deg,#103e63,#0b2948);border:1px solid #397a9e;border-radius:12px;margin-bottom:10px}',
     '#warstaxx-root .ws-lead h2{font-size:18px;margin:0 0 8px}#warstaxx-root .ws-score{font-size:22px;font-weight:800}',
@@ -2156,11 +2168,83 @@
     }
     return out.slice(0,100);
   }
+  function publicIntelCoverage(at=Date.now()){
+    const players=Array.isArray(state.data.enemies)?state.data.enemies:[],
+      result={total:players.length,profile:0,stats:0,complete:0,restricted:0,fresh:0};
+    for(const player of players){
+      const item=state.data.publicIntel[positive(player.id)];
+      if(!item)continue;
+      const profile=item.profile||{},metrics=publicMetricItems(item.stats||{});
+      const hasProfile=Boolean(profile.rank||profile.age!==null&&profile.age!==undefined||
+        profile.awards!==null&&profile.awards!==undefined);
+      const hasStats=metrics.length>0;
+      result.profile+=Number(hasProfile);
+      result.stats+=Number(hasStats);
+      result.complete+=Number(hasProfile&&hasStats);
+      result.restricted+=Number(Boolean(item.restricted));
+      result.fresh+=Number(item.at>0&&at>=item.at&&at-item.at<6*HOUR);
+    }
+    return result;
+  }
+  function publicCombatHighlights(stats){
+    const names={attackswon:'Attacks won',attackslost:'Attacks lost',
+      defendswon:'Defends won',defendslost:'Defends lost',
+      rankedwarwins:'Ranked-war wins',rankedwarhits:'Ranked-war hits',
+      factionrespect:'Faction respect',attackdamage:'Total attack damage'};
+    const found=new Map();
+    for(const x of publicMetricItems(stats||{})){
+      const key=x.name.split(' / ').pop().toLowerCase().replace(/[^a-z0-9]/g,'');
+      if(Object.hasOwn(names,key)&&!found.has(key))found.set(key,x.value);
+    }
+    return Object.entries(names).filter(([key])=>found.has(key)).map(([key,label])=>
+      ({label,value:found.get(key)}));
+  }
+  function apiSources(){
+    const sources=[['War state','wars',10*MIN],['Our roster','ours',5*MIN],
+      ['Opponent roster','enemies',5*MIN],['Our history','ourWars',40*MIN],
+      ['Opponent history','enemyWars',40*MIN],['Own exact battle stats','own-battlestats',30*MIN],
+      ['Personal spy reports','user-stat-reports',40*MIN],
+      ['Faction spy reports','faction-stat-reports',40*MIN]];
+    const at=Date.now();
+    return sources.map(([label,key,ttl])=>{
+      const updated=n(state.data.updated[key]),error=String(state.data.errors[key]||''),
+        until=n(state.data.backoff[key]?.until);
+      return {label,key,updated,error,until,
+        status:until>at?'Retry delayed':error?'Error':updated&&at-updated<=ttl?'Fresh':
+          updated?'Older data':'Not collected'};
+    });
+  }
+  function apiCoverageCard(){
+    const x=publicIntelCoverage(),history=historyCoverage(),sources=apiSources();
+    return card('AUTOMATIC API COVERAGE | KNOW WHAT IS VERIFIED',
+      '<p>Current opponent profiles '+x.profile+' / '+x.total+
+      ' | Public lifetime stats '+x.stats+' / '+x.total+
+      ' | Both '+x.complete+' / '+x.total+
+      ' | History reports '+history.complete+' / '+history.total+'.</p>'+
+      '<p class="ws-small">Torn profile and popular lifetime counters are public and do not reveal hidden battle stats. Up to three opponent dossiers are checked automatically per active-war refresh; older data and failed calls obey a six-hour cache / API backoff.</p>'+
+      '<div class="ws-toolbar">'+b(state.scanning?'Scouting public API...':'Scout up to 6 more players',
+        'scan-public',state.scanning||state.loading?'disabled':'')+
+      b('Official API diagnostics','tab:diagnostics')+
+      b('Find a player','find')+'</div>'+
+      sources.map(x=>'<div class="ws-health-row"><span><strong>'+esc(x.label)+'</strong>'+
+        '<small>Last successful read: '+esc(age(x.updated))+
+        (x.error?' | '+esc(x.error):'')+
+        (x.until>Date.now()?' | retry '+esc(stamp(x.until)):'')+'</small></span>'+
+        pill(x.status,x.status==='Fresh'?'good':x.status==='Error'||x.status==='Retry delayed'?'bad':'')+
+        '</div>').join('')+
+      (x.restricted?'<p class="ws-small">'+x.restricted+
+        ' recent player reads returned no permitted public data. These are unknown, not zero.</p>':''));
+  }
   function publicStatsHtml(id){
     const item=state.data.publicIntel[id];
     if(!item)return empty('Public profile and personal statistics are being collected automatically from Torn.');
     const p=item.profile||{},stats=publicMetricItems(item.stats||{}).slice(0,65);
-    return '<p>Last checked '+esc(age(item.at))+' | Torn public API. These may be lifetime stats, not ranked-war totals.</p>'+
+    const highlights=publicCombatHighlights(item.stats||{});
+    return '<p>Last checked '+esc(age(item.at))+
+      ' | Torn public API. Popular lifetime counters are not battle stats or current-war performance.</p>'+
+      (highlights.length?'<div class="ws-inline-metrics">'+
+        highlights.map(x=>'<span>'+esc(x.label)+': <b>'+fmt(x.value)+'</b></span>').join('')+
+        '</div>':'')+
       '<div class="ws-grid">'+
       stat('Profile rank',p.rank||'\u2014','Torn public profile')+
       stat('Account age',p.age===null||p.age===undefined?'\u2014':fmt(p.age)+' days','Torn public profile')+
@@ -2171,17 +2255,24 @@
   }
   // Public player details are API-backed. Fetch a small rotating batch in the
   // background rather than requiring individual profile clicks or manual fields.
-  async function refreshPublicIntel(){
-    if(!effectiveKey()||!state.data.enemies.length)return;
-    const now=Date.now(),candidates=state.data.enemies.slice()
-      .sort((a,b)=>n(state.data.publicIntel[a.id]?.at)-n(state.data.publicIntel[b.id]?.at))
-      .filter(p=>!state.data.publicIntel[p.id]||
-        now-n(state.data.publicIntel[p.id].at)>6*HOUR)
-      .slice(0,2);
+  // Collect automatically from the official public profile and popular-stats
+  // endpoints. Prioritise assigned and watched targets; no extra API key needed.
+  async function refreshPublicIntel(batch=2){
+    if(!effectiveKey()||!state.data.enemies.length)return 0;
+    const now=Date.now(),assigned=new Set(Object.values(cfg.assignments||{}).map(positive)),
+      importance=p=>(assigned.has(p.id)?100:0)+(cfg.watchlist?.[p.id]?70:0),
+      candidates=state.data.enemies.slice().filter(p=>
+        !state.data.publicIntel[p.id]||now-n(state.data.publicIntel[p.id].at)>=6*HOUR)
+        .sort((a,b)=>importance(b)-importance(a)||
+          n(state.data.publicIntel[a.id]?.at)-n(state.data.publicIntel[b.id]?.at))
+        .slice(0,Math.max(1,Math.min(8,Math.floor(Number(batch)||2))));
+    let scanned=0;
     for(const p of candidates){
       const id=positive(p.id);
       if(!id)continue;
-      const obj={profile:{},stats:{},at:now};
+      const prior=state.data.publicIntel[id]||{},
+        obj={profile:prior.profile||{},stats:prior.stats||{},at:now,
+          profileAt:n(prior.profileAt),statsAt:n(prior.statsAt)};
       let obtained=false;
       try{
         const profile=await call('/user/'+id+'/profile','public-profile-'+id,6*HOUR);
@@ -2189,21 +2280,23 @@
           const pr=profile.profile||profile;
           obj.profile={rank:String(pr.rank||''),age:officialNumber(pr.age),
             awards:officialNumber(pr.awards)};
+          obj.profileAt=Date.now();
           obtained=true;
         }
       }catch(_){}
       try{
         const stats=await call('/user/'+id+'/personalstats?cat=popular',
           'public-stats-'+id,6*HOUR);
-        if(stats){obj.stats=stats.personalstats||stats;obtained=true;}
+        if(stats){obj.stats=stats.personalstats||stats;obj.statsAt=Date.now();obtained=true;}
       }catch(_){}
-      // Cache a completed attempt, including restricted responses, to avoid
-      // retrying inaccessible selections on every 90-second roster refresh.
-      state.data.publicIntel[id]=obtained?obj:{...obj,restricted:true};
+      state.data.publicIntel[id]={...obj,restricted:!obtained&&
+        !Object.keys(obj.profile).length&&!publicMetricItems(obj.stats).length};
+      scanned++;
     }
     const ids=Object.keys(state.data.publicIntel).sort((a,b)=>
       n(state.data.publicIntel[b]?.at)-n(state.data.publicIntel[a]?.at));
     for(const id of ids.slice(100))delete state.data.publicIntel[id];
+    return scanned;
   }
   async function loadPublicIntel(id){
     if(!positive(id)||state.loading)return;
@@ -4172,7 +4265,7 @@
       '<p>Strength, activity, travel, previous wars and who scores their points. '+
       'FFScouter BSS is an estimate, not a confirmed spy or an individual hitter FF.</p>'+
       '<div class="ws-toolbar">'+b('Refresh','refresh')+
-      b('Detailed enemy dossiers','tab:targets')+b('Last wars','tab:history')+'</div></div>'+
+      b('Detailed enemy dossiers','tab:targets')+b('Find player','find')+b('Last wars','tab:history')+'</div></div>'+
       '<div class="ws-grid">'+
       statAction('Enemy available',active?enemy.okay+' / '+enemy.total:'Stale',
         'Observed Okay status','tab:targets')+
@@ -4190,6 +4283,7 @@
         bands.unknown+' need a fresh BSS estimate / spy','tab:targets')+
       statAction('FFScouter FF coverage',ff.total?ff.covered+' / '+ff.total:'Unknown',
         'Registered user-key FF, not per-faction-member','tab:settings')+'</div>'+
+      apiCoverageCard()+
       card('Enemy strength partition | who should tackle whom',
         '<p><b>Black Skulls:</b> '+bands.heavyCount+
         ' toughest opponents among the '+bands.known+
@@ -4240,7 +4334,7 @@
       '<p>Dig into the evidence, plan future wars, manage settings, inspect hit logs and review completed wars.</p>'+
       '<div class="ws-toolbar">'+b('Latest after-action report','tab:afteraction')+
         b('Skull Capo squad command','tab:leader')+
-        b('Torn and FF settings','tab:settings')+'</div></div>'+
+        b('Torn and FF settings','tab:settings')+b('Find player','find')+'</div></div>'+
       '<div class="ws-grid">'+
       statAction('Latest after-action',last?'#'+last.id:'No report',
         last?last.outcome+' / '+(last.detail?'official detail':'summary only'):'Refresh after a war ends','tab:afteraction')+
@@ -4252,7 +4346,7 @@
         'Past official wars','tab:history')+
       statAction('Detailed reports ready',coverage.total?coverage.complete+' / '+coverage.total:'No completed wars',
         coverage.missing+' missing; '+coverage.waiting+' on API backoff','tab:history')+'</div>';
-    h+=leaderboardCard(24);
+    h+=apiCoverageCard()+leaderboardCard(24);
     const groups=[
       ['OPERATIONS & ORDERS',[
         ['Skull Capo command','leader'],['Black Skulls','skulls'],
@@ -5058,6 +5152,59 @@
         '<tr><td>'+esc(k)+'</td><td>'+esc(age(d.updated[k]))+'</td><td>'+esc(d.errors[k]||'\u2014')+'</td></tr>').join('')+
       '</tbody></table></div><p class="ws-small">This diagnostic screen deliberately excludes keys, imported spy values, saved notes and individual activity samples.</p>');
   }
+  // Local-only search across current rosters, stored reports and tool sections.
+  function finderMatches(term){
+    const q=String(term||'').trim().toLowerCase();
+    if(q.length<2)return [];
+    const out=[],seen=new Set(),max=14;
+    const addPlayer=(p,side,live)=>{
+      const id=positive(p?.id),name=String(p?.name||('Player '+id));
+      if(!id||seen.has(id)||!(name.toLowerCase().includes(q)||String(id).includes(q)))return;
+      seen.add(id);
+      out.push({kind:'player',id,label:name+' ['+id+']',
+        detail:live?(side==='ours'?'Our faction':'Opponent')+
+          (rosterFresh(side)?' | '+String(p.status||'Unknown'):' | cached status (stale)'):
+          'Stored official war report (not current roster)'});
+    };
+    for(const side of ['ours','enemies'])for(const p of state.data[side]||[]){
+      if(out.length>=max)break;
+      addPlayer(p,side,true);
+    }
+    if(out.length<max)for(const record of Object.values(state.data.reports||{})){
+      for(const faction of record?.factions||[]){
+        for(const p of faction.members||[]){
+          if(out.length>=max)break;
+          addPlayer(p,'',false);
+        }
+        if(out.length>=max)break;
+      }
+      if(out.length>=max)break;
+    }
+    const tabs=sections.filter(id=>String(labels[id]||id).toLowerCase().includes(q)||id.includes(q))
+      .map(id=>({kind:'tab',id,label:labels[id]||id,detail:'WarStaxx screen'}));
+    return [...out,...tabs].slice(0,max);
+  }
+  function drawFinder(){
+    const field=$('#ws-find-input',root),results=$('#ws-finder-results',root),panel=$('#ws-finder',root);
+    if(!field||!results||!panel||panel.hidden)return;
+    const query=String(field.value||'').trim();
+    if(query.length<2){
+      results.innerHTML='<small>Type at least two characters to find stored players or WarStaxx screens.</small>';
+      return;
+    }
+    const found=finderMatches(query);
+    results.innerHTML=found.length?found.map(x=>
+      '<button type="button" class="ws-finder-result" data-action="finder-'+x.kind+':'+esc(x.id)+'">'+
+      '<span><strong>'+esc(x.label)+'</strong><small>'+esc(x.detail)+'</small></span>'+
+      '<span aria-hidden="true">View</span></button>').join(''):
+      '<small>No stored matches. Refresh rosters or collect more official history.</small>';
+  }
+  function closeFinder(){
+    const panel=$('#ws-finder',root),field=$('#ws-find-input',root),results=$('#ws-finder-results',root);
+    if(panel)panel.hidden=true;
+    if(field)field.value='';
+    if(results)results.textContent='';
+  }
   let previousBodyOverflow=null,previousModalFocus=null;
   function render(){
     if(!root.isConnected)return;
@@ -5126,6 +5273,7 @@
           same.setSelectionRange(focusData.selection,focusData.selection);
       }catch(_){}
     }
+    drawFinder();
     $('.ws-sync',root).textContent=state.loading?'Checking Torn\u2026':Math.max(n(state.data.updated.enemies),n(state.data.updated.ours))?'Last observation '+age(Math.max(n(state.data.updated.enemies),n(state.data.updated.ours))):'Not connected yet';
     $('.ws-head [data-action="refresh"]',root).disabled=state.loading;
   }
@@ -5182,6 +5330,22 @@
   }
   function handle(action){
     if(action==='refresh'){refresh(true);return;}
+    if(action==='scan-public'){
+      if(state.scanning||state.loading)return;
+      if(!effectiveKey()||!state.data.enemies.length){
+        state.error='Official public scouting needs a Torn API key and a loaded opponent roster.';
+        render();return;
+      }
+      state.scanning=true;state.loading=true;state.spinner='Scanning public Torn profiles';
+      const before=publicIntelCoverage();render();
+      refreshPublicIntel(6).then(count=>{
+        const after=publicIntelCoverage();
+        confirmed('Checked '+count+' opponent(s) with the public Torn API. Complete public dossiers '+
+          before.complete+' to '+after.complete+' / '+after.total+'. Restricted data stays unknown.');
+      }).catch(e=>{state.error='Public scouting failed: '+String(e.message||e).slice(0,120);})
+        .finally(()=>{state.scanning=false;state.loading=false;state.spinner='';save();publish();render();});
+      return;
+    }
     if(action==='shared-pull'){sharedPull(false);return;}
     if(action==='shared-adopt'){sharedPull(true);return;}
     if(action==='shared-push'){sharedPush();return;}
@@ -5360,7 +5524,25 @@
     if(action.startsWith('war:')){navigate('intel');state.selectedWar=positive(action.slice(4));render();return;}
     if(action.startsWith('load-report:')){loadWarReport(positive(action.slice(12)));return;}
     if(action.startsWith('public:')){loadPublicIntel(positive(action.slice(7)));return;}
-    if(action==='find'){close();event('find',{});return;}
+    if(action==='find'){
+      const panel=$('#ws-finder',root);
+      if(!panel)return;
+      panel.hidden=!panel.hidden;
+      if(panel.hidden)closeFinder();
+      else{drawFinder();$('#ws-find-input',root)?.focus({preventScroll:true});}
+      return;
+    }
+    if(action==='finder-close'){closeFinder();return;}
+    if(action.startsWith('finder-player:')){
+      const id=positive(action.slice(14));
+      if(id){closeFinder();handle('player:'+id);}
+      return;
+    }
+    if(action.startsWith('finder-tab:')){
+      const tab=action.slice(11);
+      if(sections.includes(tab)){closeFinder();navigate(tab);}
+      return;
+    }
     if(action==='more'){state.showMore=!state.showMore;render();return;}
     if(action.startsWith('tab:')){navigate(action.slice(4));event('visit',{id:ID,section:state.tab});return;}
     if(action.startsWith('alert:')){const x=currentAlerts().find(a=>a.id===action.slice(6));if(x?.targetId){focusOpportunity(x.targetId);return;}navigate(x?.tab||'alerts');return;}
@@ -5483,7 +5665,7 @@
   }
   document.addEventListener('keydown',e=>{
     if(!state.open)return;
-    if(e.key==='Escape'){e.preventDefault();close();return;}
+    if(e.key==='Escape'){e.preventDefault();if(!$('#ws-finder',root)?.hidden){closeFinder();return;}close();return;}
     if(e.key!=='Tab')return;
     const focusable=Array.from(root.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled])'))
       .filter(x=>!x.hidden&&typeof x.getClientRects==='function'&&x.getClientRects().length);
@@ -5558,12 +5740,19 @@
     if(e.target.id==='ws-sort'){state.sort=e.target.value;render();}
   });
   root.addEventListener('input',e=>{
+    if(e.target.id==='ws-find-input'){drawFinder();return;}
     if(e.target.id==='ws-search'){
       state.search=e.target.value;
       const pos=e.target.selectionStart,scroll=$('.ws-content',root).scrollTop;
       render();const input=$('#ws-search',root);
       if(input){input.focus();try{input.setSelectionRange(pos,pos);}catch(_){}}
       $('.ws-content',root).scrollTop=scroll;
+    }
+  });
+  root.addEventListener('keydown',e=>{
+    if(e.target?.id==='ws-find-input'&&e.key==='Enter'){
+      const first=$('#ws-finder-results [data-action]',root);
+      if(first){e.preventDefault();first.click();}
     }
   });
   document.addEventListener('staxx:open',e=>{if(e.detail?.id===ID)open(e.detail);});
