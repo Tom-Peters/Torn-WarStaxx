@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.5.4
+// @version      1.5.5
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='1.5.4';
+  const id='war', version='1.5.5';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.5.4', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.5.5', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -191,7 +191,7 @@
   const $$=(s,root=document)=>Array.from(root.querySelectorAll(s));
   const n=v=>Number.isFinite(Number(v))?Number(v):0;
   const positive=v=>Number.isSafeInteger(Number(v)) && Number(v)>0 ? Number(v):0;
-  const fmt=v=>Number.isFinite(Number(v))?new Intl.NumberFormat('en-GB',{maximumFractionDigits:1}).format(Number(v)):'\u2014';
+  const fmt=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))?new Intl.NumberFormat('en-GB',{maximumFractionDigits:1}).format(Number(v)):'\u2014';
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const safeRead=(k,def)=>{try{return JSON.parse(localStorage.getItem(k))||def;}catch(_){return def;}};
   const stamp=t=>t?new Date(t).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'UTC'})+' TCT':'Not recorded';
@@ -251,7 +251,7 @@
     state.data.attacks=(state.data.attacks||[]).slice(-200);
     try{localStorage.setItem(DATA,JSON.stringify(state.data));return true;}catch(e){state.error='Local storage is full; observations cannot be saved.';return false;}
   }};
-  const parseArray=(value)=>Array.isArray(value)?value:Object.entries(value&&typeof value==='object'?value:{}).filter(([key])=>/^\d+$/.test(key)).map(([key,v])=>({id:positive(v?.id||key),...(v&&typeof v==='object'?v:{})}));
+  const parseArray=(value)=>Array.isArray(value)?value.filter(v=>v&&typeof v==='object'):Object.entries(value&&typeof value==='object'?value:{}).filter(([key,v])=>/^\d+$/.test(key)&&v&&typeof v==='object'&&!Array.isArray(v)).map(([key,v])=>({...v,id:positive(v.id)||positive(v.faction_id)||positive(key)}));
   const unpack=(j,k)=>j?.[k]??j;
   function roster(j){
     const list=parseArray(unpack(j,'members'));
@@ -271,7 +271,8 @@
   function warHistory(j){
     return parseArray(unpack(j,'rankedwars')).map(w=>{
       const details=w.war&&typeof w.war==='object'?w.war:w;
-      const factions=parseArray(details.factions||details.participants||{});
+      // Keyed ranked-war data keeps faction scores beside the nested war times.
+      const factions=parseArray(w.factions??w.participants??details.factions??details.participants??{});
       const ids=factions.map(f=>positive(f.id||f.faction_id)).filter(Boolean);
       const t=positive(details.start||details.started||details.start_time);
       return {id:positive(w.id||w.war_id||details.id),start:t,end:positive(details.end||details.ended||details.end_time),
@@ -298,12 +299,12 @@
     const w=r?.war&&typeof r.war==='object'?r.war:r||{};
     return {id:warId,war:{start:positive(w.start),end:positive(w.end),winner:positive(w.winner),
       forfeit:Boolean(w.forfeit),target:n(w.target)},factions:f.map(side=>({
-      id:positive(side.id||side.faction_id),name:String(side.name||''),score:n(side.score),attacks:n(side.attacks),
+      id:positive(side.id||side.faction_id),name:String(side.name||''),score:officialNumber(side.score),attacks:officialNumber(side.attacks),
       rankBefore:String(side.rank?.before||side.rank_before||''),rankAfter:String(side.rank?.after||side.rank_after||''),
       rewards:{respect:n(side.rewards?.respect),points:n(side.rewards?.points),
         items:parseArray(side.rewards?.items).map(p=>({id:positive(p.id),name:String(p.name||''),quantity:n(p.quantity)}))},
       members:parseArray(side.members||{}).map(p=>({id:positive(p.id||p.user_id),name:String(p.name||''),
-        score:n(p.score),attacks:n(p.attacks),level:n(p.level)})).filter(p=>p.id)
+        score:officialNumber(p.score),attacks:officialNumber(p.attacks),level:officialNumber(p.level)})).filter(p=>p.id)
     })),retrieved:Date.now()};
   }
   const epochMs=value=>{
@@ -1849,6 +1850,17 @@
       'Faction auto-detection unavailable: '+(lastError||'check your Torn PDA API key and its profile permission.');
     return positive(cfg.ourId);
   }
+  function historyCoverage(){
+    const wars=[...(state.data.ourWars||[]),...(state.data.enemyWars||[])]
+      .filter(w=>positive(w?.id)&&positive(w?.end));
+    const ids=[...new Set(wars.map(w=>positive(w.id)))];
+    const complete=ids.filter(id=>{
+      const r=state.data.reports[String(id)];
+      return Array.isArray(r?.factions)&&r.factions.length>=2&&positive(r.war?.end);
+    }).length;
+    const waiting=ids.filter(id=>n(state.data.backoff['report-'+id]?.until)>Date.now()).length;
+    return {total:ids.length,complete,missing:ids.length-complete,waiting};
+  }
   async function refreshHistory(force=false){
     if(!positive(cfg.ourId))return;
     const limit=Math.max(2,Math.min(20,positive(cfg.historyLimit)||12));
@@ -1859,11 +1871,30 @@
         if(j)state.data[name]=warHistory(j);}catch(e){state.error=String(e.message||e);}
     }
     const ids=[...new Set([...state.data.enemyWars.slice(0,limit),...state.data.ourWars.slice(0,limit)]
-      .map(w=>w.id).filter(Boolean))].filter(id=>!state.data.reports[id]||!n(state.data.reports[id]?.war?.end));
-    // Bounded incremental backfill: at most 3 report calls per refresh.
-    for(const id of ids.slice(0,4)){
-      try{const j=await call('/faction/'+id+'/rankedwarreport','report-'+id);
-        if(j)state.data.reports[id]=report(j,id);}catch(e){state.data.errors['report-'+id]=String(e.message||e);}
+      .filter(w=>positive(w?.end)).map(w=>positive(w.id)).filter(Boolean))]
+      .filter(id=>!state.data.reports[id]||
+        !Array.isArray(state.data.reports[id]?.factions)||
+        state.data.reports[id].factions.length<2||
+        !positive(state.data.reports[id]?.war?.end));
+    // Cap at three actual read-only requests. A failed report must never block the rest.
+    let attempted=0;
+    for(const id of ids){
+      const kind='report-'+id;
+      if(!canCall(kind,15*MIN))continue;
+      if(attempted>=3)break;
+      attempted++;
+      try{
+        const j=await call('/faction/'+id+'/rankedwarreport',kind);
+        if(j){
+          const parsed=report(j,id);
+          if(parsed.factions.length>=2&&positive(parsed.war?.end))
+            state.data.reports[id]=parsed;
+          else{
+            state.data.errors[kind]='Official war report is incomplete; retry later.';
+            state.data.backoff[kind]={count:1,until:Date.now()+30*MIN};
+          }
+        }
+      }catch(e){state.data.errors[kind]=String(e.message||e).slice(0,180);}
     }
     const keep=Object.keys(state.data.reports).map(Number).sort((a,b)=>b-a);
     for(const id of keep.slice(40))delete state.data.reports[id];
@@ -2202,7 +2233,12 @@
     state.loading=true;state.error='';render();
     try{
       const data=await call('/faction/'+id+'/rankedwarreport','report-'+id);
-      if(data){state.data.reports[id]=report(data,id);state.selectedWar=id;state.tab='intel';}
+      if(data){
+         const parsed=report(data,id);
+         if(parsed.factions.length>=2&&positive(parsed.war?.end)){
+           state.data.reports[id]=parsed;state.selectedWar=id;state.tab='intel';
+         }else state.error='Torn returned an incomplete report. No totals were invented.';
+       }
       else if(!state.data.reports[id])state.error='War report not available yet. Check Diagnostics for endpoint errors.';
     }catch(e){state.error='Cannot load official report: '+String(e.message||e);}
     finally{state.loading=false;save();render();}
@@ -3060,7 +3096,7 @@
       '<polyline points="'+line('our')+'" fill="none" stroke="#61d9ff" stroke-width="2.8"/>'+
       '<polyline points="'+line('enemy')+'" fill="none" stroke="#ff809e" stroke-width="2.8"/>'+
       '<text x="10" y="106" fill="#a5bed0" font-size="9">'+
-      esc(stamp(first.at))+'</text><text x="245" y="106" fill="#a5bed0" font-size="9">Latest sample</text></svg>'+
+      esc(stamp(first))+'</text><text x="245" y="106" fill="#a5bed0" font-size="9">Latest sample</text></svg>'+
       '<p class="ws-small"><span class="ws-legend-own">Our score</span> | <span class="ws-legend-enemy">Enemy score</span>. '+
       subset.length+' official score samples observed in Torn PDA, not reconstructed game history.</p>';
   }
