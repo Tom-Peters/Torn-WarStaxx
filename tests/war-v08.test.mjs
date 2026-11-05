@@ -124,7 +124,7 @@ test('all six surfaces and manual defensive controls are connected and parser sa
     "function blackSkullScorecards(","function turtleAssessment(","function operationalQueue(",
     "id:'enemy-hitters-active'"])
     assert.ok(source.includes(term),'Missing '+term);
-  assert.match(source,/\/\/ @version\s+1\.5\.3/);
+  assert.match(source,/\/\/ @version\s+1\.5\.4/);
   assert.ok(source.startsWith('// ==UserScript==\n'));
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
