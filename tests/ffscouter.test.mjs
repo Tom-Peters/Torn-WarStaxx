@@ -102,7 +102,7 @@ test('FF is next to player names and remains distinct from team-specific matchup
 });
 test('distributed PDA source and smart-quote normalisation are parser-safe',()=>{
   assert.ok(source.startsWith('// ==UserScript==\n'));
-  assert.match(source,/\/\/ @version\s+1\.5\.1/);
+  assert.match(source,/\/\/ @version\s+1\.5\.2/);
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
   const normalised=source.replace(/[\u2018\u2019]/gu,"'").replace(/[\u201c\u201d]/gu,'"');
