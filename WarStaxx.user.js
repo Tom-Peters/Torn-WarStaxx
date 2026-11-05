@@ -875,7 +875,7 @@
     return x&&x.at&&Date.now()-n(x.at)<7*24*HOUR?x:null;
   }
   function ffIsStale(x){return !x||Date.now()-n(x.at)>=24*HOUR||
-    Boolean(x.updatedAt&&Date.now()-n(x.updatedAt)>90*24*HOUR);}
+    Boolean(x.updatedAt&&Date.now()-n(x.updatedAt)>28*24*HOUR);}
   function ffCoverage(){
     let covered=0,unknown=0,stale=0;
     for(const p of state.data.enemies){
@@ -912,14 +912,27 @@
     return action?'<button type="button" class="ws-ff-button" data-action="player:'+positive(id)+'" title="'+esc(title)+'">'+html+'</button>':html;
   }
   function matchup(friend,enemy){
-    const a=spy(friend.id),b=spy(enemy.id),sa=bsScore(a),manual=bsScore(b),third=ffscouter(enemy.id);
-    const sb=manual!==null?manual:(third&&!ffIsStale(third)&&Number.isFinite(Number(third.bss))&&Number(third.bss)>0?Number(third.bss):null);
-    if(sa===null||sb===null)return {known:false,ff:null,ratio:null,verdict:'Unverified stats',confidence:'Unknown'};
-    const r=sb/Math.max(1,sa);
-    const ff=Math.max(1,Math.min(3,1+(8/3)*r));
-    const old=Math.max(n(a?.observedAt),n(b?.observedAt));
-    return {known:true,ratio:r,ff,verdict:r>=1.15?'Likely tougher':r>=0.8?'Close fight':'Favourable on BSS',
-      confidence:manual===null?'FFScouter public BSS model':old&&Date.now()-old<7*24*HOUR?'Recent manual spy':'Older manual spy'};
+    const ownStats=spy(friend.id),enemyStats=spy(enemy.id),
+      ownExact=bsScore(ownStats),enemyExact=bsScore(enemyStats),
+      ownFF=ffscouter(friend.id),enemyFF=ffscouter(enemy.id);
+    const estimate=x=>x&&!ffIsStale(x)&&Number.isFinite(Number(x.bss))&&Number(x.bss)>0?
+      Number(x.bss):null;
+    const own=ownExact!==null?ownExact:estimate(ownFF),
+      opponent=enemyExact!==null?enemyExact:estimate(enemyFF);
+    if(own===null||opponent===null)return {known:false,ff:null,ratio:null,
+      exact:false,verdict:'Stats unavailable',confidence:'No comparable API data'};
+    const ratio=opponent/Math.max(1,own),exact=ownExact!==null&&enemyExact!==null,
+      // Torn caps attacking BSS at 100k in the FF formula, not in strength comparisons.
+      ff=Math.max(1,Math.min(3,1+(8/3)*(opponent/Math.max(1,Math.min(100000,own)))));
+    const observed=Math.min(Number(ownStats?.observedAt)||Infinity,
+      Number(enemyStats?.observedAt)||Infinity);
+    return {known:true,ratio,ff,exact,
+      verdict:ratio>=1.15?'Likely tougher':ratio>=0.8?'Close fight':'Favourable modelled BSS',
+      confidence:exact?(observed&&Date.now()-observed<7*24*HOUR?
+        'Recent exact API / spy figures':'Exact figures; check ages'):
+        'FFScouter public BSS estimates (not exact)',
+      friendSource:ownExact!==null?'Exact Torn API / report':'FFScouter estimate',
+      enemySource:enemyExact!==null?'Exact Torn spy report':'FFScouter estimate'};
   }
   function ffObserved(enemyId,friendId){
     const all=(state.data.attacks||[]).filter(a=>a.defender===enemyId&&(!friendId||a.attacker===friendId)&&
@@ -1175,13 +1188,13 @@
     const m=matchup(friend,enemy),official=lastKnownMemberScore('enemies',enemy.id);
     const enemySpy=spy(enemy.id),friendSpy=spy(friend.id);
     const latest=enemySpy?.observedAt||0;
-    const manuallyConfirmed=bsScore(friendSpy)!==null&&bsScore(enemySpy)!==null;
+    const exactStats=Boolean(m.exact);
     const encounters=attackHistoryFor(friend.id,enemy.id);
     const knownLoss=encounters.losses>0;
     const rosterVerified=rosterFresh('ours')&&rosterFresh('enemies');
-    const freshSpies=manuallyConfirmed&&n(latest)>0&&n(friendSpy?.observedAt)>0&&
+    const freshSpies=exactStats&&n(latest)>0&&n(friendSpy?.observedAt)>0&&
       Date.now()-latest<30*24*HOUR&&Date.now()-n(friendSpy?.observedAt)<30*24*HOUR;
-    const externalOnly=m.known&&!manuallyConfirmed;
+    const externalOnly=m.known&&!exactStats;
     const active=memberState(enemy)==='okay';
     const conflict=Object.entries(cfg.assignments).some(([id,target])=>
       positive(id)!==positive(friend.id)&&positive(target)===positive(enemy.id));
@@ -1189,15 +1202,17 @@
     if(!rosterVerified){category='Refresh roster';reason='One or both rosters older than five minutes; current status unverified';tier=3;}
     else if(!active){category='Unavailable';reason=memberState(enemy)==='hospital'?'In hospital':memberState(enemy)==='away'?'Travelling / abroad':'Not Okay';tier=5;}
     else if(m.known&&m.ratio>=1.15){category='Avoid';reason='Enemy modelled battle strength is higher';tier=4;}
-    else if(manuallyConfirmed&&m.known&&m.ratio<0.8&&!freshSpies){
+    else if(exactStats&&m.known&&m.ratio<0.8&&!freshSpies){
       category='Recheck old spies';reason='One or both spy records are older than 30 days or undated';tier=2;
     }else if(knownLoss){category='Reassess losses';reason=encounters.losses+' recent recorded loss(es) for this hitter';tier=4;
-    }else if(manuallyConfirmed&&m.known&&m.ratio<0.7){
-      category='Strong candidate';reason='Recent favourable manual spies'+(encounters.wins?' + '+encounters.wins+' confirmed recent win(s)':'')+'; verify buffs';tier=0;
-    }else if(manuallyConfirmed&&m.known&&m.ratio<0.8){
-      category='Possible';reason='Recent manual BSS margin; verify fight conditions';tier=1;
+    }else if(exactStats&&m.known&&m.ratio<0.7){
+      category='Strong candidate';reason='Recent favourable exact API / spy stats'+(encounters.wins?' + '+encounters.wins+' confirmed recent win(s)':'')+'; verify buffs';tier=0;
+    }else if(exactStats&&m.known&&m.ratio<0.8){
+      category='Possible';reason='Exact BSS margin; verify buffs';tier=1;
+    }else if(externalOnly&&m.known&&m.ratio<0.4){
+      category='Provisional API candidate';reason='Recent FFScouter public estimates suggest a wide BSS margin; win not confirmed';tier=1;
     }else if(externalOnly&&m.known&&m.ratio<0.8){
-      category='Verify estimate';reason='FFScouter BSS model; scout before hit';tier=2;
+      category='Estimate only';reason='FFScouter public BSS model, not an exact matchup';tier=2;
     }else if(m.known){category='Risky';reason='Close or unfavourable modelled battle score';tier=4;}
     const threat=null; // History influences ranking below; avoid quadratic roster-wide threat recalculation.
     const statusBonus=isOnline(enemy)?5:0;
@@ -1206,10 +1221,10 @@
       (encounters.wins&&!knownLoss?Math.min(22,encounters.wins*8):0)-
       (knownLoss?25:0)-(m.known?Math.round(Math.min(20,m.ratio*16)):0));
     const reliability=tier===0&&encounters.wins>=2?'Repeat observed wins':
-      tier===0?'Favourable current spies':tier===1?'Plausible, verify':
+      tier===0?'Favourable exact API / spy figures':tier===1?'Provisional; check buffs':
       knownLoss?'Past losses recorded':tier===2?'Evidence needs checking':'Not demonstrated';
     return {friend,enemy,match:m,category,reason,tier,score,threat,reliability,encounters,rosterVerified,
-      official,conflict,verified:manuallyConfirmed,estimated:externalOnly,
+      official,conflict,verified:exactStats,estimated:externalOnly,
       ffForHitter:m.known?m.ff:null};
   }
 
@@ -1220,11 +1235,11 @@
     const report=spy(enemy.id),known=bsScore(report),
       freshManual=known!==null&&n(report?.observedAt)>0&&
         Date.now()>=n(report.observedAt)&&Date.now()-n(report.observedAt)<=30*24*HOUR;
-    if(freshManual)return {value:known,source:'Recent manual battle-stat spy',verified:true};
+    if(freshManual)return {value:known,source:'Recent '+String(report.source||'local spy'),verified:true};
     const third=ffscouter(enemy.id);
     if(third&&!ffIsStale(third)&&Number.isFinite(third.bss)&&third.bss>0)
       return {value:third.bss,source:'Fresh FFScouter public BSS estimate',verified:false};
-    return {value:null,source:'Unknown - obtain spy or enable FFScouter',verified:false};
+    return {value:null,source:'Unknown - no readable Torn report or enabled FFScouter estimate',verified:false};
   }
   // Skull Capo can choose percent-of-known-opponents or an absolute BSS threshold.
   // Never label a missing estimate as a weak opponent or shuffle by hospital state.
@@ -1863,7 +1878,7 @@
   async function refreshFF(force=false){
     if(!cfg.ffEnabled||!cfg.ffConsent||!ffApiKey()||!state.data.enemies.length)return;
     if(!canCall('ffscouter',10*MIN))return;
-    const ids=[...new Set(state.data.enemies.map(p=>p.id).filter(Boolean))].slice(0,205);
+    const ids=[...new Set([...state.data.enemies,...state.data.ours].map(p=>p.id).concat(positive(state.data.meta?.ownerId)).filter(Boolean))].slice(0,205);
     if(!ids.length)return;
     const url='https://ffscouter.com/api/v1/get-stats?key='+encodeURIComponent(ffApiKey())+
       '&targets='+ids.join(',');
@@ -2384,7 +2399,7 @@
       if(!Number.isFinite(ff)||ff<1||ff>3)return null;
       // Current Torn base respect: 1.00 at level 1, 1.50 at level 100.
       const lvl=Math.max(1,Math.min(100,n(player.level))),
-        base=Math.round((lvl/198+197/198)*100)/100,model=base*2*ff,
+        base=(Math.log(lvl)+1)/4,model=base*2*ff,
         learned=learnedYield(friend,player,model,observed);
       return {player,evidence:ev,ff,modeled:model,actual:learned.actual,
         sampleCount:learned.samples,pointsPer25:learned.pointsPer25,
