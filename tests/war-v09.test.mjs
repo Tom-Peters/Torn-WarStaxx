@@ -66,6 +66,7 @@ test('hospital hit opens manual medical page; ready hit opens attack link only',
     'const open=d=>{opened=d.section};',
     'const ourWarReadiness=()=>({kind:status,fresh:true,energy:75});',
     'const bestEfficiencyHit=()=>({player:{id:55}});',
+    'const myMission=()=>({hasOrder:false,target:bestEfficiencyHit()});',
     "const attackLink=id=>'https://www.torn.com/loader.php?sid=attack&user2ID='+id;"
   ].join('\n');
   const x=runInNewContext(setup+part('  function itemIntent(){','  function renderWarStrip(force=false){')+
@@ -92,6 +93,7 @@ test('pressing HIT after manual heal rechecks Torn before attacking',async()=>{
     "const sessionStorage={getItem:()=>JSON.stringify({mode:'heal',at:Date.now()}),removeItem(){},setItem(){}};",
     "const ourWarReadiness=()=>({kind:cached,fresh:true,energy:75});",
     "const bestEfficiencyHit=()=>({player:{id:77}});",
+    'const myMission=()=>({hasOrder:false,target:bestEfficiencyHit()});',
     'const rosterFresh=()=>true;',
     "const attackLink=id=>'https://www.torn.com/loader.php?sid=attack&user2ID='+id;",
     "const effectiveKey=()=> 'test-key';",
@@ -118,7 +120,7 @@ test('command strip and item shortcuts are manual, PDA parser safe',()=>{
     "if(action==='war-more')","function strongestVerifiedHit("]){
     assert.ok(source.includes(token),'Missing '+token);
   }
-  assert.match(source,/\/\/ @version\s+1\.5\.0/);
+  assert.match(source,/\/\/ @version\s+1\.5\.1/);
   assert.ok(source.startsWith('// ==UserScript==\n'));
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
