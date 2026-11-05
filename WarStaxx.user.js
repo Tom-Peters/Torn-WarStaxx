@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.5.4
+// @version      1.5.5
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='1.5.4';
+  const id='war', version='1.5.5';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.5.4', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.5.5', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -191,7 +191,7 @@
   const $$=(s,root=document)=>Array.from(root.querySelectorAll(s));
   const n=v=>Number.isFinite(Number(v))?Number(v):0;
   const positive=v=>Number.isSafeInteger(Number(v)) && Number(v)>0 ? Number(v):0;
-  const fmt=v=>Number.isFinite(Number(v))?new Intl.NumberFormat('en-GB',{maximumFractionDigits:1}).format(Number(v)):'\u2014';
+  const fmt=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))?new Intl.NumberFormat('en-GB',{maximumFractionDigits:1}).format(Number(v)):'\u2014';
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const safeRead=(k,def)=>{try{return JSON.parse(localStorage.getItem(k))||def;}catch(_){return def;}};
   const stamp=t=>t?new Date(t).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'UTC'})+' TCT':'Not recorded';
@@ -251,7 +251,7 @@
     state.data.attacks=(state.data.attacks||[]).slice(-200);
     try{localStorage.setItem(DATA,JSON.stringify(state.data));return true;}catch(e){state.error='Local storage is full; observations cannot be saved.';return false;}
   }};
-  const parseArray=(value)=>Array.isArray(value)?value:Object.entries(value&&typeof value==='object'?value:{}).filter(([key])=>/^\d+$/.test(key)).map(([key,v])=>({id:positive(v?.id||key),...(v&&typeof v==='object'?v:{})}));
+  const parseArray=(value)=>Array.isArray(value)?value.filter(v=>v&&typeof v==='object'):Object.entries(value&&typeof value==='object'?value:{}).filter(([key])=>/^\d+$/.test(key)).map(([key,v])=>({...(v&&typeof v==='object'&&!Array.isArray(v)?v:{}),id:positive(v?.id)||positive(v?.faction_id)||positive(key)}));
   const unpack=(j,k)=>j?.[k]??j;
   function roster(j){
     const list=parseArray(unpack(j,'members'));
@@ -271,7 +271,8 @@
   function warHistory(j){
     return parseArray(unpack(j,'rankedwars')).map(w=>{
       const details=w.war&&typeof w.war==='object'?w.war:w;
-      const factions=parseArray(details.factions||details.participants||{});
+      // Keyed ranked-war data keeps faction scores beside the nested war times.
+      const factions=parseArray(w.factions??w.participants??details.factions??details.participants??{});
       const ids=factions.map(f=>positive(f.id||f.faction_id)).filter(Boolean);
       const t=positive(details.start||details.started||details.start_time);
       return {id:positive(w.id||w.war_id||details.id),start:t,end:positive(details.end||details.ended||details.end_time),
@@ -298,12 +299,12 @@
     const w=r?.war&&typeof r.war==='object'?r.war:r||{};
     return {id:warId,war:{start:positive(w.start),end:positive(w.end),winner:positive(w.winner),
       forfeit:Boolean(w.forfeit),target:n(w.target)},factions:f.map(side=>({
-      id:positive(side.id||side.faction_id),name:String(side.name||''),score:n(side.score),attacks:n(side.attacks),
+      id:positive(side.id||side.faction_id),name:String(side.name||''),score:officialNumber(side.score),attacks:officialNumber(side.attacks),
       rankBefore:String(side.rank?.before||side.rank_before||''),rankAfter:String(side.rank?.after||side.rank_after||''),
       rewards:{respect:n(side.rewards?.respect),points:n(side.rewards?.points),
         items:parseArray(side.rewards?.items).map(p=>({id:positive(p.id),name:String(p.name||''),quantity:n(p.quantity)}))},
       members:parseArray(side.members||{}).map(p=>({id:positive(p.id||p.user_id),name:String(p.name||''),
-        score:n(p.score),attacks:n(p.attacks),level:n(p.level)})).filter(p=>p.id)
+        score:officialNumber(p.score),attacks:officialNumber(p.attacks),level:officialNumber(p.level)})).filter(p=>p.id)
     })),retrieved:Date.now()};
   }
   const epochMs=value=>{
@@ -1750,7 +1751,7 @@
     const enemyActivity=sideActivity('enemies'),enemyHistory=factionWarMetrics('enemies');
     const observedPace=warPace();
     if(observed)event('summary',{id:ID,headline:liveWar?'Ranked war detected':'War scouting / standby',
-      updated:observed,metrics:[{label:'Enemy active 24h',value:enemyActivity.total?enemyActivity.active24+' / '+enemyActivity.total:'--'},
+      updated:observed,metrics:[{label:'Enemy active 24h',value:rosterFresh('enemies')?enemyActivity.active24+' / '+enemyActivity.total:'--'},
         {label:liveWar?'Net pace per hour':'Last war points',value:liveWar?
           observedPace?.netRate===null||!observedPace?'--':fmt(observedPace.netRate):
           enemyHistory.lastScore===null?'--':fmt(enemyHistory.lastScore)},
@@ -1849,6 +1850,17 @@
       'Faction auto-detection unavailable: '+(lastError||'check your Torn PDA API key and its profile permission.');
     return positive(cfg.ourId);
   }
+  function historyCoverage(){
+    const wars=[...(state.data.ourWars||[]),...(state.data.enemyWars||[])]
+      .filter(w=>positive(w?.id)&&positive(w?.end));
+    const ids=[...new Set(wars.map(w=>positive(w.id)))];
+    const complete=ids.filter(id=>{
+      const r=state.data.reports[String(id)];
+      return Array.isArray(r?.factions)&&r.factions.length>=2&&positive(r.war?.end);
+    }).length;
+    const waiting=ids.filter(id=>n(state.data.backoff['report-'+id]?.until)>Date.now()).length;
+    return {total:ids.length,complete,missing:ids.length-complete,waiting};
+  }
   async function refreshHistory(force=false){
     if(!positive(cfg.ourId))return;
     const limit=Math.max(2,Math.min(20,positive(cfg.historyLimit)||12));
@@ -1859,11 +1871,30 @@
         if(j)state.data[name]=warHistory(j);}catch(e){state.error=String(e.message||e);}
     }
     const ids=[...new Set([...state.data.enemyWars.slice(0,limit),...state.data.ourWars.slice(0,limit)]
-      .map(w=>w.id).filter(Boolean))].filter(id=>!state.data.reports[id]||!n(state.data.reports[id]?.war?.end));
-    // Bounded incremental backfill: at most 3 report calls per refresh.
-    for(const id of ids.slice(0,4)){
-      try{const j=await call('/faction/'+id+'/rankedwarreport','report-'+id);
-        if(j)state.data.reports[id]=report(j,id);}catch(e){state.data.errors['report-'+id]=String(e.message||e);}
+      .filter(w=>positive(w?.end)).map(w=>positive(w.id)).filter(Boolean))]
+      .filter(id=>!state.data.reports[id]||
+        !Array.isArray(state.data.reports[id]?.factions)||
+        state.data.reports[id].factions.length<2||
+        !positive(state.data.reports[id]?.war?.end));
+    // Cap at three actual read-only requests. A failed report must never block the rest.
+    let attempted=0;
+    for(const id of ids){
+      const kind='report-'+id;
+      if(!canCall(kind,15*MIN))continue;
+      if(attempted>=3)break;
+      attempted++;
+      try{
+        const j=await call('/faction/'+id+'/rankedwarreport',kind);
+        if(j){
+          const parsed=report(j,id);
+          if(parsed.factions.length>=2&&positive(parsed.war?.end))
+            state.data.reports[id]=parsed;
+          else{
+            state.data.errors[kind]='Official war report is incomplete; retry later.';
+            state.data.backoff[kind]={count:1,until:Date.now()+30*MIN};
+          }
+        }
+      }catch(e){state.data.errors[kind]=String(e.message||e).slice(0,180);}
     }
     const keep=Object.keys(state.data.reports).map(Number).sort((a,b)=>b-a);
     for(const id of keep.slice(40))delete state.data.reports[id];
@@ -2202,7 +2233,12 @@
     state.loading=true;state.error='';render();
     try{
       const data=await call('/faction/'+id+'/rankedwarreport','report-'+id);
-      if(data){state.data.reports[id]=report(data,id);state.selectedWar=id;state.tab='intel';}
+      if(data){
+         const parsed=report(data,id);
+         if(parsed.factions.length>=2&&positive(parsed.war?.end)){
+           state.data.reports[id]=parsed;state.selectedWar=id;state.tab='intel';
+         }else state.error='Torn returned an incomplete report. No totals were invented.';
+       }
       else if(!state.data.reports[id])state.error='War report not available yet. Check Diagnostics for endpoint errors.';
     }catch(e){state.error='Cannot load official report: '+String(e.message||e);}
     finally{state.loading=false;save();render();}
@@ -3060,7 +3096,7 @@
       '<polyline points="'+line('our')+'" fill="none" stroke="#61d9ff" stroke-width="2.8"/>'+
       '<polyline points="'+line('enemy')+'" fill="none" stroke="#ff809e" stroke-width="2.8"/>'+
       '<text x="10" y="106" fill="#a5bed0" font-size="9">'+
-      esc(stamp(first.at))+'</text><text x="245" y="106" fill="#a5bed0" font-size="9">Latest sample</text></svg>'+
+      esc(stamp(first))+'</text><text x="245" y="106" fill="#a5bed0" font-size="9">Latest sample</text></svg>'+
       '<p class="ws-small"><span class="ws-legend-own">Our score</span> | <span class="ws-legend-enemy">Enemy score</span>. '+
       subset.length+' official score samples observed in Torn PDA, not reconstructed game history.</p>';
   }
@@ -3297,7 +3333,7 @@
       stat('Known attack energy',readyE+' / '+plan.skulls,'25+ E known, fresh owner or manual reading')+
       stat('Manual target coverage',plan.manual+' / '+plan.members,'Members with locally saved manual assignments')+
       stat('Leadership duties active',fmt(plan.inProgress),'Engaged or monitoring, manually marked')+
-      stat('Enemy Okay',state.data.enemies.filter(x=>memberState(x)==='okay').length+' / '+plan.enemy,'Last official roster snapshot')+
+      stat('Enemy Okay',rosterFresh('enemies')?state.data.enemies.filter(x=>memberState(x)==='okay').length+' / '+plan.enemy:'Stale','Last official roster snapshot')+
       stat('Scoring momentum',p?.netRate===null||!p?'\u2014':(p.netRate>=0?'+':'')+fmt(p.netRate)+'/h','Recent observed net score pace')+
       stat('Current score',score?fmt(score.our)+' / '+fmt(score.enemy):'\u2014','Our faction / enemy official snapshot')+'</div>';
     if(acceleration?.accelerating)html+=card('Opponent pace warning',
@@ -4198,7 +4234,7 @@
   function reportsScreen(){
     const last=Object.values(state.data.afterActions||{}).filter(x=>positive(x.id))
         .sort((a,b)=>n(b.end)-n(a.end))[0]||null,
-      live=warHitLedger(),chain=chainStatus();
+      live=warHitLedger(),chain=chainStatus(),coverage=historyCoverage();
     let h=statusNote()+'<div class="ws-lead"><span class="ws-data-label">03 / REPORTS AND MANAGEMENT</span>'+
       '<h2>Analysis, history and every advanced tool</h2>'+
       '<p>Dig into the evidence, plan future wars, manage settings, inspect hit logs and review completed wars.</p>'+
@@ -4213,7 +4249,9 @@
       statAction('Chain',chain.fresh?'#'+fmt(chain.count):'Unknown',
         'Observed current chain state','tab:skulls')+
       statAction('Stored opponent wars',fmt(state.data.enemyWars.filter(x=>x.end).length),
-        'Past official wars','tab:history')+'</div>';
+        'Past official wars','tab:history')+
+      statAction('Detailed reports ready',coverage.total?coverage.complete+' / '+coverage.total:'No completed wars',
+        coverage.missing+' missing; '+coverage.waiting+' on API backoff','tab:history')+'</div>';
     h+=leaderboardCard(24);
     const groups=[
       ['OPERATIONS & ORDERS',[
@@ -4446,11 +4484,11 @@
       b('Previous wars','tab:history')+b('What to do now','tab:operations')+b('After-action reports','tab:afteraction')+b('Our war orders','tab:assignments')+
       b('Leadership board','tab:command')+b('Live points/hour','tab:pace')+b('War timelines','tab:timeline')+'</div></div>'+
       '<div class="ws-grid">'+
-      statAction('Enemy online now',them.total?fmt(them.online)+' / '+them.total:'\u2014',
+      statAction('Enemy online now',rosterFresh('enemies')?fmt(them.online)+' / '+them.total:'Stale',
         'Latest observed roster | '+age(them.last),'tab:activity')+
       statAction('Active in last 24h',them.total?fmt(them.active24)+' / '+them.total:'\u2014',
         'Last action timestamps; not sustained online time','tab:targets')+
-      statAction('Enemy Okay now',them.total?fmt(them.okay)+' / '+them.total:'\u2014',
+      statAction('Enemy Okay now',rosterFresh('enemies')?fmt(them.okay)+' / '+them.total:'Stale',
         'Possible candidates | check again before hitting','tab:targets')+
       statAction('Enemy last war',last&&historyStats.lastScore!==null?fmt(historyStats.lastScore)+' pts':'\u2014',
         last?'Against '+scoreLabel(historyStats.lastAgainst)+' | #'+last.id:'History not yet loaded','tab:intel')+
@@ -4458,7 +4496,7 @@
         'Last '+historyStats.wars+' completed wars loaded','tab:history')+
       statAction('FFScouter coverage',ff.total?ff.covered+' / '+ff.total:'\u2014',
         'Fresh estimates; click to inspect source and connection','tab:targets')+
-      statAction('Enemy status',them.total?fmt(them.away)+' away / '+fmt(them.hospital)+' hosp.':'\u2014',
+      statAction('Enemy status',rosterFresh('enemies')?fmt(them.away)+' away / '+fmt(them.hospital)+' hosp.':'Stale',
         'Observed travel and hospital states','tab:activity')+'</div>';
     if(score&&score.target){
       const pct=Math.max(0,Math.min(100,(score.net+score.target)/(2*score.target)*100));
@@ -4878,10 +4916,10 @@
       '<div class="ws-grid">'+
       stat('Our active in 24h',ours.total?ours.active24+' / '+ours.total:'\u2014','Official last-action timestamps')+
       stat('Enemy active in 24h',them.total?them.active24+' / '+them.total:'\u2014','Official last-action timestamps')+
-      stat('Our online now',ours.total?ours.online+' / '+ours.total:'\u2014','Snapshot '+age(ours.last))+
-      stat('Enemy online now',them.total?them.online+' / '+them.total:'\u2014','Snapshot '+age(them.last))+
-      stat('Enemies away',them.total?fmt(them.away):'\u2014','Travelling / abroad in last snapshot')+
-      stat('Enemies hospitalised',them.total?fmt(them.hospital):'\u2014','Last observed state')+'</div>';
+      stat('Our online now',rosterFresh('ours')?ours.online+' / '+ours.total:'Stale','Snapshot '+age(ours.last))+
+      stat('Enemy online now',rosterFresh('enemies')?them.online+' / '+them.total:'Stale','Snapshot '+age(them.last))+
+      stat('Enemies away',rosterFresh('enemies')?fmt(them.away):'Stale','Travelling / abroad in last snapshot')+
+      stat('Enemies hospitalised',rosterFresh('enemies')?fmt(them.hospital):'Stale','Last observed state')+'</div>';
     html+=card('24-hour online coverage | our faction vs enemy',
       '<p>Tap individual hourly cells to see the comparative evidence below. Green means more of our checks were online; red means more of theirs. Faded cells lack sufficient samples.</p>'+
       '<div class="ws-hour-grid">'+both.map(x=>'<button type="button" data-action="hour:'+x.hour+'" class="ws-hour '+(!x.enough?'unknown':x.difference>0?'positive':x.difference<0?'negative':'')+
@@ -4909,9 +4947,10 @@
   }
   function history(){
     const groups=[['Our faction','ours',cfg.ourId,state.data.ourWars],['Enemy faction','enemies',cfg.enemyId,state.data.enemyWars]];
+    const coverage=historyCoverage();
     let html=statusNote()+'<div class="ws-lead"><span class="ws-data-label">OFFICIAL TORN RANKED-WAR RECORDS</span>'+
       '<h2>Previous war results, scores and detailed contributions</h2>'+
-      '<p>Open any war to see total points, attacks, rank movement, rewards and individual score tables. Missing detailed reports can be fetched individually.</p>'+
+      '<p>Open any war to see total points, attacks, rank movement, rewards and individual score tables. Detailed reports: '+coverage.complete+' / '+coverage.total+' completed wars; '+coverage.missing+' missing ('+coverage.waiting+' on temporary Torn backoff). Missing reports retry automatically when permitted.</p>'+
       '<div class="ws-toolbar">'+b('Opponent summary','tab:intel')+b('Refresh war history','refresh')+b('Deep scan 20 wars','deep-scan')+'</div></div>';
     for(const [title,side,fid,history] of groups){
       const stats=factionWarMetrics(side);
