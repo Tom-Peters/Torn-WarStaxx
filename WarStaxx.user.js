@@ -1989,6 +1989,7 @@
       captureAttackBssObservations();
       await refreshOwnReadiness();
       await refreshBattleIntel();
+      await refreshPublicIntel();
       await refreshFF();
       if(sharedEndpoint()&&sharedScope())sharedPull(false);
       state.lastRefresh=Date.now();
@@ -2126,7 +2127,7 @@
   }
   function publicStatsHtml(id){
     const item=state.data.publicIntel[id];
-    if(!item)return empty('Public profile and personal statistics not yet loaded. Select the lookup button to fetch them from Torn.');
+    if(!item)return empty('Public profile and personal statistics are being collected automatically from Torn.');
     const p=item.profile||{},stats=publicMetricItems(item.stats||{}).slice(0,65);
     return '<p>Last checked '+esc(age(item.at))+' | Torn public API. These may be lifetime stats, not ranked-war totals.</p>'+
       '<div class="ws-grid">'+
@@ -2136,6 +2137,42 @@
       '</div>'+(stats.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Public statistic</th><th>Value</th></tr></thead><tbody>'+
       stats.map(x=>'<tr><td>'+esc(x.name.replace(/_/g,' '))+'</td><td>'+fmt(x.value)+'</td></tr>').join('')+'</tbody></table></div>':
       empty('This key returned no numerical public personal-stat fields.'));
+  }
+  // Public player details are API-backed. Fetch a small rotating batch in the
+  // background rather than requiring individual profile clicks or manual fields.
+  async function refreshPublicIntel(){
+    if(!effectiveKey()||!state.data.enemies.length)return;
+    const now=Date.now(),candidates=state.data.enemies.slice()
+      .sort((a,b)=>n(state.data.publicIntel[a.id]?.at)-n(state.data.publicIntel[b.id]?.at))
+      .filter(p=>!state.data.publicIntel[p.id]||
+        now-n(state.data.publicIntel[p.id].at)>6*HOUR)
+      .slice(0,2);
+    for(const p of candidates){
+      const id=positive(p.id);
+      if(!id)continue;
+      const obj={profile:{},stats:{},at:now};
+      let obtained=false;
+      try{
+        const profile=await call('/user/'+id+'/profile','public-profile-'+id,6*HOUR);
+        if(profile){
+          const pr=profile.profile||profile;
+          obj.profile={rank:String(pr.rank||''),age:officialNumber(pr.age),
+            awards:officialNumber(pr.awards)};
+          obtained=true;
+        }
+      }catch(_){}
+      try{
+        const stats=await call('/user/'+id+'/personalstats?cat=popular',
+          'public-stats-'+id,6*HOUR);
+        if(stats){obj.stats=stats.personalstats||stats;obtained=true;}
+      }catch(_){}
+      // Cache a completed attempt, including restricted responses, to avoid
+      // retrying inaccessible selections on every 90-second roster refresh.
+      state.data.publicIntel[id]=obtained?obj:{...obj,restricted:true};
+    }
+    const ids=Object.keys(state.data.publicIntel).sort((a,b)=>
+      n(state.data.publicIntel[b]?.at)-n(state.data.publicIntel[a]?.at));
+    for(const id of ids.slice(100))delete state.data.publicIntel[id];
   }
   async function loadPublicIntel(id){
     if(!positive(id)||state.loading)return;
