@@ -20,6 +20,7 @@ test('highest reliable points per 25 energy outranks level and excludes unavaila
       "{id:101,status:'Okay',level:95},{id:102,status:'Okay',level:20},"+
       "{id:103,status:'Hospital',level:100}]}};",
     'const memberState=p=>p.status.toLowerCase();',
+    'const enemyRoleBands=()=>({heavy:new Set([101])});',
     'const activeWarNow=()=>true,rosterFresh=()=>true;',
     'const bsScore=x=>x?100:null,spy=id=>({id});',
     'let blocked=new Set();',
@@ -94,7 +95,7 @@ test('live strip supports automatic compact mode, alert links, skull orders and 
     "cfg.priorityNotifications=Boolean($('#ws-priority-notifications'"]){
     assert.ok(source.includes(term),'Missing integration '+term);
   }
-  assert.match(source,/\/\/ @version\s+1\.5\.0/);
+  assert.match(source,/\/\/ @version\s+1\.5\.1/);
   assert.ok(source.startsWith('// ==UserScript==\n'));
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
