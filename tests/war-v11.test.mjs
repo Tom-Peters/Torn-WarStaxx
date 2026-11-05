@@ -89,6 +89,7 @@ test('shared payload explicitly excludes keys, spies, notes and private readines
     'const currentPlanKey=()=>"war:4",hitterRisk=()=>({mode:"safe"});',
     'const state={data:{ours:[{id:5}]}};',
     'const turtlePlan=()=>({mode:"balanced",members:{5:"strike"}});',
+    'const heavyRule=()=>({mode:"percent",percent:40,minBss:0});',
     'const hitterPlanStatus=()=>("engaged");'
   ].join('\n');
   const f=fixture(setup,'  function sharedPayload(){','  function sharedHasLocalOrders(){',
@@ -111,7 +112,7 @@ test('automatic sync has scoped path, revision conflicts, foreground-only pollin
     "data-skull-risk","if(!document.hidden&&sharedEndpoint()&&sharedScope())"])
     assert.ok(source.includes(token),'Missing sync wiring '+token);
   assert.ok(!source.includes('GM_xmlhttpRequest({method:"POST"'));
-  assert.match(source,/\/\/ @version\s+1\.5\.0/);
+  assert.match(source,/\/\/ @version\s+1\.5\.1/);
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
 });
