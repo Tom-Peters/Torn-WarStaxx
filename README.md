@@ -1,5 +1,14 @@
 > **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v1.5.2). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
 
+## v1.5.4 - Automatic battle-stat and opponent API accuracy (5 November 2026)
+
+- Owner's exact four battle stats are read from Torn's `user/battlestats`, including nested API response formats; null or missing stats never become zeros.
+- Personal and faction spy reports now support list and keyed report containers and several nested report layouts, accepting only complete, timestamped four-stat records. The freshest eligible exact record is used, with public FFScouter BSS clearly identified as an estimate.
+- Recorded attack FF evidence now excludes samples older than 30 days or from future timestamps; attack-feed refresh stops after the active war ends.
+- Public opponent profile and personal statistics are fetched **automatically** in a rotating batch of two players per refresh, with a six-hour cache and bounded 100-player retention. API-restricted fields stay unknown instead of requiring manual entry.
+- Added `tests/war-battle-accuracy-v154.test.mjs`. The previous optional manual correction remains available only for inaccessible private stats; it is not a prerequisite for API-derived data.
+- A precise win chance cannot be inferred from BSS alone: merits, buffs, weapons, temporary effects and hidden private stats can change the outcome. FFScouter's owner-specific FF is not a per-teammate prediction.
+
 ## v1.5.2 - Stability release (5 November 2026)
 
 - **No stale-war commands:** Operations and event alerts use the fresh, officially observed active-war state rather than only a cached war ID. The TornStaxx hub's live-war flag, headline and pace labels also observe the same live guard.
