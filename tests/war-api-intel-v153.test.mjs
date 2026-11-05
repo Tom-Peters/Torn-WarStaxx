@@ -70,7 +70,7 @@ test('owner exact stats win over old legacy data and cannot be overwritten by re
   assert.equal(f.spy(7).strength,100);
   assert.equal(f.applyAutoSpies({7:{...v,strength:1,observedAt:t,
     source:'Torn faction spy report'}}),0);
-  f.cfg.spies[90]={...v,strength:45,observedAt:t-1000,source:'Legacy'};
+  f.cfg.spies[90]={...v,strength:45,observedAt:t-6000,source:'Legacy'};
   assert.equal(f.applyAutoSpies({90:{...v,source:'Torn personal spy report'}}),1);
   assert.equal(f.spy(90).strength,100);
 });
