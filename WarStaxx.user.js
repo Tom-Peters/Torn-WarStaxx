@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.5.1
+// @version      1.5.2
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='0.8.0';
+  const id='war', version='1.5.2';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.5.1', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.5.2', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -222,7 +222,7 @@
     cfg.shared&&typeof cfg.shared==='object'?cfg.shared:{});
   const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},factionBasic:{},publicIntel:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},scoreTimelines:{},warTimelines:{},afterActions:{},ownerReadiness:{},availabilityEvents:{},chain:{},squadSnapshots:{},attackBssSnapshots:{},sampleCount:0});
   const state={data:Object.assign(freshData(),safeRead(DATA,{})),open:false,tab:'overview',showMore:false,
-    filter:'all',sort:'warScore',search:'',commanderFilter:'black',controlFocus:0,loading:false,ffLoading:false,spinner:'',error:'',scanning:false,alerts:[],chosen:0,
+    filter:'all',sort:'warScore',search:'',commanderFilter:'black',controlFocus:0,loading:false,ffLoading:false,spinner:'',error:'',notice:null,scanning:false,alerts:[],chosen:0,
     lastRefresh:0,historicalRead:0,localKeyError:false,sharedBusy:false,sharedDirty:false,sharedRevision:0,sharedSyncAt:0,sharedEditVersion:0,sharedError:'',warMore:false,quickHitPending:false,stripScrolled:false,stripExpanded:false,warExpected:false,selectedWar:0,selectedTimeline:0,selectedPace:0,selectedDebrief:0,detailFrom:'targets',leaderFilter:'all',hitterFilter:'all',renderedPlayerId:0,skipDraftRestore:false};
   state.data.reports=state.data.reports||{};
   state.data.squadSnapshots=state.data.squadSnapshots||{};
@@ -1499,7 +1499,7 @@
   }
   function currentAlerts(){
     const out=[];
-    const w=state.data.war,score=warScore(),t=state.data.updated.enemies||0;
+    const w=activeWarNow()?state.data.war:null,score=w?warScore():null,t=state.data.updated.enemies||0;
     if(!effectiveKey())out.push({id:'api-key',title:'Connect Torn API',detail:'Add a key in Settings to load live and historical intelligence.',status:'now',priority:95,tab:'settings'});
     if(!positive(cfg.ourId))out.push({id:'faction-id',title:'Detect your faction',detail:'WarStaxx checks your API key identity automatically. Open Settings if you need to retry or use a manual ID.',status:'now',priority:92,tab:'settings'});
     if(w&&t&&Date.now()-t<5*MIN){
@@ -1618,14 +1618,15 @@
   }
   function publish(){
     const a=currentAlerts();state.alerts=a;
+    const liveWar=activeWarNow();
     announce();
     const observed=Math.max(n(state.data.updated.wars),n(state.data.updated.enemies),n(state.data.updated.ours));
     const hittable=rosterFresh('enemies')?state.data.enemies.filter(e=>evaluate(e).ready).length:0;
     const enemyActivity=sideActivity('enemies'),enemyHistory=factionWarMetrics('enemies');
     const observedPace=warPace();
-    if(observed)event('summary',{id:ID,headline:state.data.war?'Ranked war detected':'War scouting / standby',
+    if(observed)event('summary',{id:ID,headline:liveWar?'Ranked war detected':'War scouting / standby',
       updated:observed,metrics:[{label:'Enemy active 24h',value:enemyActivity.total?enemyActivity.active24+' / '+enemyActivity.total:'--'},
-        {label:state.data.war?'Net pace per hour':'Last war points',value:state.data.war?
+        {label:liveWar?'Net pace per hour':'Last war points',value:liveWar?
           observedPace?.netRate===null||!observedPace?'--':fmt(observedPace.netRate):
           enemyHistory.lastScore===null?'--':fmt(enemyHistory.lastScore)},
         {label:'Enemy Okay',value:rosterFresh('enemies')?String(hittable):'--'}]});
@@ -1637,7 +1638,7 @@
       .sort((a,b)=>n(b.war.end)-n(a.war.end)).slice(0,10);
     if(completed.length)event('activity',{id:ID,events:completed.map(r=>({id:'war-'+r.id,
       at:n(r.war.end)*1000,title:'Ranked war finished',detail:'Official report '+r.id+' available',section:'history',source:'api'}))});
-    event('war-context',{id:ID,active:Boolean(state.data.war),ourFactionId:positive(cfg.ourId),
+    event('war-context',{id:ID,active:liveWar,ourFactionId:positive(cfg.ourId),
       opponentFactionId:positive(cfg.enemyId),observedAt:observed||0,hittable:hittable});
   }
   // Torn API v2 key/info reports user.faction_id for the key owner even when
@@ -1824,7 +1825,7 @@
   async function refresh(force=false){
     if(state.loading||document.hidden)return;
     if(!effectiveKey()){publish();render();return;}
-    state.loading=true;state.error='';state.spinner='Fetching official Torn data';
+    state.loading=true;state.error='';state.notice=null;state.spinner='Fetching official Torn data';
     render();
     try{
       await identify(force);
@@ -1923,7 +1924,7 @@
     '#warstaxx-root tr:hover td{background:#12334e}#warstaxx-root a{color:#89dfff;text-decoration:none}',
     '#warstaxx-root .ws-empty{border:1px dashed #3a6280;border-radius:9px;padding:16px;color:#adc9da}',
     '#warstaxx-root .ws-note{border-left:3px solid #54d7fa;background:#0c2f4f;padding:10px;border-radius:6px;margin:9px 0}',
-    '#warstaxx-root .ws-warn{border-left-color:#ff8094}#warstaxx-root .ws-small{font-size:11px;color:#a8c4d7}',
+    '#warstaxx-root .ws-warn{border-left-color:#ff8094}#warstaxx-root .ws-success{border-left-color:#51cabc;background:#0b353b;color:#d7fff8}#warstaxx-root .ws-small{font-size:11px;color:#a8c4d7}',
     '#warstaxx-root .ws-pct{height:8px;background:#132a44;border-radius:8px;overflow:hidden;margin:9px 0}#warstaxx-root .ws-pct i{display:block;height:100%;background:#2eafd6}',
     '#warstaxx-root .ws-stat-action{display:flex;flex-direction:column;align-items:flex-start;text-align:left;color:#e5f5ff;gap:4px;min-height:106px;width:100%;cursor:pointer}',
     '#warstaxx-root .ws-stat-action:active{background:#15436b}#warstaxx-root .ws-stat-title{color:#acd7ec;font-weight:700;font-size:12px}#warstaxx-root .ws-stat-link{color:#63d9f6;font-size:11px;margin-top:auto}',
@@ -1957,6 +1958,7 @@
     '@media(max-width:640px){#warstaxx-root .ws-panel{height:100dvh;bottom:auto}#warstaxx-root .ws-hour-grid{grid-template-columns:repeat(8,minmax(0,1fr))}#warstaxx-root .ws-stat-action{min-height:112px}#warstaxx-root .ws-lead{padding:10px}#warstaxx-root .ws-score{font-size:19px}}',
     '@media(max-width:640px){#warstaxx-root .ws-panel{top:0;bottom:0;width:100%;border-radius:0}#warstaxx-root .ws-head{padding:8px}#warstaxx-root .ws-head strong{font-size:18px}#warstaxx-root .ws-head small{font-size:8px}#warstaxx-root .ws-content{padding:8px}#warstaxx-root .ws-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}#warstaxx-root .ws-card{padding:9px}#warstaxx-root .ws-number{font-size:21px}}',
     '@media(pointer:coarse){#warstaxx-root button,#warstaxx-root a.ws-btn{min-height:44px}#warstaxx-root .ws-ff-button{min-height:40px}}',
+    '@media(max-width:600px){#warstaxx-root .ws-table-wrap{max-width:100%;border:1px solid #294f70;border-radius:8px;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}#warstaxx-root .ws-table-wrap table:not(.ws-leader-table) th:first-child,#warstaxx-root .ws-table-wrap table:not(.ws-leader-table) td:first-child{position:sticky;left:0;z-index:1;background:#102d49;box-shadow:1px 0 0 #335c7b}#warstaxx-root .ws-table-wrap table:not(.ws-leader-table) td:first-child{max-width:180px;overflow-wrap:anywhere}}',
     '@media(max-width:420px){#warstaxx-root .ws-head-buttons{flex-shrink:0}#warstaxx-root .ws-head-buttons button{padding:6px 9px;min-width:42px}#warstaxx-root .ws-refresh-label{display:none}#warstaxx-root .ws-head strong{font-size:17px}#warstaxx-root .ws-head small{letter-spacing:0;font-size:8px}#warstaxx-root .ws-row{align-items:flex-start}}'
   ].join('');
   function card(title,body){return '<section class="ws-card"><h2>'+esc(title)+'</h2>'+body+'</section>';}
@@ -2324,7 +2326,10 @@
   function myMission(){
     const self=ourWarReadiness(),assignedId=positive(cfg.assignments[self.id]),
       assigned=state.data.enemies.find(p=>p.id===assignedId)||null,
-      recommended=bestEfficiencyHit();
+      // One verified scan serves both the recommended option and any saved order.
+      options=self.kind==='okay'&&self.player?
+        efficiencyHits(self.player,Math.max(1,state.data.enemies.length)):[],
+      recommended=options[0]||null;
     let target=assignedId?null:recommended,issue='',evidence=null;
     if(assignedId){
       if(!assigned)issue='The assigned opponent is missing from the current roster.';
@@ -2337,8 +2342,7 @@
         issue='The assigned opponent is outside your Black Skulls / regular BSS bracket.';
       else{
         evidence=matchEvidence(self.player,assigned);
-        target=efficiencyHits(self.player,state.data.enemies.length)
-          .find(hit=>hit.player.id===assignedId)||null;
+        target=options.find(hit=>hit.player.id===assignedId)||null;
         if(!target)issue='Assignment requires a new matchup check: '+evidence.reason+
           '. Verify manual spy age, observed losses, risk settings and energy.';
       }
@@ -2384,8 +2388,8 @@
       b('Squad orders','tab:command')+'</div>');
   }
   function commandPulse(){
-    const fresh=rosterFresh('ours')&&rosterFresh('enemies'),
-      squad=blackSkullsCoverage(),actions=operationalQueue().filter(x=>x.group==='now').slice(0,4),
+    const at=Date.now(),fresh=rosterFresh('ours',at)&&rosterFresh('enemies',at),
+      squad=blackSkullsCoverage(at),actions=operationalQueue(at,squad).filter(x=>x.group==='now').slice(0,4),
       holes=squad.targets.filter(x=>x.needsAssignment||x.blocked).slice(0,3);
     return card('SKULL CAPO | 30-SECOND WAR BRIEF',
       '<div class="ws-inline-metrics"><span>Heavy targets: '+fmt(squad.targets.length)+'</span>'+
@@ -2756,9 +2760,17 @@
   }
   function handleWarScroll(e){
     if(!activeWarNow())return;
-    if(e?.target?.closest?.('#warstaxx-root,#staxx-hub-root'))return;
-    const top=n(e?.target?.scrollTop)||n(window.scrollY)||
-      n(document.scrollingElement?.scrollTop)||0;
+    // Captured scroll events also come from tables, dialogs and Torn widgets.
+    // Only the document or Torn's own main page scroller may resize the bar.
+    const t=e?.target;
+    const documentScroll=!t||t===window||t===document||t===document.body||
+      t===document.documentElement||t===document.scrollingElement;
+    const mainScroll=!documentScroll&&t?.matches?.(
+      '#mainContent,#main-content,#mainContainer,#mainWrapper,main,[role="main"]')&&
+      !t.closest?.('#warstaxx-root,#staxx-hub-root');
+    if(!documentScroll&&!mainScroll)return;
+    const top=Math.max(n(window.scrollY),n(document.scrollingElement?.scrollTop),
+      mainScroll?n(t.scrollTop):0);
     const next=top>130;
     if(next===state.stripScrolled)return;
     state.stripScrolled=next;
@@ -2855,6 +2867,9 @@
         '<small data-ws-note>Locate an item, then tap Torn native Use. The script does not use medical items. Incompatible blood bags require your own blood-type check.</small></div>':'');
   }
 
+  function confirmed(message){
+    state.error='';state.notice={message:String(message),at:Date.now()};
+  }
   function statusNote(){
     const own=n(state.data.updated.ours),enemy=n(state.data.updated.enemies);
     const fresh=rosterFresh('ours')&&rosterFresh('enemies');
@@ -2865,7 +2880,9 @@
             '; opponent '+esc(age(enemy))+'. ')+
       'Travel, online and hospital data are observed snapshots, not continuous records. '+
       '<span class="ws-small">Times shown in TCT (UTC).</span></div>'+
-      (state.error?'<div class="ws-note ws-warn">'+esc(state.error)+'</div>':'');
+      (state.error?'<div class="ws-note ws-warn" role="alert">'+esc(state.error)+'</div>':
+        state.notice&&Date.now()-state.notice.at<30000?
+          '<div class="ws-note ws-success" role="status">'+esc(state.notice.message)+'</div>':'');
   }
   function scoreSpark(p){
     const pts=p?.points||[];
@@ -3174,12 +3191,12 @@
       b('Copy command briefing','copy-leader-brief')+'</div>');
     return html+watchlistPanel();
   }
-  function operationalQueue(at=Date.now()){
+  function operationalQueue(at=Date.now(),coverageOverride=null){
     const items=[],add=(group,id,priority,title,detail,action,source,dueAt=0)=>{
       if(!items.some(x=>x.id===id))items.push({group,id,priority,title,detail,action,source,dueAt});
     };
     const ownFresh=rosterFresh('ours',at),enemyFresh=rosterFresh('enemies',at);
-    const active=Boolean(positive(state.data.war?.id));
+    const active=activeWarNow();
     if(!effectiveKey())add('now','connect',100,'Connect your Torn API key',
       'Without a valid personal key, war roster and score facts are unavailable.','tab:settings','Connection');
     if(!positive(cfg.ourId))add('now','faction',98,'Detect your faction',
@@ -3206,7 +3223,7 @@
     }
     const plan=leadershipSummary();
     if(active&&ownFresh&&enemyFresh){
-      const coverage=blackSkullsCoverage(at);
+      const coverage=coverageOverride||blackSkullsCoverage(at);
       if(!coverage.skulls.length)add('intel','skulls-unset',65,
         'Mark your Black Skulls heavy-hitter squad',
         'No hitters are locally tagged as Black Skulls. Assign squad members before drafting heavy-target coverage.',
@@ -4215,7 +4232,7 @@
       b('War room','tab:overview')+b('All targets','tab:targets')+'</div>';
   }
   function liveWarRoom(){
-    const w=state.data.war,score=warScore(),own=ourWarReadiness(),target=bestEfficiencyHit(),
+    const w=state.data.war,score=warScore(),own=ourWarReadiness(),
       enemies=sideActivity('enemies'),pace=warPace(),alerts=currentAlerts().slice(0,3),
       fresh=rosterFresh('enemies');
     const chain=chainStatus();
@@ -4969,20 +4986,20 @@
       if(!['balanced','defensive','full'].includes(mode))return;
       const key=currentPlanKey(),prior=turtlePlan();
       cfg.turtlePlans[key]={mode,members:{...prior.members},updated:Date.now()};
-      saveCfg();markSharedDirty();state.error='Local defensive posture saved. No travel, medical or attack action occurred.';render();return;
+      saveCfg();markSharedDirty();confirmed('Local defensive posture saved. No travel, medical or attack action occurred.');render();return;
     }
     if(action==='copy-ops'){
       const content=operationalBrief();
       if(navigator.clipboard&&typeof navigator.clipboard.writeText==='function'){
         navigator.clipboard.writeText(content).then(()=>{
-          state.error='Operations brief copied locally; share it manually if needed.';render();
+          confirmed('Operations brief copied locally; share it manually if needed.');render();
         }).catch(()=>{state.error='Clipboard permission denied; no brief was shared.';render();});
       }else{
         const textarea=document.createElement('textarea');textarea.value=content;
         textarea.style.cssText='position:fixed;left:-9999px';document.body.appendChild(textarea);
         textarea.select();let copied=false;
         try{copied=document.execCommand('copy');}catch(_){}
-        textarea.remove();state.error=copied?'Operations brief copied for manual sharing.':'Clipboard unavailable; no brief was shared.';render();
+        textarea.remove();copied?confirmed('Operations brief copied for manual sharing.'):state.error='Clipboard unavailable; no brief was shared.';render();
       }
       return;
     }
@@ -4996,8 +5013,8 @@
       const [idText,side]=action.slice(11).split(':'),id=positive(idText);
       if(!id||!['black','regular'].includes(side)||!state.data.afterActions[id])return;
       const value=squadReportText(id,side);
-      const success=()=>{state.error=(side==='black'?'Black Skulls':'Regular-member')+
-        ' report copied for manual sharing.';render();};
+      const success=()=>{confirmed((side==='black'?'Black Skulls':'Regular-member')+
+        ' report copied for manual sharing.');render();};
       const failure=()=>{state.error='Clipboard unavailable; no report was shared.';render();};
       if(navigator.clipboard?.writeText)navigator.clipboard.writeText(value).then(success).catch(failure);
       else{const area=document.createElement('textarea');area.value=value;
@@ -5009,8 +5026,8 @@
     if(action.startsWith('copy-debrief:')){const id=positive(action.slice(13)),record=state.data.afterActions[id];
       if(!record)return;
       const value=afterActionText(record);
-      if(navigator.clipboard?.writeText){navigator.clipboard.writeText(value).then(()=>{state.error='After-action report copied for manual sharing.';render();}).catch(()=>{state.error='Clipboard access denied. Nothing was sent.';render();});}
-      else{const area=document.createElement('textarea');area.value=value;area.style.cssText='position:fixed;left:-9999px';document.body.appendChild(area);area.select();let copied=false;try{copied=document.execCommand('copy');}catch(_){}area.remove();state.error=copied?'After-action report copied.':'Clipboard unavailable.';render();}return;
+      if(navigator.clipboard?.writeText){navigator.clipboard.writeText(value).then(()=>{confirmed('After-action report copied for manual sharing.');render();}).catch(()=>{state.error='Clipboard access denied. Nothing was sent.';render();});}
+      else{const area=document.createElement('textarea');area.value=value;area.style.cssText='position:fixed;left:-9999px';document.body.appendChild(area);area.select();let copied=false;try{copied=document.execCommand('copy');}catch(_){}area.remove();copied?confirmed('After-action report copied.'):state.error='Clipboard unavailable.';render();}return;
     }
     if(action.startsWith('save-readiness:')){
       const id=positive(action.slice(15));if(!state.data.ours.some(p=>p.id===id))return;
@@ -5023,7 +5040,7 @@
          state.error='Energy must be 0-1000 E; medical remaining must be 0-720 minutes.';render();return;}
       if(energy===null&&med===null)delete cfg.manualReadiness[id];
       else cfg.manualReadiness[id]={energy,medicalUntil:med===null?null:Date.now()+med*MIN,at:Date.now()};
-      saveCfg();state.error='Readiness saved locally for 45 minutes. No teammate API data was accessed.';render();return;
+      saveCfg();confirmed('Readiness saved locally for 45 minutes. No teammate API data was accessed.');render();return;
     }
     if(action==='match-more'){state.showAllMatchups=!state.showAllMatchups;render();return;}
     if(action.startsWith('hitter:')){const id=positive(action.slice(7));if(state.data.ours.some(p=>p.id===id)){state.chosen=id;navigate('matchups');}return;}
@@ -5041,7 +5058,7 @@
         render();return;
       }
       cfg.heavyPolicy=heavyRule({mode,percent,minBss});saveCfg();markSharedDirty();
-      state.error='Black Skulls strength cutoff saved. Check coverage and existing orders.';
+      confirmed('Black Skulls strength cutoff saved. Check coverage and existing orders.');
       render();return;
     }
     if(action.startsWith('skull-assign:')){
@@ -5056,22 +5073,22 @@
         render();return;
       }
       cfg.assignments[id]=targetId;saveCfg();markSharedDirty();
-      state.error='Assigned '+member.name+' to review '+target.name+'. No Torn attack performed.';
+      confirmed('Assigned '+member.name+' to review '+target.name+'. No Torn attack performed.');
       render();return;
     }
     if(action==='draft-black'){
       const drafts=suggestedDraft();
       for(const x of drafts)if(!positive(cfg.assignments[x.friend.id]))cfg.assignments[x.friend.id]=x.enemy.id;
-      saveCfg();markSharedDirty();state.error=drafts.length?'Drafted '+drafts.length+' role-appropriate target orders locally. Verify each manually.':'No evidenced unassigned role-appropriate targets; improve BSS coverage and comparable spies first.';render();return;
+      saveCfg();markSharedDirty();drafts.length?confirmed('Drafted '+drafts.length+' role-appropriate target orders locally. Verify each manually.'):state.error='No evidenced unassigned role-appropriate targets; improve BSS coverage and comparable spies first.';render();return;
     }
     if(action==='save-leader-note'){
       const key=positive(state.data.war?.id)||('scout-'+positive(cfg.enemyId));
       cfg.leaderNotes[key]=String($('#ws-leader-note',root)?.value||'').slice(0,1800);
-      saveCfg();state.error='Local leadership notes saved.';render();return;
+      saveCfg();confirmed('Local leadership notes saved.');render();return;
     }
     if(action==='copy-skull-chat'){
       const value=skullChatBrief();
-      const success=()=>{state.error='Black Skulls briefing copied. Paste it manually into Torn faction chat.';render();};
+      const success=()=>{confirmed('Black Skulls briefing copied. Paste it manually into Torn faction chat.');render();};
       const failure=()=>{state.error='Could not copy the briefing; no message was sent.';render();};
       if(navigator.clipboard?.writeText)navigator.clipboard.writeText(value).then(success).catch(failure);
       else{const area=document.createElement('textarea');area.value=value;
@@ -5107,14 +5124,14 @@
       delete cfg.assignments[oldId];cfg.assignments[newId]=enemyId;
       if(positive(cfg.enemyId))cfg.ordersByEnemy[String(cfg.enemyId)]={...cfg.assignments};
       saveCfg();markSharedDirty();
-      state.error='Moved this local heavy-target order from '+old.name+' to '+replacement.name+
-        '. Verify the order with your squad; no Torn action was performed.';
+      confirmed('Moved this local heavy-target order from '+old.name+' to '+replacement.name+
+        '. Verify the order with your squad; no Torn action was performed.');
       render();return;
     }
     if(action==='copy-leader-brief'){
       const content=leadershipBrief();
-      if(navigator.clipboard?.writeText){navigator.clipboard.writeText(content).then(()=>{state.error='Leadership briefing copied for manual sharing.';render();}).catch(()=>{state.error='Clipboard not permitted; no briefing was sent.';render();});}
-      else{const textArea=document.createElement('textarea');textArea.value=content;textArea.style.cssText='position:fixed;left:-9999px;';document.body.appendChild(textArea);textArea.select();let copied=false;try{copied=document.execCommand('copy');}catch(_){}textArea.remove();state.error=copied?'Leadership briefing copied for manual sharing.':'Clipboard unavailable; no briefing was sent.';render();}return;
+      if(navigator.clipboard?.writeText){navigator.clipboard.writeText(content).then(()=>{confirmed('Leadership briefing copied for manual sharing.');render();}).catch(()=>{state.error='Clipboard not permitted; no briefing was sent.';render();});}
+      else{const textArea=document.createElement('textarea');textArea.value=content;textArea.style.cssText='position:fixed;left:-9999px;';document.body.appendChild(textArea);textArea.select();let copied=false;try{copied=document.execCommand('copy');}catch(_){}textArea.remove();copied?confirmed('Leadership briefing copied for manual sharing.'):state.error='Clipboard unavailable; no briefing was sent.';render();}return;
     }
     if(action==='refresh-ff'){manualFFCheck(false);return;}
     if(action==='watched-list'){state.filter='watched';navigate('targets');return;}
@@ -5158,11 +5175,11 @@
     if(action==='copy-orders'){
       const text=copiedWarOrders();
       if(navigator.clipboard&&typeof navigator.clipboard.writeText==='function'){
-        navigator.clipboard.writeText(text).then(()=>{state.error='War plan copied to clipboard; paste it into faction chat when ready.';render();}).catch(()=>{state.error='Clipboard permission denied. The plan remains available here.';render();});
+        navigator.clipboard.writeText(text).then(()=>{confirmed('War plan copied to clipboard; paste it into faction chat when ready.');render();}).catch(()=>{state.error='Clipboard permission denied. The plan remains available here.';render();});
       }else{
         const el=document.createElement('textarea');el.value=text;el.style.position='fixed';el.style.left='-9999px';document.body.appendChild(el);el.select();
         let ok=false;try{ok=document.execCommand('copy');}catch(_){}el.remove();
-        state.error=ok?'War plan copied; paste into faction chat when ready.':'Clipboard unavailable; use the visible orders table.';render();
+        ok?confirmed('War plan copied; paste into faction chat when ready.'):state.error='Clipboard unavailable; use the visible orders table.';render();
       }
       return;
     }
@@ -5276,7 +5293,7 @@
       if(!id||!state.data.ours.some(p=>p.id===id)||!cfg.blackSkulls[id]||
         !['safe','balanced','aggressive'].includes(mode))return;
       cfg.hitterRisk[id]={mode,at:Date.now()};saveCfg();markSharedDirty();
-      state.error='Per-player risk saved. Actual win probability remains unknown.';render();return;
+      confirmed('Per-player risk saved. Actual win probability remains unknown.');render();return;
     }
     const control=e.target.closest('[data-control-target]');
     if(control){
@@ -5286,7 +5303,7 @@
       const key=currentPlanKey(),prior=cfg.controlAssignments[key]||{};
       if(watcher)prior[enemyId]=watcher;else delete prior[enemyId];
       cfg.controlAssignments[key]=prior;saveCfg();markSharedDirty();
-      state.error='Hospital watcher assigned locally. No attack or hospitalisation performed.';render();return;
+      confirmed('Hospital watcher assigned locally. No attack or hospitalisation performed.');render();return;
     }
     const turtleDuty=e.target.closest('[data-turtle-duty]');
     if(turtleDuty){
@@ -5295,7 +5312,7 @@
       const key=currentPlanKey(),plan=turtlePlan();
       if(value==='auto')delete plan.members[id];else plan.members[id]=value;
       cfg.turtlePlans[key]={mode:plan.mode,members:plan.members,updated:Date.now()};
-      saveCfg();markSharedDirty();state.error='Defensive duty saved locally. Torn player status is unchanged.';render();return;
+      saveCfg();markSharedDirty();confirmed('Defensive duty saved locally. Torn player status is unchanged.');render();return;
     }
     const target=e.target.closest('[data-leader-target]');
     if(target){const ourId=positive(target.dataset.leaderTarget),enemyId=positive(target.value);
@@ -5310,13 +5327,13 @@
       }
       else if(!enemyId)delete cfg.assignments[ourId];
       else return;
-      saveCfg();markSharedDirty();state.error=enemyId?'Manual target saved locally; no Torn action performed.':'Manual target cleared.';render();return;
+      saveCfg();markSharedDirty();confirmed(enemyId?'Manual target saved locally; no Torn action performed.':'Manual target cleared.');render();return;
     }
     const duty=e.target.closest('[data-leader-duty]');
     if(duty){const id=positive(duty.dataset.leaderDuty),value=String(duty.value);
       if(!state.data.ours.some(p=>p.id===id)||!hitterPlanStatuses().some(x=>x[0]===value))return;
       if(value==='not-set')delete cfg.planStatus[hitterPlanKey(id)];else cfg.planStatus[hitterPlanKey(id)]=value;
-      saveCfg();markSharedDirty();state.error='Manual duty updated locally; this is not a verified Torn action.';render();return;
+      saveCfg();markSharedDirty();confirmed('Manual duty updated locally; this is not a verified Torn action.');render();return;
     }
     if(e.target.id==='ws-leader-filter'){state.leaderFilter=e.target.value;render();return;}
     if(e.target.id==='ws-hitter-filter'){state.hitterFilter=e.target.value;render();return;}
