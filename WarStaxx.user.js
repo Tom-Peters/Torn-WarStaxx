@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.5.2
+// @version      1.5.3
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='1.5.2';
+  const id='war', version='1.5.3';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.5.2', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.5.3', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -220,7 +220,7 @@
     cfg.heavyPolicy&&typeof cfg.heavyPolicy==='object'?cfg.heavyPolicy:{});
   cfg.shared=Object.assign({enabled:false,endpoint:'',token:'',canWrite:false},
     cfg.shared&&typeof cfg.shared==='object'?cfg.shared:{});
-  const freshData=()=>({ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},factionBasic:{},publicIntel:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},scoreTimelines:{},warTimelines:{},afterActions:{},ownerReadiness:{},availabilityEvents:{},chain:{},squadSnapshots:{},attackBssSnapshots:{},sampleCount:0});
+  const freshData=()=>({autoSpies:{},ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},factionBasic:{},publicIntel:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},scoreTimelines:{},warTimelines:{},afterActions:{},ownerReadiness:{},availabilityEvents:{},chain:{},squadSnapshots:{},attackBssSnapshots:{},sampleCount:0});
   const state={data:Object.assign(freshData(),safeRead(DATA,{})),open:false,tab:'overview',showMore:false,
     filter:'all',sort:'warScore',search:'',commanderFilter:'black',controlFocus:0,loading:false,ffLoading:false,spinner:'',error:'',notice:null,scanning:false,alerts:[],chosen:0,
     lastRefresh:0,historicalRead:0,localKeyError:false,sharedBusy:false,sharedDirty:false,sharedRevision:0,sharedSyncAt:0,sharedEditVersion:0,sharedError:'',warMore:false,quickHitPending:false,stripScrolled:false,stripExpanded:false,warExpected:false,selectedWar:0,selectedTimeline:0,selectedPace:0,selectedDebrief:0,detailFrom:'targets',leaderFilter:'all',hitterFilter:'all',renderedPlayerId:0,skipDraftRestore:false};
@@ -238,7 +238,7 @@
   // Repair malformed legacy cached containers without wiping valid user data.
   for(const k of ['ours','enemies','ourWars','enemyWars','attacks'])
     if(!Array.isArray(state.data[k]))state.data[k]=[];
-  for(const k of ['reports','activity','factionBasic','publicIntel','ffstats','seenAttacks','updated','errors','backoff','meta','scoreTimelines','warTimelines','afterActions','ownerReadiness','availabilityEvents','chain'])
+  for(const k of ['autoSpies','reports','activity','factionBasic','publicIntel','ffstats','seenAttacks','updated','errors','backoff','meta','scoreTimelines','warTimelines','afterActions','ownerReadiness','availabilityEvents','chain'])
     if(!state.data[k]||typeof state.data[k]!=='object'||Array.isArray(state.data[k]))state.data[k]={};
   if(state.data.war&&!Array.isArray(state.data.war.factions))state.data.war=null;
   for(const [key,value] of Object.entries(state.data.reports))
@@ -778,13 +778,65 @@
   function lastKnownMemberScore(side,id){
     return recentWarRecords(side,id).find(x=>x.covered&&x.member)?.score??null;
   }
-  function spy(id){const s=cfg.spies[String(id)];return s&&typeof s==='object'?s:null;}
+  function spy(id){
+    const idKey=String(positive(id)),legacy=cfg.spies[idKey],api=state.data.autoSpies[idKey],
+      saved=bsScore(legacy)!==null?legacy:null,automatic=bsScore(api)!==null?api:null;
+    if(automatic&&automatic.source==='Torn owner battlestats'&&
+      positive(id)===positive(state.data.meta?.ownerId))return automatic;
+    if(automatic&&(!saved||n(automatic.observedAt)>=n(saved.observedAt)))return automatic;
+    return saved;
+  }
+  // BSS = sqrt(STR) + sqrt(SPD) + sqrt(DEF) + sqrt(DEX).
+  // Never treat missing or null battle stats as actual zeroes.
   function bsScore(s){
-    if(!s)return null;
+    if(!s||typeof s!=='object')return null;
     const keys=['strength','speed','defense','dexterity'];
-    if(keys.some(k=>!Number.isFinite(Number(s[k]))||Number(s[k])<0))return null;
+    if(keys.some(k=>s[k]===null||s[k]===undefined||s[k]===''||
+      !Number.isFinite(Number(s[k]))||Number(s[k])<0))return null;
     const score=keys.reduce((sum,k)=>sum+Math.sqrt(Number(s[k])),0);
     return score>0?score:null;
+  }
+  function exactBattleStats(raw,at,source){
+    if(!raw||typeof raw!=='object'||!at||at>Date.now()+MIN)return null;
+    const record={};
+    for(const k of ['strength','speed','defense','dexterity']){
+      const entry=raw[k],v=entry&&typeof entry==='object'?entry.value:entry;
+      if(v===null||v===undefined||v===''||!Number.isFinite(Number(v))||Number(v)<0)return null;
+      record[k]=Number(v);
+    }
+    return bsScore(record)!==null?{...record,observedAt:at,source}:null;
+  }
+  function parseOwnBattleStats(json,at=Date.now()){
+    return exactBattleStats(json?.battlestats??json,at,'Torn owner battlestats');
+  }
+  function parseStatsReports(json,source,at=Date.now()){
+    const records={};
+    for(const report of Array.isArray(json?.reports)?json.reports:[]){
+      if(String(report?.type||'').toLowerCase()!=='stats')continue;
+      const id=positive(report?.target_id),time=epochMs(report?.timestamp),
+        stats=exactBattleStats(report?.report,time,source);
+      if(!id||!stats||time>at+MIN)continue;
+      if(!records[id]||records[id].observedAt<time)records[id]=stats;
+    }
+    return records;
+  }
+  function applyAutoSpies(records,owner=positive(state.data.meta?.ownerId)){
+    if(!owner)return 0;
+    let count=0;
+    for(const [id,entry] of Object.entries(records||{})){
+      if(!positive(id)||bsScore(entry)===null)continue;
+      const prev=state.data.autoSpies[id],own=positive(id)===owner;
+      if(own&&prev?.source==='Torn owner battlestats'&&
+        entry.source!=='Torn owner battlestats')continue;
+      if(!prev||n(entry.observedAt)>n(prev.observedAt)||
+        own&&entry.source==='Torn owner battlestats'){
+        state.data.autoSpies[id]=entry;count++;
+      }
+    }
+    const ordered=Object.keys(state.data.autoSpies).sort((a,b)=>
+      n(state.data.autoSpies[b]?.observedAt)-n(state.data.autoSpies[a]?.observedAt));
+    for(const id of ordered.slice(300))delete state.data.autoSpies[id];
+    return count;
   }
   // Fair Fight from FFScouter uses the API-key owner's battle stats, not a
   // selected teammate's. A true per-hitter figure needs both BSS inputs.
@@ -916,6 +968,29 @@
       if(j){const parsed=parseOwnCooldown(j);if(parsed.medicalUntil!==null)state.data.ownerReadiness.cooldown=parsed;}
     }catch(_){}
     state.data.ownerReadiness.ownerId=positive(state.data.meta.ownerId);
+  }
+  // Existing owned reports are read automatically; no one needs to type stats.
+  // Private teammate/opponent battle stats outside shared spy reports are not public.
+  async function refreshBattleIntel(){
+    const owner=positive(state.data.meta?.ownerId);
+    if(!effectiveKey()||!owner)return;
+    try{
+      const response=await call('/user/battlestats','own-battlestats',10*MIN);
+      if(response){
+        const stats=parseOwnBattleStats(response);
+        if(stats)applyAutoSpies({[owner]:stats},owner);
+        else state.data.errors['own-battlestats']='No complete battle stats in API response';
+      }
+    }catch(_){}
+    for(const [url,kind,source] of [
+      ['/user/reports?cat=stats&limit=100','user-stat-reports','Torn personal spy report'],
+      ['/faction/reports?cat=stats&limit=100','faction-stat-reports','Torn faction spy report']]){
+      try{
+        const response=await call(url,kind,20*MIN);
+        if(response)applyAutoSpies(parseStatsReports(response,source),owner);
+      }catch(_){}
+    }
+    state.data.meta.autoBattleCount=Object.keys(state.data.autoSpies).length;
   }
   function manualReadinessFor(id,at=Date.now()){
     const r=cfg.manualReadiness[String(positive(id))];
@@ -1686,7 +1761,7 @@
           // a missing or permission-restricted faction field.
           const owner=response?.info?.user||response?.user||response?.key?.user;
           if(source==='key-info'&&owner){const ownId=positive(owner.id||owner.user_id||owner.player_id);
-            if(ownId)state.data.meta.ownerId=ownId;}
+            if(ownId){if(positive(state.data.meta?.ownerId)&&positive(state.data.meta.ownerId)!==ownId)state.data.autoSpies={};state.data.meta.ownerId=ownId;}}
           if(source==='key-info'&&owner&&Object.prototype.hasOwnProperty.call(owner,'faction_id')&&
              (owner.faction_id===null||Number(owner.faction_id)===0)){
             cfg.ourId=0;cfg.enemyId=0;cfg.factionVerifiedAt=Date.now();
@@ -1861,9 +1936,10 @@
         const chain=await call('/faction/'+cfg.ourId+'/chain','chain',30*1000);
         if(chain){const snapshot=chainSnapshot(chain);if(snapshot)state.data.chain=snapshot;}
       }catch(e){state.data.errors.chain=String(e.message||e).slice(0,150);}
-      await refreshFF();
       captureAttackBssObservations();
       await refreshOwnReadiness();
+      await refreshBattleIntel();
+      await refreshFF();
       if(sharedEndpoint()&&sharedScope())sharedPull(false);
       state.lastRefresh=Date.now();
     }catch(e){state.error=String(e.message||e);}
@@ -5183,7 +5259,7 @@
       }
       return;
     }
-    if(action==='clear-key'){cfg.key='';cfg.factionVerifiedAt=0;delete state.data.meta.ffRegistration;delete state.data.meta.ownerId;state.data.ownerReadiness={};state.data.ffstats={};state.data.updated.ffscouter=0;saveCfg();save();render();return;}
+    if(action==='clear-key'){cfg.key='';cfg.factionVerifiedAt=0;delete state.data.meta.ffRegistration;delete state.data.meta.ownerId;state.data.ownerReadiness={};state.data.autoSpies={};state.data.ffstats={};state.data.updated.ffscouter=0;saveCfg();save();render();return;}
     if(action==='clear-ff-key'){cfg.ffKey='';state.data.ffstats={};delete state.data.meta.ffRegistration;state.data.updated.ffscouter=0;saveCfg();save();state.error='FFScouter will use your Torn PDA key if you enabled and consented to FF lookup.';render();return;}
     if(action==='detect-faction'){
       cfg.factionAuto=true;
@@ -5244,7 +5320,7 @@
       }
       if(cfg.shared.enabled&&!sharedEndpoint())state.error='Shared orders need an HTTPS Worker URL and a read/write token.';
       if(previousOwnerKey!==effectiveKey()){
-        state.data.ownerReadiness={};delete state.data.meta.ownerId;
+        state.data.ownerReadiness={};state.data.autoSpies={};delete state.data.meta.ownerId;
         for(const name of ['own-bars','own-cooldowns','owner-id-readiness']){
           delete state.data.updated[name];delete state.data.errors[name];delete state.data.backoff[name];
         }
