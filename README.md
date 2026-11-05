@@ -1,5 +1,15 @@
 > **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v1.0.0). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
 
+## v1.5.0 - Mission-first live war command (5 November 2026)
+
+- **My Mission** is at the top of the live war screen: own status, energy, assigned target, verified matchup evidence, any blocker, and next action. A local assignment takes precedence over the highest-scoring model suggestion.
+- **HIT safety:** the permanent Torn command strip and post-heal HIT flow respect the user's locally saved target. If that target is missing, not Okay, has a stale roster, is outside the Skull/regular BSS bracket, or fails recent comparative-spy and risk checks, quick HIT stops with an explicit message. It never silently switches targets.
+- **30-second Skull Capo brief:** the first war screen surfaces immediate interventions, high-BSS coverage gaps, blocked orders, unknown enemy BSS and qualified free replacements, with manual one-click review/assignment.
+- **Operational queue:** unassigned heavy enemies, blocked Black Skull orders and missing comparative battle intelligence are now actionable priorities.
+- **Permanent strip:** displays the saved mission and a REVIEW ORDER state when the assigned target is no longer eligible. Hub metric uses **Enemy Okay** rather than suggesting an Okay enemy is proven safely hittable.
+- The original four layers are preserved: always-on Torn strip + Act Now + Opponent + Reports. Deep links and TornStaxx hub contract stay the same. Actions do not automatically attack, use consumables or send faction messages.
+- Automated regression coverage: `tests/war-v15.test.mjs`. The source is ASCII-only and passes a JavaScript syntax check; the full Node test suite and a live Torn PDA installation still need verification.
+
 ## v1.4.0 - Skull Capo operational intelligence (4 November 2026)
 
 All five Skull Capo requests implemented in \`WarStaxx.user.js\`, preserving the always-available Torn command strip, **01 Act Now / 02 Opponent / 03 Reports**, FFScouter BSS badges, manual matchup safety and v1.3 cutoff settings.
