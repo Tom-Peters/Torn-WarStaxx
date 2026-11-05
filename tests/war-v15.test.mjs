@@ -76,7 +76,7 @@ test('live strip, healed-hit and main war screen reuse the mission-safe HIT hand
   assert.match(source,/const primary=\['overview','enemy','reports'\]/);
 });
 test('high-BSS coverage gaps are prioritised; lower risk labels remain honest',()=>{
-  const queue=region('  function operationalQueue(at=Date.now()){','  function operationalBrief(at=Date.now()){');
+  const queue=region('  function operationalQueue(at=Date.now(),coverageOverride=null){','  function operationalBrief(at=Date.now()){');
   assert.match(queue,/heavy-unassigned/);
   assert.match(queue,/heavy-blocked/);
   assert.match(queue,/heavy-intel/);
