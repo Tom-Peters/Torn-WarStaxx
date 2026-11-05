@@ -2856,11 +2856,15 @@
   }
 
   function statusNote(){
-    const latest=Math.max(n(state.data.updated.enemies),n(state.data.updated.ours));
-    const fresh=latest&&Date.now()-latest<5*MIN;
+    const own=n(state.data.updated.ours),enemy=n(state.data.updated.enemies);
+    const fresh=rosterFresh('ours')&&rosterFresh('enemies');
     return '<div class="ws-note'+(fresh?'':' ws-warn')+'">'+
-      (state.loading?'Refreshing official data\u2026 ':fresh?'Live roster sampled '+esc(age(latest))+'. ':'Status may be stale. Latest roster: '+esc(age(latest))+'. ')+
-      'Travel, online and hospital data are observed snapshots\u2014not a continuous historical log. '+'<span class="ws-small">Times shown in TCT (UTC).</span></div>'+
+      (state.loading?'Refreshing official data... ':
+        fresh?'Both rosters checked within five minutes. ':
+          'One or both rosters need refresh. Our roster '+esc(age(own))+
+            '; opponent '+esc(age(enemy))+'. ')+
+      'Travel, online and hospital data are observed snapshots, not continuous records. '+
+      '<span class="ws-small">Times shown in TCT (UTC).</span></div>'+
       (state.error?'<div class="ws-note ws-warn">'+esc(state.error)+'</div>':'');
   }
   function scoreSpark(p){
