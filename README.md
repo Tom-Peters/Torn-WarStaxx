@@ -1,4 +1,17 @@
-> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v1.0.0). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v1.5.2). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+
+## v1.5.2 - Stability release (5 November 2026)
+
+- **No stale-war commands:** Operations and event alerts use the fresh, officially observed active-war state rather than only a cached war ID. The TornStaxx hub's live-war flag, headline and pace labels also observe the same live guard.
+- **Reliable strip scrolling:** The permanent on-page war strip reacts only to page/main-scroller movement. Scrolling an intelligence table, other Torn widget or WarStaxx modal no longer unexpectedly minimises the strip.
+- **Quicker tactical render:** My Mission scans verified options once for both the suggested and manually assigned opponent, and the Skull Capo 30-second brief reuses one coverage calculation rather than rebuilding it in the operations queue. Removed a redundant live-screen matchup scan.
+- **Clearer feedback:** Successful order changes, role settings, manual readiness entries and copy actions use neutral/success confirmation styling; actual errors retain warning styling. Confirmations expire after 30 seconds.
+- **Mobile usability:** Scrollable report tables gain a visible first-column identifier on phones, while the Black Skulls leadership cards keep their existing responsive layout.
+- **Torn PDA diagnostics:** The embedded loader-probe version now agrees with both the module and install metadata at **1.5.2** (previously the probe still said 0.8.0).
+- **Regression tests:** Added `tests/war-stability-v152.test.mjs`; updated historical fixtures to reflect retained current behaviour without weakening the guarded HIT or read-only gameplay rules.
+- Existing installer URL, stored config, four-tier UI and shared TornStaxx module ID remain unchanged. **No automated attacks, consumable use or faction chat posting.**
+
+**Device validation:** Physical Torn PDA display and live-war API access are separate from GitHub's Node test suite. See [Stability release verification](docs/STABILITY-RELEASE-1.5.2.md).
 
 ## v1.5.1 - Full functionality and mobile usability audit (5 November 2026)
 
