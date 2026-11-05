@@ -57,7 +57,7 @@ test('small-screen use, keyboard navigation and reduced-motion respect stay wire
   assert.match(source,/@media\(max-width:420px\)/);
   assert.match(source,/@media\(pointer:coarse\)/);
   assert.match(source,/ws-refresh-label/);
-  assert.match(source,/aria-label="Open TornStaxx search"/);
+  assert.match(source,/aria-label="Find a player or WarStaxx section"/);
   assert.match(source,/e\.key==='Escape'/);
   assert.match(source,/e\.key!=='Tab'/);
   assert.match(source,/previousModalFocus\.focus/);
