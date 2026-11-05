@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.5.5
+// @version      1.5.6
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='1.5.5';
+  const id='war', version='1.5.6';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.5.5', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.5.6', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -2043,8 +2043,10 @@
   }));
   root.innerHTML='<div class="ws-veil" data-close></div><section class="ws-panel" role="dialog" aria-label="WarStaxx command centre" aria-modal="true">'+
     '<header class="ws-head"><div><strong>War<span>Staxx</span></strong><small>RANKED WAR INTELLIGENCE \u00b7 v'+VER+'</small></div>'+
-    '<div class="ws-head-buttons"><button type="button" data-action="refresh" aria-label="Refresh war intelligence" title="Refresh official war intelligence">\u21bb <span class="ws-refresh-label">Refresh</span></button><button type="button" data-action="find" aria-label="Open TornStaxx search" title="Search TornStaxx">\u2315</button><button type="button" data-close aria-label="Close WarStaxx">\u00d7</button></div></header>'+
-    '<nav class="ws-tabs" aria-label="WarStaxx sections"></nav><main class="ws-content"></main>'+
+    '<div class="ws-head-buttons"><button type="button" data-action="refresh" aria-label="Refresh war intelligence" title="Refresh official war intelligence">\u21bb <span class="ws-refresh-label">Refresh</span></button><button type="button" data-action="find" aria-label="Find a player or WarStaxx section" title="Find a player or section">\u2315</button><button type="button" data-close aria-label="Close WarStaxx">\u00d7</button></div></header>'+
+    '<nav class="ws-tabs" aria-label="WarStaxx sections"></nav>'+ 
+    '<div id="ws-finder" class="ws-finder" hidden><div class="ws-finder-row"><input id="ws-find-input" type="search" autocomplete="off" placeholder="Search players, IDs or tools" aria-label="Find players or tools"><button type="button" data-action="finder-close" aria-label="Close search">Close</button></div><div id="ws-finder-results" class="ws-finder-results" aria-live="polite"></div></div>'+ 
+    '<main class="ws-content"></main>'+
     '<footer class="ws-footer"><span class="ws-sync"></span><span>Observations, not automated attacks</span></footer></section>';
   root.appendChild(domBridge);
   const css=el('style');css.textContent=[
@@ -2060,6 +2062,13 @@
     '#warstaxx-root .ws-tabs{display:flex;gap:4px;overflow-x:auto;white-space:nowrap;flex-shrink:0;background:#0a233c;padding:7px 9px;border-bottom:1px solid #244d6e}',
     '#warstaxx-root .ws-tabs button{background:#13334f;border:1px solid #244e6f;border-radius:7px;padding:7px 10px;font-size:12px}',
     '#warstaxx-root .ws-tabs button.on{background:#066caa;border-color:#54d7fa;color:white}',
+    '#warstaxx-root .ws-finder[hidden]{display:none}#warstaxx-root .ws-finder{background:#0b2944;border-bottom:1px solid #326184;padding:8px 12px;flex-shrink:0}',
+    '#warstaxx-root .ws-finder-row{display:flex;gap:8px;align-items:center}#warstaxx-root .ws-finder-row input{flex:1;max-width:none;min-width:0}',
+    '#warstaxx-root .ws-finder-row button{border:1px solid #497a9b;background:#153b5c;border-radius:8px;padding:8px 12px}',
+    '#warstaxx-root .ws-finder-results{max-height:36vh;overflow-y:auto;overscroll-behavior:contain;margin-top:7px}',
+    '#warstaxx-root .ws-finder-result{display:flex;align-items:center;justify-content:space-between;width:100%;gap:10px;padding:10px;border:1px solid #294e69;background:#123551;border-radius:7px;margin:4px 0;text-align:left}',
+    '#warstaxx-root .ws-finder-result small{font-size:11px;white-space:normal}',
+    '#warstaxx-root .ws-finder-result strong{font-size:12px;color:#e1f5ff}',
     '#warstaxx-root .ws-content{flex:1;overflow:auto;overscroll-behavior:contain;padding:12px;min-height:0}',
     '#warstaxx-root .ws-footer{display:flex;justify-content:space-between;gap:6px;padding:7px 12px;border-top:1px solid #254765;background:#071a2d;color:#92b4cf;font-size:10px}',
     '#warstaxx-root .ws-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:9px}',
@@ -2085,6 +2094,9 @@
     '#warstaxx-root .ws-warn{border-left-color:#ff8094}#warstaxx-root .ws-success{border-left-color:#51cabc;background:#0b353b;color:#d7fff8}#warstaxx-root .ws-small{font-size:11px;color:#a8c4d7}',
     '#warstaxx-root .ws-pct{height:8px;background:#132a44;border-radius:8px;overflow:hidden;margin:9px 0}#warstaxx-root .ws-pct i{display:block;height:100%;background:#2eafd6}',
     '#warstaxx-root .ws-stat-action{display:flex;flex-direction:column;align-items:flex-start;text-align:left;color:#e5f5ff;gap:4px;min-height:106px;width:100%;cursor:pointer}',
+    '#warstaxx-root .ws-health-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;border-bottom:1px solid #30536e;gap:8px;padding:7px 0}',
+    '#warstaxx-root .ws-health-row small{font-size:11px;display:block}',
+    '#warstaxx-root .ws-health-row strong{color:#d9f4ff;font-size:12px}',
     '#warstaxx-root .ws-stat-action:active{background:#15436b}#warstaxx-root .ws-stat-title{color:#acd7ec;font-weight:700;font-size:12px}#warstaxx-root .ws-stat-link{color:#63d9f6;font-size:11px;margin-top:auto}',
     '#warstaxx-root .ws-lead{padding:14px;background:linear-gradient(110deg,#103e63,#0b2948);border:1px solid #397a9e;border-radius:12px;margin-bottom:10px}',
     '#warstaxx-root .ws-lead h2{font-size:18px;margin:0 0 8px}#warstaxx-root .ws-score{font-size:22px;font-weight:800}',
