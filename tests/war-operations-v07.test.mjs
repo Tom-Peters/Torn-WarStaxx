@@ -33,7 +33,7 @@ function matchingFixture(){
     'const ffscouter=id=>({bss:({103:80,104:60})[id]||null});',
     'const ffIsStale=()=>false;',
     'const matchup=(friend,enemy)=>{const ratios={1:{101:0.35,102:0.45},2:{101:0.38,102:1.35}};'+
-      "return {known:true,ratio:ratios[friend.id]?.[enemy.id],ff:2.5,confidence:'Two recent spies'};};"
+      "return {known:true,ratio:ratios[friend.id]?.[enemy.id],ff:2.5,exact:[101,102].includes(enemy.id),confidence:'Two recent spies'};};"
   ].join('\n');
   return runInNewContext(setup+part('  function rosterFresh(','  function assignments(){')+
     '; ({cfg,state,rosterFresh,enemyHospitalExit,watchedTargetIds,matchEvidence,personalShortlist,suggestedDraft})');
