@@ -251,7 +251,7 @@
     state.data.attacks=(state.data.attacks||[]).slice(-200);
     try{localStorage.setItem(DATA,JSON.stringify(state.data));return true;}catch(e){state.error='Local storage is full; observations cannot be saved.';return false;}
   }};
-  const parseArray=(value)=>Array.isArray(value)?value.filter(v=>v&&typeof v==='object'):Object.entries(value&&typeof value==='object'?value:{}).filter(([key,v])=>/^\d+$/.test(key)&&v&&typeof v==='object'&&!Array.isArray(v)).map(([key,v])=>({...v,id:positive(v.id)||positive(v.faction_id)||positive(key)}));
+  const parseArray=(value)=>Array.isArray(value)?value.filter(v=>v&&typeof v==='object'):Object.entries(value&&typeof value==='object'?value:{}).filter(([key])=>/^\d+$/.test(key)).map(([key,v])=>({...(v&&typeof v==='object'&&!Array.isArray(v)?v:{}),id:positive(v?.id)||positive(v?.faction_id)||positive(key)}));
   const unpack=(j,k)=>j?.[k]??j;
   function roster(j){
     const list=parseArray(unpack(j,'members'));
