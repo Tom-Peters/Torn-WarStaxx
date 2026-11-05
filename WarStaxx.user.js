@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.5.3
+// @version      1.5.4
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='1.5.3';
+  const id='war', version='1.5.4';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.5.3', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.5.4', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -807,14 +807,21 @@
     return bsScore(record)!==null?{...record,observedAt:at,source}:null;
   }
   function parseOwnBattleStats(json,at=Date.now()){
-    return exactBattleStats(json?.battlestats??json,at,'Torn owner battlestats');
+    return exactBattleStats(json?.battlestats??json?.user?.battlestats??json,at,'Torn owner battlestats');
   }
   function parseStatsReports(json,source,at=Date.now()){
     const records={};
-    for(const report of Array.isArray(json?.reports)?json.reports:[]){
-      if(String(report?.type||'').toLowerCase()!=='stats')continue;
-      const id=positive(report?.target_id),time=epochMs(report?.timestamp),
-        stats=exactBattleStats(report?.report,time,source);
+    const raw=json?.reports??json?.data?.reports??[];
+    const rows=Array.isArray(raw)?raw:raw&&typeof raw==='object'?Object.values(raw):[];
+    for(const entry of rows){
+      const report=entry?.report&&typeof entry.report==='object'?entry.report:entry;
+      const type=String(entry?.type??report?.type??'').toLowerCase();
+      if(type&&type!=='stats'&&type!=='stat')continue;
+      const id=positive(entry?.target_id??entry?.target?.id??report?.target_id??report?.target?.id);
+      const time=epochMs(entry?.timestamp??entry?.created_at??report?.timestamp??report?.created_at);
+      const rawStats=report?.stats??report?.battlestats??report?.data?.stats??
+        report?.data?.battlestats??report?.data??report;
+      const stats=exactBattleStats(rawStats,time,source);
       if(!id||!stats||time>at+MIN)continue;
       if(!records[id]||records[id].observedAt<time)records[id]=stats;
     }
@@ -936,6 +943,7 @@
   }
   function ffObserved(enemyId,friendId){
     const all=(state.data.attacks||[]).filter(a=>a.defender===enemyId&&(!friendId||a.attacker===friendId)&&
+      n(a.at)>Date.now()-30*24*HOUR&&n(a.at)<=Date.now()&&
       Number.isFinite(a.ff)&&a.ff>=1&&a.ff<=3);
     return {count:all.length,avg:all.length?all.reduce((s,a)=>s+a.ff,0)/all.length:null};
   }
@@ -1930,7 +1938,7 @@
     save();
   }
   async function refreshAttacks(){
-    if(!cfg.enableAttacks||!state.data.war||!positive(cfg.ourId))return;
+    if(!cfg.enableAttacks||!activeWarNow()||!positive(cfg.ourId))return;
     try{
       const j=await call('/faction/attacks?limit=100','attacks',3*MIN);
       if(!j)return;
