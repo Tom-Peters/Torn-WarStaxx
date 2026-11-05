@@ -71,7 +71,7 @@ test('live strip, healed-hit and main war screen reuse the mission-safe HIT hand
   assert.match(quick,/Saved order blocked/);
   assert.match(strip,/mission\.hasOrder&&!target\?'REVIEW ORDER'/);
   assert.match(strip,/MY ORDER:/);
-  assert.match(live,/missionPanel\(\)\+commandPulse\(\)/);
+  assert.match(live,/missionPanel\(\)\+battleIntelCard\(\)\+commandPulse\(\)/);
   assert.match(heal,/warQuick\('hit'\)/);
   assert.match(source,/const primary=\['overview','enemy','reports'\]/);
 });
