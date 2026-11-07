@@ -268,6 +268,8 @@
       earlyDischarge:p.has_early_discharge===true,
       status:String(p.status?.state||p.status||'Unknown'),
       statusText:String(p.status?.description||''),statusDetails:String(p.status?.details||''),
+      locationHint:String(p.location?.name||p.location||p.status?.location||''),
+      destinationHint:String(p.travel?.destination?.name||p.travel?.destination||p.status?.destination||''),
       until:n(p.status?.until)*1000,
       lastAction:String(p.last_action?.status||'Unknown'),lastAt:n(p.last_action?.timestamp)*1000,
       updated:Date.now()
@@ -526,6 +528,72 @@
     const valid=eta>at-5*MIN&&eta<at+20*HOUR;
     return {kind,eta:valid?eta:null,source:valid&&inbound?'inbound Torn roster expiry':'status only',
       statusText:desc.trim().slice(0,140)};
+  }
+  // Torn travel destinations and aliases; unknown flight destinations stay unknown.
+  const nativeCountries=[
+    ['Argentina',/\bArgentina\b/i],['Canada',/\bCanada\b/i],
+    ['Cayman Islands',/\b(?:Cayman\s+Islands|Caymans?)\b/i],
+    ['China',/\bChina\b/i],['Hawaii',/\bHawaii\b/i],['Japan',/\bJapan\b/i],
+    ['Mexico',/\bMexico\b/i],['South Africa',/\bSouth\s+Africa\b/i],
+    ['Switzerland',/\b(?:Switzerland|Swiss)\b/i],
+    ['United Kingdom',/\b(?:United\s+Kingdom|Great\s+Britain|U\.?K\.?)\b/i],
+    ['UAE',/\b(?:United\s+Arab\s+Emirates|U\.?A\.?E\.?)\b/i],
+    ['Torn',/\b(?:Torn\s+City|Torn)\b/i]
+  ];
+  function nativeCountryName(value){
+    const text=String(value||'');
+    for(const [country,pattern] of nativeCountries)if(pattern.test(text))return country;
+    return '';
+  }
+  function nativeWarLocation(p){
+    if(!p)return {country:'Unknown',phase:'unknown',source:'Missing player'};
+    const kind=memberState(p);
+    const desc=[p.statusText,p.statusDetails].filter(Boolean).join(' ').trim();
+    const explicit=nativeCountryName(p.destinationHint),current=nativeCountryName(p.locationHint);
+    if(kind==='away'){
+      const to=desc.match(/\b(?:travell?ing|traveling|flying|heading|departing|returning|flight)\s+(?:back\s+)?to\s+([^.,;|]+)/i);
+      const dest=explicit||nativeCountryName(to?.[1]);
+      if(dest)return {country:dest,phase:'inbound',eta:positive(p.until),source:'Torn flight destination'};
+      if(/\b(?:returning from|flying back from|flight back|flying back|back to torn)\b/i.test(desc))
+        return {country:'Torn',phase:'inbound',eta:positive(p.until),source:'Torn return flight'};
+      if(/^abroad$/i.test(String(p.status||''))){
+        const where=current||nativeCountryName(desc);
+        if(where)return {country:where,phase:'abroad',source:'Torn abroad status'};
+      }
+      return {country:'Unknown',phase:'unknown-travel',eta:positive(p.until),source:'Destination not provided'};
+    }
+    if(['okay','hospital','jail','fallen'].includes(kind)){
+      const where=current||nativeCountryName(desc);
+      if(where)return {country:where,phase:'present',source:'Torn member status'};
+      return {country:'Torn',phase:'present',source:'Inferred from non-travel status'};
+    }
+    return {country:current||'Unknown',phase:'unknown',source:'Location not provided'};
+  }
+  function nativeWarOwnLocation(){
+    const id=positive(state.data.meta?.ownerId),me=state.data.ours.find(p=>p.id===id);
+    if(me){const info=nativeWarLocation(me);if(info.country!=='Unknown')
+      return {country:info.country,known:true,phase:info.phase};}
+    return {country:'Torn',known:false,phase:'unknown'};
+  }
+  function nativeWarCountryCompare(a,b,own=nativeWarOwnLocation()){
+    if(a===b)return 0;
+    if(own.known&&a===own.country)return -1;
+    if(own.known&&b===own.country)return 1;
+    if(a==='Unknown')return 1;
+    if(b==='Unknown')return -1;
+    return a.localeCompare(b,'en',{sensitivity:'base'});
+  }
+  function nativeWarAvailabilityRank(p){
+    const kind=memberState(p);
+    return kind==='okay'?0:kind==='hospital'?1:kind==='jail'?2:kind==='away'?3:4;
+  }
+  function nativeWarLastSeen(p,at=Date.now()){
+    const last=positive(p?.lastAt),state=String(p?.lastAction||'').toLowerCase();
+    if(state==='online'&&last&&at-last<15*MIN)return 'ONLINE';
+    if(!last||last>at+MIN)return 'Seen ?';
+    const min=Math.max(0,Math.floor((at-last)/MIN));
+    return min<1?'Seen now':min<60?'Seen '+min+'m':min<1440?
+      'Seen '+Math.floor(min/60)+'h':'Seen '+Math.floor(min/1440)+'d';
   }
   function flightCountdown(ms,at=Date.now()){
     if(!ms)return 'Unknown';
