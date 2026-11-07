@@ -38,7 +38,7 @@ function element(tag='div',name=''){
   };
   return node;
 }
-test('Torn PDA: v1.5.11 never inserts intel labels inside the existing player or status columns',()=>{
+test('Torn PDA: compact rows keep the native player/status cells intact',()=>{
   const row=element('li','enemy'),member=element('div','member'),status=element('div','status');
   row.id=123;
   row.querySelector=sel=>sel==='div.member'?member:sel==='div.status'?status:
@@ -48,8 +48,9 @@ test('Torn PDA: v1.5.11 never inserts intel labels inside the existing player or
     until:Date.now()+180000,lastAction:'Offline'}],ours:[],updated:{enemies:Date.now(),ours:Date.now()}}};
   const cfg={nativeWarEnabled:true,nativeWarFilter:'all',nativeWarSort:'availability',
     assignments:{},watchlist:{},blackSkulls:{}};
+  const nativeWarState={expandedId:0};
   const context={
-    document:{getElementById:()=>({}),querySelector:()=>box},state,cfg,Date,Map,Set,
+    document:{getElementById:()=>({}),querySelector:()=>box},state,cfg,nativeWarState,Date,Map,Set,
     isNativeWarPage:()=>true,activeWarNow:()=>true,nativeWarStyle:()=>{},nativeWarToolbar:()=>{},
     renderNativeChainBubble:()=>{},nativeWarRows:()=>[row],nativeWarPlayerId:x=>x.id,
     nativeWarConflict:()=>false,enemyRoleBands:()=>({heavy:new Set([123]),regular:new Set()}),
@@ -57,7 +58,7 @@ test('Torn PDA: v1.5.11 never inserts intel labels inside the existing player or
     positive:x=>Number(x)>0?Number(x):0,memberState:p=>p.status.toLowerCase(),
     nativeWarFilters:()=>true,nativeWarTransition:()=>null,MIN:60000,
     el:(tag,cls,text)=>{const n=element(tag,cls);n.textContent=text||'';return n;},
-    age:()=> '20s',hospitalCountdown:()=> '3m 00s',flightEvidence:()=>({kind:'returning'}),
+    age:()=> '20s',hospitalCountdown:()=> '3m 00s',nativeWarHospitalShort:()=> 'H 3m',flightEvidence:()=>({kind:'returning'}),
     enemyBattleEstimate:()=>({value:1500,verified:false,source:'FFScouter'}),
     nativeWarStrength:()=>({short:'FFS ~62m',detail:'Modelled 62m; public BSS 15,500'}),
     ffLabel:()=>({source:'estimate',value:'1.32x'}),fmt:String,nativeWarSort:()=>{}
@@ -70,14 +71,23 @@ test('Torn PDA: v1.5.11 never inserts intel labels inside the existing player or
   assert.equal(row.children.length,1,'One intel subrow even after repeated refreshes');
   assert.match(row.children[0].className,/wsnw-intel/);
   const labels=row.children[0].children.map(x=>x.textContent);
-  assert.deepEqual(labels,['Example enemy','HOSP 3m 00s','SKULL','FFS ~62m','Your FF 1.32x','Intel','Copy']);
+  assert.deepEqual(labels,['+ Example enemy','H 3m','SK','FFS ~62m','FF 1.32x','Intel','Copy']);
+  const detailButtons=row.children[0].children.filter(x=>['Intel','Copy'].includes(x.textContent));
+  assert.ok(detailButtons.every(x=>x.className.includes('wsnw-details-only')));
+  nativeWarState.expandedId=123;render();
+  assert.equal(row.classList.contains('wsnw-expanded'),true);
+  assert.deepEqual(row.children[0].children.map(x=>x.textContent),
+    ['- Example enemy','HOSP 3m 00s','BLACK SKULL','FFS ~62m','Your FF 1.32x','Intel','Copy']);
+  assert.ok(detailButtons.every(x=>!x.className.includes('wsnw-details-only')));
 });
 test('original Torn attack cells are allocated a separate fixed-height lane from the intelligence subrow',()=>{
   const css=section('  function nativeWarStyle(){','  // An opt-in small, draggable chain indicator.');
-  assert.match(css,/li\.wsnw-enhanced\{position:relative!important;height:79px!important;min-height:79px!important/);
-  assert.match(css,/li\.wsnw-enhanced > \.wsnw-intel\{position:absolute!important;top:49px!important/);
-  assert.match(css,/li\.wsnw-enhanced > \.attack\{height:49px!important;max-height:49px!important/);
+  assert.match(css,/li\.wsnw-enhanced\{position:relative!important;height:58px!important;min-height:58px!important/);
+  assert.match(css,/li\.wsnw-enhanced > \.wsnw-intel\{position:absolute!important;top:36px!important/);
+  assert.match(css,/li\.wsnw-enhanced > \.attack\{height:36px!important;max-height:36px!important/);
   assert.match(css,/overflow-x:auto!important/);
+  assert.match(css,/li\.wsnw-expanded\{height:82px!important/);
+  assert.match(css,/li\.wsnw-expanded \.wsnw-details-only\{display:inline-flex!important/);
   assert.match(css,/\.wsnw-owner\{position:sticky!important;left:0!important/);
   assert.doesNotThrow(()=>new Script(source));
 });
