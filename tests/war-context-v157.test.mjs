@@ -15,7 +15,7 @@ function mode(url,scope='contextual',faction=false,intent=''){
   return runInNewContext(routeCode+';warStripPageMode()',{
     location:{pathname:parsed.pathname,search:parsed.search,hash:parsed.hash},
     URLSearchParams,cfg:{warStripScope:scope},
-    factionRoute:()=>faction,itemIntent:()=>intent
+    factionRoute:()=>faction,itemIntent:()=>intent,isNativeWarPage:()=>false
   });
 }
 test('attack routes suppress the banner for all modes while faction/item routes retain full controls',()=>{
