@@ -1,4 +1,13 @@
-> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v1.5.8). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v1.5.9). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+
+## v1.5.9 - Mobile ranked-war layout repair (7 November 2026)
+
+- Fixes the Torn PDA player-list overlap shown in the 7 November screenshot. WarStaxx no longer places sizeable BSS, FF, role, order, countdown and copy labels **inside Torn's fixed-height member-name cell**.
+- Each enhanced player row now reserves its own 29px high, horizontally scrollable intelligence strip **below the original player/level/score/status/attack cells**. The native row is explicitly extended to 80px so adjacent players do not overlap; the original player graphics and attack links remain in place.
+- Tiny, separate chips show hospital countdown / return state, Skull/regular category, verified spy BSS versus estimated BSS, owner-specific FF versus historical team FF and any local assignment/watch. The copy action lives in the new subrow. Narrow mobile widths can scroll the intel subrow horizontally without scrolling the attack interface.
+- Removes leftover old-version labels from the native member/status columns when refreshing and cleans up all custom DOM on navigation. Shortens the native war toolbar by removing its verbose explanatory footer.
+- Keeps 20-second foreground official roster refresh, one-second read-only hospital countdowns, current Black Skulls policy, risk gates and all existing WarStaxx/hub settings and features. No automatic gameplay actions and no new permissions.
+- Regression checks cover script syntax, native row layout invariants, attack-route guard and expected parsing/sorting. Actual Torn PDA WebView rendering still needs a real-device check.
 
 ## v1.5.8 - Native faction war monitor (7 November 2026)
 
