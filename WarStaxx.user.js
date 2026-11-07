@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.5.9
+// @version      1.5.10
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='1.5.9';
+  const id='war', version='1.5.10';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.5.9', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.5.10', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -4962,6 +4962,10 @@
       '<p><b>FFScouter for your registered key:</b> '+(third&&third.ff!==null?third.ff.toFixed(2)+'x estimated':'no estimate')+
       ' | Public BSS estimate: '+(third&&third.bss?fmt(third.bss):'unknown')+
       ' | Exact battle stats: '+(bsScore(s)===null?'unknown':esc(s.source||'Legacy spy'))+'</p>'+ 
+      '<p><b>Do not compare different scales:</b> Public BSS is a square-root strength score; ' +
+      'FFScouter estimated total ('+esc(third?.bsEstimate&&third.bsEstimate>0?nativeCompactTotal(third.bsEstimate):'unknown')+
+      ') is a separate modelled guess. YATA can show a different estimate because it uses different evidence. '+
+      'WarStaxx does not currently fetch YATA estimates.</p>'+
       '<p>FFScouter data source '+esc(third?.source||'unknown')+' | Public estimate updated '+esc(third?.updatedAt?age(third.updatedAt):'unknown')+
       ' | Retrieved '+esc(third?.at?age(third.at):'never')+
       ' | Approximate total stats '+esc(third?.bsHuman||'unknown')+'.</p>'+
@@ -6212,6 +6216,8 @@
         row.classList.toggle('wsnw-filtered',enemy&&!nativeWarFilters(p,band,cfg.nativeWarFilter||'all'));
         const now=Date.now(),recent=enemy&&fresh?nativeWarTransition(id,now):null;
         row.classList.toggle('wsnw-recent',Boolean(recent));
+        row.classList.toggle('wsnw-newly-okay',Boolean(recent));
+        row.classList.toggle('wsnw-heavy-target',enemy&&band.heavy.has(id));
         const kind=memberState(p);
         row.classList.toggle('wsnw-hospital-soon',enemy&&fresh&&kind==='hospital'&&
           positive(p.until)>now&&p.until-now<5*MIN);
@@ -6224,6 +6230,10 @@
           infoBar=el('div','wsnw-intel');infoBar.setAttribute('aria-label','WarStaxx player intelligence');
           row.appendChild(infoBar);
         }
+        let name=infoBar.querySelector('.wsnw-owner');
+        if(!name){name=el('strong','wsnw-owner');infoBar.insertBefore(name,infoBar.firstChild);}
+        if(name.textContent!==p.name)name.textContent=p.name;
+        name.title=p.name+' ['+id+']';
         const chip=(key,value,variant='',title='')=>{
           let x=infoBar.querySelector('[data-wsnw-chip="'+key+'"]');
           if(value===null||value===undefined||value===''){x?.remove();return;}
@@ -6242,7 +6252,7 @@
           const flight=flightEvidence(p);
           message=flight.kind==='returning'?'RETURN '+(flight.eta?flightCountdown(flight.eta):'ETA ?'):
             flight.kind==='outbound'?'OUTBOUND':'ABROAD';
-        }else if(kind==='okay')message='OKAY';
+        }else if(kind==='okay')message=''; // Torn already shows Okay in the main Status column.
         if(recent)message=recent.kind+' | '+(message||'OKAY');
         const timer=chip('status',message,enemy&&kind==='hospital'&&positive(p.until)>now&&p.until-now<5*MIN?
           'wsnw-soon':'','Torn roster observed '+age(state.data.updated[enemy?'enemies':'ours']));
@@ -6251,17 +6261,16 @@
           else timer.removeAttribute('data-wsnw-expiry');
         }
         let role='';
-        if(enemy)role=band.heavy.has(id)?'SKULL':band.regular.has(id)?'REG':'UNCLASSIFIED';
+        if(enemy)role=band.heavy.has(id)?'SKULL':band.regular.has(id)?'REGULAR':'UNKNOWN';
         else if(cfg.blackSkulls[id])role='BLACK SKULL';
         chip('role',role,enemy&&band.heavy.has(id)?'wsnw-heavy':'',
           enemy?'Black Skulls target strength partition (not a guaranteed win)':'Your Black Skulls member');
         if(enemy){
-          const strength=enemyBattleEstimate(p);
-          chip('bss',strength.value!==null?(strength.verified?'BSS ':'~BSS ')+fmt(strength.value):'BSS ?',
-            '',strength.source||'No estimate');
+          const strength=nativeWarStrength(p);
+          chip('bss',strength.short,'',strength.detail);
           const ff=ffLabel(id);
-          chip('ff',ff.source==='estimate'?'FF '+ff.value:
-            ff.source==='observed'?'TEAM '+ff.value:'',
+          chip('ff',ff.source==='estimate'?'Your FF '+ff.value:
+            ff.source==='observed'?'Team FF '+ff.value:'',
             '',ff.source==='estimate'?'FF for your API-key owner, not for other squad members':
               'Recorded team FF, not your predicted attack FF');
           chip('order',orders.has(id)?'TO '+orders.get(id):cfg.watchlist[id]?'WATCH':'',
@@ -6269,6 +6278,12 @@
         }else{
           for(const key of ['bss','ff','order'])chip(key,'');
         }
+        let intel=infoBar.querySelector('.wsnw-intel-link');
+        if(enemy){
+          if(!intel){intel=el('button','wsnw-intel-link','Intel');intel.type='button';infoBar.appendChild(intel);}
+          intel.dataset.wsnwIntel=String(id);
+          intel.setAttribute('aria-label','Open full intelligence for '+p.name);
+        }else intel?.remove();
         let copy=infoBar.querySelector('.wsnw-copy');
         if(!row.querySelector('.twse-copy-btn')){
           if(!copy){copy=el('button','wsnw-copy','Copy');copy.type='button';infoBar.appendChild(copy);}
@@ -6328,6 +6343,11 @@
     }
   }
   document.addEventListener('click',e=>{
+    const intel=e.target?.closest?.('[data-wsnw-intel]');
+    if(intel&&isNativeWarPage()){
+      e.preventDefault();e.stopPropagation();
+      focusOpportunity(positive(intel.dataset.wsnwIntel));return;
+    }
     const copy=e.target?.closest?.('[data-wsnw-copy]');
     if(copy&&isNativeWarPage()){
       e.preventDefault();e.stopPropagation();
