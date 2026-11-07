@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.5.6
+// @version      1.5.7
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='1.5.6';
+  const id='war', version='1.5.7';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.5.6', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.5.7', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -199,7 +199,7 @@
   const link=id=>'https://www.torn.com/profiles.php?XID='+positive(id);
   const attackLink=id=>'https://www.torn.com/loader.php?sid=attack&user2ID='+positive(id);
   const apiKeyPda=typeof window.PDA_APIKEY==='string'?window.PDA_APIKEY:'###PDA-APIKEY###';
-  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},controlAssignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,warStripCompact:false,priorityNotifications:true,hitterRisk:{},heavyPolicy:{mode:'percent',percent:40,minBss:0},shared:{enabled:false,endpoint:'',token:'',canWrite:false},hidden:false};
+  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},controlAssignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,warStripCompact:false,warStripScope:'contextual',priorityNotifications:true,hitterRisk:{},heavyPolicy:{mode:'percent',percent:40,minBss:0},shared:{enabled:false,endpoint:'',token:'',canWrite:false},hidden:false};
   const cfg=Object.assign({},defaults,safeRead(CONFIG,{}));
   cfg.assignments=cfg.assignments&&typeof cfg.assignments==='object'?cfg.assignments:{};
   cfg.ordersByEnemy=cfg.ordersByEnemy&&typeof cfg.ordersByEnemy==='object'?cfg.ordersByEnemy:{};
@@ -3056,7 +3056,8 @@
     if(path==='/attack.php'||path==='/attack'||(path==='/loader.php'&&sid.startsWith('attack'))||
       /(?:^|[?#&])sid=attack(?:[&#]|$)/i.test(location.hash))return 'hidden';
     if(factionRoute()||(path==='/item.php'&&itemIntent()))return 'full';
-    return 'mini';
+    if(cfg.warStripScope==='faction')return 'hidden';
+    return cfg.warStripScope==='everywhere'?'full':'mini';
   }
   function handleWarScroll(e){
     if(!activeWarNow()||warStripPageMode()!=='full')return;
@@ -5172,6 +5173,12 @@
       (state.data.errors.identity?' | '+esc(state.data.errors.identity):'')+'</p>'+
       '<label>My faction ID (manual fallback when automatic detection is disabled)<input type="number" id="ws-our" min="1" value="'+(positive(cfg.ourId)||'')+'"></label>'+
       '<label>Opponent faction ID (auto-updated if a ranked war is detected)<input type="number" id="ws-enemy" min="1" value="'+(positive(cfg.enemyId)||'')+'"></label>'+
+      '<label>War bar visibility<select id="ws-strip-scope">'+
+      [['contextual','Compact summary outside war pages (recommended)'],
+       ['faction','Only show on faction / war pages'],
+       ['everywhere','Full bar elsewhere (never while attacking)']].map(([value,label])=>
+         '<option value="'+value+'" '+((cfg.warStripScope||'contextual')===value?'selected':'')+'>'+label+'</option>').join('')+
+      '</select></label><p class="ws-small">WarStaxx always hides the bar on the Torn attack screen. The TornStaxx launcher remains available.</p>'+
       '<label>Automatic refresh<select id="ws-interval">'+[90,120,180,300].map(s=>'<option value="'+s+'" '+(cfg.refreshSeconds===s?'selected':'')+'>'+s+' seconds while visible</option>').join('')+'</select></label>'+
       '<label>Historical wars per side<select id="ws-limit">'+[3,5,8,12,20].map(s=>'<option value="'+s+'" '+(cfg.historyLimit===s?'selected':'')+'>'+s+' wars</option>').join('')+'</select></label>'+
       '<label><input type="checkbox" id="ws-attacks" '+(cfg.enableAttacks?'checked':'')+'> Read faction attacks (optional faction API permission): FF observations, sampled ranked-war hit ledger and live opponent scoring where available</label>'+ 
@@ -5718,6 +5725,8 @@
           state.data.updated[key]=0;
       }
       if(setOpponent(positive($('#ws-enemy',root)?.value)))state.data.war=null;
+      const stripScope=String($('#ws-strip-scope',root)?.value||'contextual');
+      cfg.warStripScope=['contextual','faction','everywhere'].includes(stripScope)?stripScope:'contextual';
       cfg.refreshSeconds=Math.max(90,Math.min(300,positive($('#ws-interval',root)?.value)||120));
       cfg.historyLimit=Math.max(2,Math.min(20,positive($('#ws-limit',root)?.value)||8));
       cfg.enableAttacks=Boolean($('#ws-attacks',root)?.checked);
