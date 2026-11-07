@@ -40,9 +40,9 @@ function fakeList(rows){
     appendChild(fragment){this.children=fragment.nodes.slice();}};
 }
 test('all userscript registration version surfaces agree and code parses',()=>{
-  assert.match(source,/^\/\/ @version\s+1\.5\.8$/m);
-  assert.match(source,/const id='war', version='1\.5\.8'/);
-  assert.match(source,/const ID='war', VER='1\.5\.8'/);
+  assert.match(source,/^\/\/ @version\s+1\.5\.9$/m);
+  assert.match(source,/const id='war', version='1\.5\.9'/);
+  assert.match(source,/const ID='war', VER='1\.5\.9'/);
   assert.doesNotThrow(()=>new Script(source));
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
 });
@@ -105,4 +105,15 @@ test('no new permissions or hidden automated game actions; rate-limited official
   assert.match(source,/const nativeWarPolling=setInterval/);
   assert.doesNotMatch(native,/twse\.dev|GM_xmlhttpRequest|location\.assign\(attackLink/);
   assert.match(source,/^\/\/ @connect\s+api\.torn\.com$/m);
+});
+
+test('mobile layout uses a reserved sibling intelligence subrow, never the name/status columns',()=>{
+  const native=region('  // Torn native ranked-war enhancement:','  function mountFactionShortcut(){');
+  assert.match(native,/li\.wsnw-enhanced\{position:relative!important;height:80px!important;min-height:80px!important/);
+  assert.match(native,/> \.wsnw-intel\{position:absolute!important;top:49px!important/);
+  assert.match(native,/infoBar=el\('div','wsnw-intel'\)/);
+  assert.match(native,/row\.appendChild\(infoBar\)/);
+  assert.match(native,/member\.querySelectorAll\('\.wsnw-detail,\.wsnw-badge,\.wsnw-copy'\)\.forEach/);
+  assert.doesNotMatch(native,/member\.appendChild\(label\)|member\.appendChild\(desc\)/);
+  assert.match(native,/\.wsnw-intel \[data-wsnw-expiry\]/);
 });
