@@ -3055,7 +3055,7 @@
   function warStripPageMode(){
     const path=location.pathname.toLowerCase();
     const sid=(new URLSearchParams(location.search).get('sid')||'').toLowerCase();
-    if(path==='/attack.php'||path==='/attack'||(path==='/loader.php'&&sid.startsWith('attack'))||
+    if(path==='/attack.php'||path==='/attack'||(['/loader.php','/page.php'].includes(path)&&sid.startsWith('attack'))||
       /(?:^|[?#&])sid=attack(?:[&#]|$)/i.test(location.hash))return 'hidden';
     if(isNativeWarPage()&&cfg.nativeWarEnabled!==false)return 'hidden';
     if(factionRoute()||(path==='/item.php'&&itemIntent()))return 'full';
@@ -6273,7 +6273,7 @@
     const a=e.target?.closest?.('a[href]');if(!a)return;
     try{
       const u=new URL(a.href,location.href);
-      if(u.hostname===location.hostname&&u.pathname.toLowerCase()==='/loader.php'&&
+      if(u.hostname===location.hostname&&['/loader.php','/page.php'].includes(u.pathname.toLowerCase())&&
         (u.searchParams.get('sid')||'').toLowerCase().startsWith('attack'))
         document.getElementById('warstaxx-live-strip')?.remove();
     }catch(_){}
