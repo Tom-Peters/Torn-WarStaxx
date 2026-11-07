@@ -6025,7 +6025,7 @@
       '#wsnw-toolbar .wsnw-note{color:#97bdcf;font-size:10px}'+
       '.faction-war ul.members-list li .wsnw-detail{display:block;font:700 10px/1.25 system-ui,sans-serif;color:#8dd8f6;white-space:normal;margin-top:2px}'+
       '.faction-war ul.members-list li .wsnw-detail.wsnw-soon{color:#74e6af}'+
-      '.faction-war ul.members-list li .wsnw-badge{display:inline-block;font:750 9px/1.2 system-ui,sans-serif;background:#0f4560;color:#b5e9fb;border:1px solid #387e9f;border-radius:4px;padding:1px 4px;margin-left:4px;vertical-align:middle}'+
+      '.faction-war ul.members-list li .wsnw-badge{max-width:100%;white-space:normal;overflow-wrap:anywhere;display:inline-block;font:750 9px/1.2 system-ui,sans-serif;background:#0f4560;color:#b5e9fb;border:1px solid #387e9f;border-radius:4px;padding:1px 4px;margin-left:4px;vertical-align:middle}'+
       '.faction-war ul.members-list li .wsnw-badge.wsnw-heavy{color:#f0cefd;background:#392b58;border-color:#8065a8}'+
       '.faction-war ul.members-list li .wsnw-badge.wsnw-return{color:#b5ffdc;background:#215447;border-color:#409e74}'+
       '.faction-war ul.members-list li .wsnw-copy{margin-left:4px;padding:2px 5px;min-height:23px;border:1px solid #3f7894;border-radius:5px;background:#15405d;color:#d4f3ff;font:10px system-ui,sans-serif;cursor:pointer}'+
@@ -6114,11 +6114,18 @@
       cfg.nativeWarSort:'availability';
     const filter=['all','okay','hospital','returning','heavy','assigned','watched','active5','active60','offline'].includes(cfg.nativeWarFilter)?
       cfg.nativeWarFilter:'all';
-    const signature=[mode,filter,conflict,score?.our,score?.enemy,chain.fresh?chain.count:0,chain.remaining].join(':');
-    if(toolbar.dataset.signature===signature)return;
+    const signature=[mode,filter,conflict].join(':');
+    const scoreText=score?'Us '+fmt(score.our)+' / Them '+fmt(score.enemy):'LIVE WAR';
+    const chainText=chain.fresh?'Chain '+fmt(chain.count)+' ('+chain.remaining+'s)':'Chain unknown';
+    if(toolbar.dataset.signature===signature){
+      const headline=toolbar.querySelector('[data-wsnw-score]'),clock=toolbar.querySelector('[data-wsnw-chain]');
+      if(headline&&headline.textContent!=='WARSTAXX | '+scoreText)headline.textContent='WARSTAXX | '+scoreText;
+      if(clock&&clock.textContent!==chainText)clock.textContent=chainText;
+      return;
+    }
     toolbar.dataset.signature=signature;
-    toolbar.innerHTML='<strong>WARSTAXX | '+(score?'Us '+fmt(score.our)+' / Them '+fmt(score.enemy):'LIVE WAR')+'</strong>'+
-      (chain.fresh?'<span>Chain '+fmt(chain.count)+' ('+chain.remaining+'s)</span>':'')+
+    toolbar.innerHTML='<strong data-wsnw-score>WARSTAXX | '+scoreText+'</strong>'+
+      '<span data-wsnw-chain>'+chainText+'</span>'+
       '<label>Sort <select data-wsnw-sort>'+
       [['availability','Availability'],['hospital','Hospital expiry'],['bss','BSS highest'],['ff','FF highest'],['activity','Recent activity'],['torn','Torn order']].map(x=>
         '<option value="'+x[0]+'" '+(mode===x[0]?'selected':'')+'>'+x[1]+'</option>').join('')+
