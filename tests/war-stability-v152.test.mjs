@@ -10,11 +10,11 @@ function region(start,end){
   return source.slice(a,b);
 }
 
-test('all three Torn PDA version surfaces match 1.5.13 and script remains parser safe',()=>{
+test('all three Torn PDA version surfaces match 1.5.17 and script remains parser safe',()=>{
   assert.ok(source.startsWith('// ==UserScript==\n'));
-  assert.match(source,/^\/\/ @version\s+1\.5\.13$/m);
-  assert.match(source,/const id='war', version='1\.5\.13'/);
-  assert.match(source,/const ID='war', VER='1\.5\.13'/);
+  assert.match(source,/^\/\/ @version\s+1\.5\.17$/m);
+  assert.match(source,/const id='war', version='1\.5\.17'/);
+  assert.match(source,/const ID='war', VER='1\.5\.17'/);
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
 });
@@ -37,31 +37,23 @@ test('hub signal, headline and pace respect confirmed active-war status',()=>{
   assert.match(publish,/label:liveWar\?/);
 });
 
-test('nested table or modal scrolling never minimises live Torn command bar',()=>{
+test('war summary is in page flow and never changes size on any scrolling',()=>{
   let rerenders=0;
-  const scroller={scrollTop:0},document={
-    body:{},documentElement:{},scrollingElement:scroller
-  },window={scrollY:0},state={stripScrolled:false,stripExpanded:true};
+  const document={body:{},documentElement:{},scrollingElement:{scrollTop:200}};
+  const window={scrollY:350},state={stripScrolled:false,stripExpanded:true};
   const code=region('  function handleWarScroll(e){',
     '  function renderWarStrip(force=false){');
   const handler=runInNewContext(code+';handleWarScroll',{
-    activeWarNow:()=>true,warStripPageMode:()=> 'full',document,window,state,n:x=>Number(x)||0,
-    renderWarStrip:()=>{rerenders++;}
+    document,window,state,renderWarStrip:()=>{rerenders++;}
   });
-  handler({target:{scrollTop:340,matches:()=>false,closest:()=>null}});
+  handler({target:{scrollTop:390,matches:()=>false,closest:()=>null}});
+  handler({target:document});
+  handler({target:document.scrollingElement});
   assert.equal(rerenders,0);
   assert.equal(state.stripScrolled,false);
-  scroller.scrollTop=200;
-  handler({target:document});
-  assert.equal(rerenders,1);
-  assert.equal(state.stripScrolled,true);
-  handler({target:{scrollTop:390,matches:()=>false,closest:()=>null}});
-  assert.equal(rerenders,1);
-  scroller.scrollTop=0;
-  handler({target:{scrollTop:10,matches:()=>true,closest:()=>null}});
-  assert.equal(rerenders,2);
-  assert.equal(state.stripScrolled,false);
-  assert.equal(state.stripExpanded,false);
+  assert.equal(state.stripExpanded,true);
+  assert.match(source,/warstaxx-live-strip\{position:static/);
+  assert.doesNotMatch(code,/state\.stripScrolled=/);
 });
 
 test('assigned mission computes eligible targets once, without re-querying a second time',()=>{
