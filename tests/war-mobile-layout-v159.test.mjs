@@ -38,7 +38,7 @@ function element(tag='div',name=''){
   };
   return node;
 }
-test('Torn PDA: v1.5.10 never inserts intel labels inside the existing player or status columns',()=>{
+test('Torn PDA: v1.5.11 never inserts intel labels inside the existing player or status columns',()=>{
   const row=element('li','enemy'),member=element('div','member'),status=element('div','status');
   row.id=123;
   row.querySelector=sel=>sel==='div.member'?member:sel==='div.status'?status:
