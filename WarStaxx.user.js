@@ -3057,7 +3057,7 @@
     const sid=(new URLSearchParams(location.search).get('sid')||'').toLowerCase();
     if(path==='/attack.php'||path==='/attack'||(path==='/loader.php'&&sid.startsWith('attack'))||
       /(?:^|[?#&])sid=attack(?:[&#]|$)/i.test(location.hash))return 'hidden';
-    if(isNativeWarPage())return 'hidden';
+    if(isNativeWarPage()&&cfg.nativeWarEnabled!==false)return 'hidden';
     if(factionRoute()||(path==='/item.php'&&itemIntent()))return 'full';
     if(cfg.warStripScope==='faction')return 'hidden';
     return cfg.warStripScope==='everywhere'?'full':'mini';
@@ -5194,7 +5194,7 @@
       '<label>Native ranked-war default sorting<select id="ws-native-sort">'+
       [['availability','Available first'],['hospital','Hospital first'],['bss','Highest BSS first'],['ff','Highest FF first'],['activity','Most recently active'],['torn','Leave Torn order unchanged']].map(([value,label])=>
         '<option value="'+value+'" '+((cfg.nativeWarSort||'availability')===value?'selected':'')+'>'+label+'</option>').join('')+
-      '</select></label><p class="ws-small">Native controls appear inside Torn faction ranked-war lists, not on attack pages. If TWSE or FFScouter is sorting, WarStaxx will not override their order. No new background API requests.</p>'+
+      '</select></label><p class="ws-small">Native controls appear inside Torn faction ranked-war lists, not on attack pages. If TWSE or FFScouter is sorting, WarStaxx will not override their order. Official read-only status polls every 20 seconds while the ranked-war page is visible; Torn API backoff is respected.</p>'+
       '<label>War bar visibility<select id="ws-strip-scope">'+
       [['contextual','Compact summary outside war pages (recommended)'],
        ['faction','Only show on faction / war pages'],
@@ -5956,8 +5956,9 @@
     if(m==='okay')return 1;
     if(m==='hospital')return 2;
     if(flight?.kind==='returning')return 3;
-    if(m==='away')return 4;
-    return 5;
+    if(flight?.kind==='outbound')return 4;
+    if(m==='away')return 5;
+    return 6;
   }
   function nativeWarOrder(p,mode,at=Date.now()){
     const t=nativeWarTransition(p.id,at),kind=memberState(p),group=nativeWarClass(p);
@@ -5976,7 +5977,7 @@
     return [t?0:group,t?-t.at:eta,p.id];
   }
   function nativeWarSort(list,playerMap,mode){
-    if(!list||mode==='torn'||nativeWarConflict(list))return false;
+    if(!list||nativeWarConflict(list))return false;
     const all=Array.from(list.children),rows=nativeWarRows(list);
     if(rows.length<2||all.length!==rows.length||rows.some(r=>!r.classList.contains('enemy')))return false;
     if(!nativeWarState.original.has(list)){
@@ -6103,8 +6104,8 @@
           desc=status.querySelector('.wsnw-detail')||el('span','wsnw-detail');
         if(!desc.isConnected)status.appendChild(desc);
         let message='';
-        if(!fresh&&enemy)message='Roster stale - refresh';
-        else if(other)message=''; // TWSE already provides countdowns and flight labels.
+        if(!fresh&&enemy){message='Roster stale - refresh';desc.removeAttribute('data-wsnw-expiry');}
+        else if(other){message='';desc.removeAttribute('data-wsnw-expiry');} // TWSE already provides countdowns and flight labels.
         else if(kind==='hospital'){
           message='HOSP '+hospitalCountdown(p.until,now);
           desc.dataset.wsnwExpiry=String(positive(p.until));
@@ -6142,6 +6143,36 @@
       }
       if(fresh&&!conflict)nativeWarSort(list,enemyMap,cfg.nativeWarSort||'availability');
     }
+  }
+  async function pollNativeWar(){
+    if(!isNativeWarPage()||document.hidden||cfg.nativeWarEnabled===false||
+      !effectiveKey()||!positive(cfg.enemyId)||!activeWarNow()||
+      state.loading||nativeWarState.pollBusy)return;
+    nativeWarState.pollBusy=true;
+    try{
+      const prior=state.data.enemies.slice(),oldAt=n(state.data.updated.enemies);
+      // Only the existing official Torn faction-members endpoint; never scrape opponent pages.
+      const fresh=await call('/faction/'+cfg.enemyId+'/members','enemies',20000);
+      if(fresh){
+        const next=roster(fresh);
+        if(oldAt&&Date.now()-oldAt<5*MIN)
+          observeNativeWarTransitions(prior,next,positive(state.data.war?.id));
+        state.data.enemies=next;
+        if(oldAt&&Date.now()-oldAt<5*MIN)
+          recordAvailability(prior,next,positive(state.data.war?.id));
+        save();publish();if(state.open)render();syncNativeWar();
+      }
+      if(canCall('chain',30000)){
+        try{
+          const chain=await call('/faction/'+cfg.ourId+'/chain','chain',30000);
+          if(chain){const data=chainSnapshot(chain);if(data)state.data.chain=data;}
+        }catch(_){}
+      }
+      syncNativeWar();
+    }catch(e){
+      // Shared call() already handles API rate-limit/error backoff. Keep the native UI stable.
+      state.data.errors.nativeWar=String(e.message||e).slice(0,150);
+    }finally{nativeWarState.pollBusy=false;}
   }
   function tickNativeWar(){
     if(!isNativeWarPage()||document.hidden)return;
@@ -6219,6 +6250,7 @@
   const hospitalClockTimer=setInterval(()=>{if(!document.hidden)updateHospitalCountdowns();},10000);
   const nativeWarTimer=setInterval(()=>{if(!document.hidden)syncNativeWar();},5000);
   const nativeWarClock=setInterval(tickNativeWar,1000);
+  const nativeWarPolling=setInterval(()=>{if(!document.hidden)pollNativeWar();},20000);
   // Torn can navigate to an attack without a full reload.
   const warRouteTimer=setInterval(()=>{if(!document.hidden&&
     state.stripRouteKey!==location.pathname+location.search+location.hash)renderWarStrip(true);},1000);
@@ -6240,7 +6272,7 @@
   const refreshTimer=setInterval(()=>{
     if(!document.hidden&&effectiveKey()&&!state.loading&&Date.now()-state.lastRefresh>cfg.refreshSeconds*1000)refresh(false);
   },30000);
-  window.addEventListener('beforeunload',()=>{clearInterval(refreshTimer);clearInterval(registrationTimer);clearInterval(warStripTimer);clearInterval(warRouteTimer);clearInterval(hospitalClockTimer);clearInterval(nativeWarTimer);clearInterval(nativeWarClock);clearNativeWar();},{once:true});
+  window.addEventListener('beforeunload',()=>{clearInterval(refreshTimer);clearInterval(registrationTimer);clearInterval(warStripTimer);clearInterval(warRouteTimer);clearInterval(hospitalClockTimer);clearInterval(nativeWarTimer);clearInterval(nativeWarClock);clearInterval(nativeWarPolling);clearNativeWar();},{once:true});
   try{boot();}catch(err){
     window.__warStaxxReady=false;
     window.__warStaxxStartError='Startup failed ('+(err?.name||'Error')+')';
