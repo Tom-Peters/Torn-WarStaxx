@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.5.16
+// @version      1.5.17
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='1.5.16';
+  const id='war', version='1.5.17';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.5.16', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.5.17', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -199,7 +199,7 @@
   const link=id=>'https://www.torn.com/profiles.php?XID='+positive(id);
   const attackLink=id=>'https://www.torn.com/loader.php?sid=attack&user2ID='+positive(id);
   const apiKeyPda=typeof window.PDA_APIKEY==='string'?window.PDA_APIKEY:'###PDA-APIKEY###';
-  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},controlAssignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,warStripCompact:false,warStripScope:'contextual',nativeWarEnabled:true,nativeWarCountryGroups:true,nativeWarSort:'availability',nativeWarFilter:'all',nativeChainBubble:false,priorityNotifications:true,hitterRisk:{},heavyPolicy:{mode:'percent',percent:40,minBss:0},shared:{enabled:false,endpoint:'',token:'',canWrite:false},hidden:false};
+  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},controlAssignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,warStripCompact:true,warStripScope:'contextual',nativeWarEnabled:true,nativeWarCountryGroups:true,nativeWarSort:'availability',nativeWarFilter:'all',nativeChainBubble:false,priorityNotifications:true,hitterRisk:{},heavyPolicy:{mode:'percent',percent:40,minBss:0},shared:{enabled:false,endpoint:'',token:'',canWrite:false},hidden:false};
   const cfg=Object.assign({},defaults,safeRead(CONFIG,{}));
   cfg.assignments=cfg.assignments&&typeof cfg.assignments==='object'?cfg.assignments:{};
   cfg.ordersByEnemy=cfg.ordersByEnemy&&typeof cfg.ordersByEnemy==='object'?cfg.ordersByEnemy:{};
@@ -3052,8 +3052,7 @@
   function warQuick(action){
     const self=ourWarReadiness();
     if(action==='compact'){
-      if(state.stripScrolled&&!cfg.warStripCompact)state.stripExpanded=!state.stripExpanded;
-      else{cfg.warStripCompact=!cfg.warStripCompact;state.stripExpanded=false;saveCfg();}
+      state.stripExpanded=!state.stripExpanded;
       renderWarStrip(true);return;
     }
     if(action==='war'){open({section:'overview'});return;}
@@ -3145,23 +3144,8 @@
     return cfg.warStripScope==='everywhere'?'full':'mini';
   }
   function handleWarScroll(e){
-    if(!activeWarNow()||warStripPageMode()!=='full')return;
-    // Captured scroll events also come from tables, dialogs and Torn widgets.
-    // Only the document or Torn's own main page scroller may resize the bar.
-    const t=e?.target;
-    const documentScroll=!t||t===window||t===document||t===document.body||
-      t===document.documentElement||t===document.scrollingElement;
-    const mainScroll=!documentScroll&&t?.matches?.(
-      '#mainContent,#main-content,#mainContainer,#mainWrapper,main,[role="main"]')&&
-      !t.closest?.('#warstaxx-root,#staxx-hub-root');
-    if(!documentScroll&&!mainScroll)return;
-    const top=Math.max(n(window.scrollY),n(document.scrollingElement?.scrollTop),
-      mainScroll?n(t.scrollTop):0);
-    const next=top>130;
-    if(next===state.stripScrolled)return;
-    state.stripScrolled=next;
-    if(!next)state.stripExpanded=false;
-    renderWarStrip(true);
+    // Never resize the compact war commands on page scroll.
+    return;
   }
   function renderWarStrip(force=false){
     const mode=warStripPageMode();
@@ -3173,12 +3157,12 @@
     document.getElementById('warstaxx-faction-open')?.remove();
     if(!document.getElementById('warstaxx-live-style')){
       const style=document.createElement('style');style.id='warstaxx-live-style';
-      style.textContent='#warstaxx-live-strip{position:sticky;top:3px;z-index:40;clear:both;margin:8px 4px 12px;padding:10px;border-radius:12px;border:1px solid #448db0;background:linear-gradient(110deg,#091c30,#0d3b5b);color:#eafbff;font:13px/1.4 system-ui,Arial,sans-serif;box-sizing:border-box;box-shadow:0 8px 25px #0004}'+
+      style.textContent='#warstaxx-live-strip{position:static;top:auto;z-index:auto;clear:both;margin:5px 4px 7px;padding:6px 8px;border-radius:12px;border:1px solid #448db0;background:linear-gradient(110deg,#091c30,#0d3b5b);color:#eafbff;font:13px/1.4 system-ui,Arial,sans-serif;box-sizing:border-box;box-shadow:0 8px 25px #0004}'+
         '#warstaxx-live-strip *{box-sizing:border-box}#warstaxx-live-strip .wsw-top{display:flex;align-items:center;gap:9px;flex-wrap:wrap}'+
-        '#warstaxx-live-strip .wsw-top strong{font-size:17px}#warstaxx-live-strip .wsw-kicker{color:#6dd6fb;font-size:10px;font-weight:900}'+
+        '#warstaxx-live-strip .wsw-top strong{font-size:14px}#warstaxx-live-strip .wsw-kicker{color:#6dd6fb;font-size:10px;font-weight:900}'+
         '#warstaxx-live-strip .wsw-meta{display:flex;gap:6px 15px;flex-wrap:wrap;color:#bdd9e8;font-size:11px;margin:6px 0}'+
         '#warstaxx-live-strip .wsw-actions{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-top:8px}'+
-        '#warstaxx-live-strip button{background:#154a6d;border:1px solid #3f8db9;color:white;font:750 12px system-ui,Arial,sans-serif;min-height:43px;padding:7px;border-radius:8px;cursor:pointer}'+
+        '#warstaxx-live-strip button{background:#154a6d;border:1px solid #3f8db9;color:white;font:750 12px system-ui,Arial,sans-serif;min-height:29px;padding:4px 7px;border-radius:6px;cursor:pointer}'+
         '#warstaxx-live-strip button[data-ws-quick=hit]{background:#076fad;border-color:#61d5ff}'+
         '#warstaxx-live-strip button[data-ws-quick=compact]{margin-left:auto;background:#10314b;font-size:11px}'+
         '#warstaxx-live-strip .wsw-item-controls{border-top:1px solid #3b7794;margin-top:10px;padding-top:8px;display:flex;gap:7px;flex-wrap:wrap}'+
@@ -3194,7 +3178,8 @@
         '#warstaxx-live-strip.wsw-mini .wsw-top{flex-wrap:nowrap;gap:8px}'+
         '#warstaxx-live-strip.wsw-mini .wsw-top strong{font-size:12px;white-space:nowrap}'+
         '#warstaxx-live-strip.wsw-mini button{margin-left:auto;min-height:30px;padding:3px 9px;font-size:11px}'+
-        '@media(max-width:600px){#warstaxx-live-strip{margin:6px 2px;padding:8px}#warstaxx-live-strip .wsw-actions{grid-template-columns:repeat(3,minmax(0,1fr))}#warstaxx-live-strip button{font-size:11px;min-height:44px}#warstaxx-live-strip.wsw-mini{padding:3px 5px}#warstaxx-live-strip.wsw-mini .wsw-top{gap:5px}#warstaxx-live-strip.wsw-mini .wsw-top strong{font-size:10px}#warstaxx-live-strip.wsw-mini button{min-height:30px}}';
+        '@media(max-width:600px){#warstaxx-live-strip{margin:3px 2px;padding:5px 6px}#warstaxx-live-strip .wsw-actions{grid-template-columns:repeat(3,minmax(0,1fr))}#warstaxx-live-strip button{font-size:10px;min-height:28px}#warstaxx-live-strip.wsw-mini{padding:3px 5px}#warstaxx-live-strip.wsw-mini .wsw-top{gap:5px}#warstaxx-live-strip.wsw-mini .wsw-top strong{font-size:10px}#warstaxx-live-strip.wsw-mini button{min-height:30px}}';
+      style.textContent+="#warstaxx-live-strip{position:static!important;top:auto!important;z-index:auto!important;box-shadow:none!important}\n#warstaxx-live-strip .wsw-top{display:flex;align-items:center;gap:6px;flex-wrap:wrap}\n#warstaxx-live-strip .wsw-shortcuts{display:inline-flex;align-items:center;gap:4px;margin-left:auto}\n#warstaxx-live-strip .wsw-shortcuts button{min-height:29px;padding:4px 7px;white-space:nowrap}\n#warstaxx-live-strip .wsw-shortcuts button[data-ws-quick=\"hit\"]{background:#0875a9;border-color:#4dc8fc}\n#warstaxx-live-strip .wsw-shortcuts button[data-ws-quick=\"compact\"]{background:#12334a;border-color:#416b85}\n#warstaxx-live-strip .wsw-actions{grid-template-columns:repeat(3,minmax(0,1fr))}\n#warstaxx-live-strip .wsw-meta{margin:5px 0}\n@media(max-width:600px){#warstaxx-live-strip .wsw-top{gap:4px}#warstaxx-live-strip .wsw-shortcuts{gap:3px}#warstaxx-live-strip .wsw-shortcuts button{font-size:10px;padding:3px 5px;min-height:27px}}\n";
       document.head.appendChild(style);
     }
     if(!bar){
@@ -3234,33 +3219,34 @@
     bar.classList.remove('wsw-standby');
     const mission=myMission(),self=mission.self,score=warScore(),target=mission.target,
       opportunities=priorityOpportunities(),defence=turtleWindow(),chain=chainStatus(),
-      compact=Boolean(cfg.warStripCompact||(state.stripScrolled&&!state.stripExpanded)),
+      compact=!state.stripExpanded,
       intent=location.pathname.toLowerCase()==='/item.php'?itemIntent():'',
       sig=[state.data.war.id,score?.our,score?.enemy,self.kind,self.energy,target?.player.id,
         intent,compact,mission.assignedId,mission.issue,opportunities.map(x=>x.id+':'+x.at).join(','),state.quickHitPending,location.pathname,Math.floor(Date.now()/10000),chain.fresh?chain.count:0].join(':');
     if(!force&&bar.dataset.signature===sig)return;
     bar.dataset.signature=sig;
-    bar.innerHTML='<div class="wsw-top"><span class="wsw-kicker">RANKED WAR LIVE</span>'+
-      '<strong>Us '+(score?fmt(score.our):'?')+' / Them '+(score?fmt(score.enemy):'?')+'</strong>'+
-      '<strong>Net '+(score?(score.net>=0?'+':'')+fmt(score.net):'?')+'</strong>'+
-      btn(compact?'Expand':'Minimise','compact')+'</div>'+
-      (compact?'':'<div class="wsw-meta"><span>Your status: '+esc(self.kind)+' | '+(self.energy===null?'Energy unknown':fmt(self.energy)+' E')+'</span>'+
-        '<span>'+(mission.hasOrder?'MY ORDER: '+(mission.assigned?esc(mission.assigned.name):'#'+mission.assignedId)+
-          (target?' | verified for quick-hit':' | REVIEW: '+esc(mission.issue)):
-          target?'Suggested: '+esc(target.player.name)+' ('+fmt(target.pointsPer25)+' pts / 25 E proxy)':'No verified safe hit')+'</span>'+
-        '<span>Suggested cover '+(defence.minutes===null?'Review':defence.minutes+'m')+
-        ' | War '+esc(age(state.data.updated.wars))+' | roster '+esc(age(state.data.updated.ours))+'</span></div>')+
-      '<div class="wsw-actions">'+btn('TURTLE','turtle')+
-      btn(state.quickHitPending?'CHECKING...':self.kind==='hospital'?'HEAL TO HIT':mission.hasOrder&&!target?'REVIEW ORDER':'HIT','hit')+
-      (compact?btn('OPEN','war'):btn('HEAL','heal')+
-       btn(cfg.blackSkulls[self.id]?'MY SKULLS':'WAR ROOM',cfg.blackSkulls[self.id]?'skulls':'war')+
-       btn('MORE STATS','stats'))+'</div>'+
-      (chain.fresh?'<div class="wsw-meta"><span>Chain #'+fmt(chain.count)+
-        ' | '+chain.remaining+'s | next '+(chain.next===null?'unknown':
-        '#'+fmt(chain.next)+' (+'+fmt(chain.nextBonus)+' respect if unlocked) in '+
-          fmt(chain.nextIn)+' hits')+'</span></div>':'')+
-      (opportunities.length?'<div class="wsw-opportunities"><b>AVAILABLE:</b> '+
-        opportunities.slice(0,2).map(x=>btn(x.name,'opportunity:'+x.id)).join('')+'</div>':'')+
+    const actionLabel=state.quickHitPending?'CHECKING':self.kind==='hospital'?'HEAL':
+      mission.hasOrder&&!target?'ORDER':'HIT';
+    bar.innerHTML='<div class="wsw-top"><span class="wsw-kicker">WAR</span>'+
+      '<strong class="wsw-score">'+(score?fmt(score.our)+' - '+fmt(score.enemy):'? - ?')+'</strong>'+
+      '<span class="wsw-kicker">NET '+(score?(score.net>=0?'+':'')+fmt(score.net):'?')+'</span>'+
+      (chain.fresh?'<span class="wsw-kicker">CHAIN '+fmt(chain.count)+' / '+chain.remaining+'s</span>':'')+
+      '<span class="wsw-shortcuts">'+btn('Turtle','turtle')+
+      btn(actionLabel,'hit')+btn('Room','war')+btn(compact?'More':'Less','compact')+'</span></div>'+
+      (compact?'':'<div class="wsw-meta"><span>YOU: '+esc(self.kind)+
+        (self.energy===null?'':' | '+fmt(self.energy)+' E')+'</span>'+
+        '<span>'+(mission.hasOrder?'ORDER: '+(mission.assigned?esc(mission.assigned.name):'#'+mission.assignedId)+
+          (target?' | verified':' | review: '+esc(mission.issue)):
+          target?'Suggested: '+esc(target.player.name)+' | '+fmt(target.pointsPer25)+' pts / 25 E':
+            'No verified safe hit')+'</span>'+
+        '<span>War '+esc(age(state.data.updated.wars))+
+        ' | roster '+esc(age(state.data.updated.ours))+
+        ' | turtle window '+(defence.minutes===null?'unknown':defence.minutes+'m')+'</span></div>'+
+        '<div class="wsw-actions">'+btn('Heal items','heal')+
+        btn(cfg.blackSkulls[self.id]?'My Skulls':'Skulls',cfg.blackSkulls[self.id]?'skulls':'war')+
+        btn('Reports','stats')+'</div>'+
+        (opportunities.length?'<div class="wsw-opportunities"><b>READY:</b> '+
+          opportunities.slice(0,2).map(x=>btn(x.name,'opportunity:'+x.id)).join('')+'</div>':''))+
       (intent?'<div class="wsw-item-controls"><b>'+(intent==='turtle'?'Turtle items:':'Healing items:')+'</b>'+
         (intent==='turtle'?btn('Find Ipecac','item:ipecac')+btn('Find blood bags','item:blood'):
           btn('Find blood bags','item:blood')+btn('Find Morphine','item:morphine')+btn('Find First Aid','item:firstaid'))+
