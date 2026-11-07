@@ -4580,7 +4580,7 @@
       statAction('Enemy hospital',fresh?fmt(enemies.hospital):'Unknown','Watch expiry windows','tab:control')+
       statAction('Enemy active 24h',enemies.total?fmt(enemies.active24)+' / '+fmt(enemies.total):'Unknown','Last actions, not uptime','tab:activity')+
       statAction('Enemy points / hour',pace?.measurable?fmt(pace.rateEnemy):'Unknown','Sampled observations','tab:pace')+'</div>'+
-      bonusTargetCard()+
+      hospitalWatchCard()+bonusTargetCard()+
       leaderboardCard(5)+
       card('Immediate priorities',alerts.length?alerts.map(x=>'<div class="ws-row"><span><b>'+
         esc(x.title)+'</b><br><small>'+esc(x.detail)+'</small></span>'+
@@ -4782,6 +4782,20 @@
       el.textContent=hospitalCountdown(until);
       el.classList.toggle('ws-timer-soon',Boolean(until&&until-Date.now()<=5*MIN));
     }
+  }
+  function hospitalWatchCard(){
+    if(!rosterFresh('enemies'))return card('Next hospital exits',
+      '<p>Opponent roster is stale. Refresh before using any release window.</p>'+b('Refresh roster','refresh'));
+    const releases=state.data.enemies.filter(p=>memberState(p)==='hospital'&&positive(p.until))
+      .sort((a,b)=>a.until-b.until||a.id-b.id).slice(0,5);
+    return card('Next hospital exits | observed Torn status',
+      releases.length?'<p class="ws-small">Expiry is a countdown from the last official roster. A target may med out or be revived earlier; confirm Okay before attacking.</p>'+
+      releases.map(p=>'<div class="ws-row"><span>'+infoButton(p.name,p.id)+' '+ffBadge(p.id)+
+        '<br><small>Hospital until '+esc(stamp(p.until))+' | <b data-ws-hospital-until="'+positive(p.until)+'">'+
+        esc(hospitalCountdown(p.until))+'</b></small></span>'+
+        b('Intel','player:'+p.id)+' '+b(cfg.watchlist[p.id]?'Unwatch':'Watch','watch:'+p.id)+'</div>').join('')+
+        '<div class="ws-toolbar">'+b('Sort all by hospital exit','tab:targets')+'</div>':
+        empty('No opponents with known hospital-expiry data in the current roster.'));
   }
   function availabilitySortKey(p){
     const kind=memberState(p),flight=kind==='away'?flightEvidence(p):null;
