@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.5.13
+// @version      1.5.14
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='1.5.13';
+  const id='war', version='1.5.14';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.5.13', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.5.14', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -573,7 +573,7 @@
   function nativeWarOwnLocation(){
     const id=positive(state.data.meta?.ownerId),me=state.data.ours.find(p=>p.id===id);
     if(me){const info=nativeWarLocation(me);if(info.country!=='Unknown')
-      return {country:info.country,known:info.phase!=='inbound',phase:info.phase};}
+      return {country:info.country,known:true,phase:info.phase};}
     return {country:'Torn',known:false,phase:'unknown'};
   }
   function nativeWarCountryCompare(a,b,own=nativeWarOwnLocation()){
@@ -6123,7 +6123,7 @@
       for(const row of sorted){
         const player=playerMap.get(nativeWarPlayerId(row)),
           country=player?nativeWarLocation(player).country:'Unknown';
-        if(country!==lastCountry&&counts.has(country)){
+        if(!row.classList.contains('wsnw-filtered')&&country!==lastCountry&&counts.has(country)){
           let heading=headersByCountry.get(country);
           if(!heading){heading=el('li','wsnw-country-heading');heading.dataset.wsnwCountry=country;}
           const amount=counts.get(country);
@@ -6135,7 +6135,7 @@
           expected.push(heading);
         }
         expected.push(row);
-        lastCountry=country;
+        if(!row.classList.contains('wsnw-filtered'))lastCountry=country;
       }
     }else expected.push(...sorted);
     for(const old of priorHeaders)if(!expected.includes(old))old.remove();
@@ -6214,6 +6214,7 @@
       '.faction-war ul.members-list li.wsnw-enhanced > .member,.faction-war ul.members-list li.wsnw-enhanced > .level,.faction-war ul.members-list li.wsnw-enhanced > .points,.faction-war ul.members-list li.wsnw-enhanced > .status,.faction-war ul.members-list li.wsnw-enhanced > .attack{height:36px!important;max-height:36px!important;box-sizing:border-box!important}'+
       '.faction-war ul.members-list li.wsnw-enhanced > .wsnw-intel{position:absolute!important;top:36px!important;left:0!important;right:0!important;width:auto!important;height:20px!important;z-index:2;box-sizing:border-box!important;padding:1px 3px!important;display:flex!important;flex-direction:row!important;align-items:center!important;gap:4px!important;background:rgba(11,31,49,.98)!important;border-top:1px solid rgba(109,172,207,.25)!important;overflow-x:hidden!important;overflow-y:hidden!important;white-space:nowrap!important;scrollbar-width:none;touch-action:pan-y pinch-zoom!important;cursor:pointer}'+
       '.faction-war ul.members-list li.wsnw-enhanced > .wsnw-intel::-webkit-scrollbar{display:none}'+
+      '.faction-war ul.members-list li.wsnw-enhanced > .wsnw-intel *{touch-action:pan-y pinch-zoom!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-owner{position:sticky!important;left:0!important;z-index:3!important;float:none!important;flex:0 0 auto!important;max-width:105px!important;min-width:40px!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;color:#fff!important;font:800 11px system-ui,sans-serif!important;margin-right:2px!important;padding:0 3px 0 2px!important;background:#0b1f31!important;box-shadow:3px 0 5px #0b1f31!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-chip{position:static!important;float:none!important;flex:0 0 auto!important;display:inline-flex!important;align-items:center!important;max-width:140px!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;padding:1px 3px!important;margin:0!important;border-radius:4px!important;background:#123d56!important;border:1px solid #2b617d!important;color:#b7dffa!important;font:650 10px/1.2 system-ui,sans-serif!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-ff-danger{background:#5a2434!important;color:#ffd5d9!important;border-color:#af6470!important}'+
