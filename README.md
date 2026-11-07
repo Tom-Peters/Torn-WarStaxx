@@ -1,4 +1,11 @@
-> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v1.5.10). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v1.5.11). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+
+## v1.5.11 - Accurate uncapped FFScouter values and safer target warnings (7 November 2026)
+
+- **Correct FFScouter reading:** Torn awarded Fair Fight caps at 3.00, but FFScouter calculated FF may legitimately be 9.29 or higher for substantially stronger targets. The previous shared validator incorrectly discarded readings above 3.00. Actual logged Torn FF keeps its separate 1-3 validator.
+- Calculated FF above 3 gets a caution colour and above 4.5 a danger colour, including the native war rows. Values above 3 are **not awarded respect multipliers** or automatic win predictions.
+- Keeps v1.5.10 named/grouped player layout and explicit FFScouter ~total versus BSS sources; on upgrade a prior FFScouter timestamp is invalidated only for previously consented users. Manual Refresh FF bypasses cache age but not API error backoff.
+- Tests include tests/war-ffscouter-uncapped-v1511.test.mjs; live Torn PDA layout/response verification still pending.
 
 ## v1.5.10 - Clearly grouped mobile players and honest strength sources (7 November 2026)
 
