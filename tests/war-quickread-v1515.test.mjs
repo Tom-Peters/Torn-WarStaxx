@@ -58,8 +58,9 @@ test('compact strip keeps accessible scrolling, colored status, Skull badge and 
   assert.match(css,/touch-action:pan-y pinch-zoom!important/);
   assert.match(css,/wsnw-status\.wsnw-warning/);
   assert.match(css,/wsnw-status\.wsnw-soon/);
-  assert.match(css,/wsnw-role\.wsnw-heavy::before/);
-  assert.match(css,/wsnw-role\.wsnw-heavy::after/);
+  assert.match(css,/wsnw-role\.wsnw-heavy\{display:inline-flex!important/);
+  assert.match(css,/width:24px!important/);
+  assert.doesNotMatch(css,/wsnw-role\.wsnw-heavy::after/);
   assert.match(css,/font-size:11px!important;padding:1px 3px!important/);
   assert.match(source,/FLIGHT \| DEST HIDDEN/);
   assert.doesNotThrow(()=>new Script(source));
