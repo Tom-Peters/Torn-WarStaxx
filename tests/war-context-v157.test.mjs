@@ -21,6 +21,7 @@ function mode(url,scope='contextual',faction=false,intent=''){
 test('attack routes suppress the banner for all modes while faction/item routes retain full controls',()=>{
   for(const scope of ['contextual','faction','everywhere']){
     assert.equal(mode('https://www.torn.com/loader.php?sid=attack&user2ID=123',scope),'hidden');
+    assert.equal(mode('https://www.torn.com/page.php?sid=attack&user2ID=123',scope),'hidden');
     assert.equal(mode('https://www.torn.com/attack.php?user2ID=123',scope),'hidden');
     assert.equal(mode('https://www.torn.com/factions.php',scope,true),'full');
     assert.equal(mode('https://www.torn.com/item.php',scope,false,'heal'),'full');
