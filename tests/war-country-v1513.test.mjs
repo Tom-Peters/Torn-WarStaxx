@@ -100,7 +100,7 @@ test('scroll gesture is vertical on compact intel strips and no attack overlay i
   const css=region('  function nativeWarStyle(){','  // An opt-in small, draggable chain indicator.');
   assert.match(css,/overflow-x:hidden!important;overflow-y:hidden!important;white-space:nowrap!important/);
   assert.match(css,/touch-action:pan-y pinch-zoom!important/);
-  assert.match(css,/li\.wsnw-country-heading\{display:block!important/);
+  assert.match(css,/li\.wsnw-country-heading\{display:flex!important/);
   assert.match(css,/wsnw-heavy-target > \.wsnw-intel\{background:rgba\(51,27,78/);
   assert.match(source,/nativeWarCountryGroups:true/);
   assert.match(source,/const nativeWarPolling=setInterval/);
