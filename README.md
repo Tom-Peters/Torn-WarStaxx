@@ -1,5 +1,12 @@
 > **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v1.5.13). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
 
+## v1.5.14 - Location grouping and touch refinements (7 November 2026)
+
+- Inbound flights to the player's own destination country now receive the own-country priority, including flights back to Torn.
+- Hidden/filtered members no longer create misplaced or duplicate country headings.
+- Blue intelligence chips allow vertical touch gestures to scroll Torn's roster, including touch starts directly on text and badges.
+- Retains v1.5.13 country grouping, alphabetic countries, available-first sorting, prominent Black Skull highlighting, travel/hospital countdowns and last-online timers.
+
 ## v1.5.13 - Country-aware ranked war targeting (7 November 2026)
 
 - **Where people are:** Reads faction-member Torn status/destination hints, recognises the 11 normal travel destinations and Torn, and displays recognised country names rather than a generic "Abroad". Unknown destinations remain Unknown; the tool does not invent location certainty.
