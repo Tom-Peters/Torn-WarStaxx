@@ -60,6 +60,7 @@ test('Torn PDA: compact rows keep the native player/status cells intact',()=>{
     nativeWarFilters:()=>true,nativeWarTransition:()=>null,MIN:60000,
     nativeWarLocation:()=>({country:'Torn',phase:'present',source:'Official roster'}),
     nativeWarLastSeen:()=> 'Seen 4m',nativeWarHospitalTier:()=> 'wsnw-soon',
+    isOnline:()=>false,
     el:(tag,cls,text)=>{const n=element(tag,cls);n.textContent=text||'';return n;},
     age:()=> '20s',hospitalCountdown:()=> '3m 00s',nativeWarHospitalShort:()=> 'H 3m',flightEvidence:()=>({kind:'returning'}),
     enemyBattleEstimate:()=>({value:1500,verified:false,source:'FFScouter'}),
