@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.5.15
+// @version      1.5.16
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='1.5.15';
+  const id='war', version='1.5.16';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -6130,11 +6130,26 @@
           let heading=headersByCountry.get(country);
           if(!heading){heading=el('li','wsnw-country-heading');heading.dataset.wsnwCountry=country;}
           const amount=counts.get(country);
-          const name=country+(own.known&&own.phase!=='inbound'&&own.country===country?' | YOUR LOCATION':'');
-          const headline=name+' | '+amount.total+' player'+(amount.total===1?'':'s')+
-            ' | '+amount.okay+' Okay'+(amount.flights?' | '+amount.flights+' flying in':'');
-          if(heading.textContent!==headline)heading.textContent=headline;
+          const isHome=own.known&&own.phase!=='inbound'&&own.country===country;
+          const name=country+(isHome?' | YOU ARE HERE':'');
+          const summary=amount.total+' player'+(amount.total===1?'':'s')+
+            ' | '+amount.okay+' ready'+(amount.flights?' | '+amount.flights+' inbound':'');
+          const headline=name+' | '+summary;
+          // Preserve the simple text fallback used by non-browser diagnostics.
+          if(typeof heading.querySelector==='function'&&typeof heading.replaceChildren==='function'){
+            let title=heading.querySelector('.wsnw-country-title'),
+              stats=heading.querySelector('.wsnw-country-meta');
+            if(!title||!stats){
+              title=el('strong','wsnw-country-title');
+              stats=el('span','wsnw-country-meta');
+              heading.replaceChildren(title,stats);
+            }
+            if(title.textContent!==name)title.textContent=name;
+            if(stats.textContent!==summary)stats.textContent=summary;
+          }else if(heading.textContent!==headline)heading.textContent=headline;
+          heading.classList.toggle?.('wsnw-your-country',isHome);
           heading.setAttribute('aria-label',headline);
+          heading.title=headline;
           expected.push(heading);
         }
         expected.push(row);
@@ -6217,7 +6232,11 @@
       '.faction-war ul.members-list li.wsnw-enhanced{position:relative!important;height:58px!important;min-height:58px!important;box-sizing:border-box!important;border-left:3px solid #32718e!important;border-bottom:2px solid #34536b!important}'+
       '.faction-war ul.members-list li.wsnw-heavy-target{border-left:5px solid #bb84f5!important}'+
       '.faction-war ul.members-list li.wsnw-heavy-target > .wsnw-intel{background:rgba(51,27,78,.98)!important;border-top-color:#9b70c9!important}'+
-      '.faction-war ul.members-list li.wsnw-country-heading{display:block!important;position:relative!important;float:none!important;clear:both!important;width:100%!important;height:26px!important;min-height:26px!important;max-height:26px!important;margin:0!important;padding:5px 9px!important;box-sizing:border-box!important;border:0!important;border-left:4px solid #4e9cba!important;border-bottom:1px solid #50738a!important;background:#143c55!important;color:#f1fbff!important;font:800 11px/1.25 system-ui,sans-serif!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;pointer-events:none!important}'+
+      '.faction-war ul.members-list li.wsnw-country-heading{display:flex!important;position:relative!important;float:none!important;clear:both!important;align-items:center!important;justify-content:space-between!important;flex-wrap:wrap!important;gap:3px 12px!important;width:100%!important;height:auto!important;min-height:41px!important;max-height:none!important;margin:12px 0 4px!important;padding:7px 11px!important;box-sizing:border-box!important;border:0!important;border-top:2px solid #56cfff!important;border-bottom:2px solid #286b89!important;border-left:6px solid #56cfff!important;border-radius:4px!important;box-shadow:0 3px 8px #0007!important;background:linear-gradient(95deg,#155375,#102d46)!important;color:#f1fbff!important;font:800 11px/1.3 system-ui,sans-serif!important;white-space:normal!important;overflow:visible!important;pointer-events:none!important}'+
+      '.faction-war ul.members-list li.wsnw-country-heading:first-child{margin-top:3px!important}'+
+      '.faction-war ul.members-list li.wsnw-country-heading.wsnw-your-country{border-left-color:#5be2b3!important;border-top-color:#5be2b3!important;background:linear-gradient(95deg,#17564e,#123848)!important}'+
+      '.faction-war ul.members-list li.wsnw-country-heading .wsnw-country-title{flex:0 1 auto!important;min-width:0!important;font:900 13px/1.3 system-ui,sans-serif!important;letter-spacing:.5px!important;text-transform:uppercase!important;color:#fff!important}'+
+      '.faction-war ul.members-list li.wsnw-country-heading .wsnw-country-meta{flex:0 1 auto!important;min-width:0!important;color:#c1e8fa!important;font:750 11px/1.3 system-ui,sans-serif!important;text-align:right!important}'+
       '.faction-war ul.members-list li.wsnw-newly-okay{border-left-color:#42d69f!important}'+
       '.faction-war ul.members-list li.wsnw-enhanced > .member,.faction-war ul.members-list li.wsnw-enhanced > .level,.faction-war ul.members-list li.wsnw-enhanced > .points,.faction-war ul.members-list li.wsnw-enhanced > .status,.faction-war ul.members-list li.wsnw-enhanced > .attack{height:36px!important;max-height:36px!important;box-sizing:border-box!important}'+
       '.faction-war ul.members-list li.wsnw-enhanced > .wsnw-intel{position:absolute!important;top:36px!important;left:0!important;right:0!important;width:auto!important;height:20px!important;z-index:2;box-sizing:border-box!important;padding:1px 3px!important;display:flex!important;flex-direction:row!important;align-items:center!important;gap:4px!important;background:rgba(11,31,49,.98)!important;border-top:1px solid rgba(109,172,207,.25)!important;overflow-x:hidden!important;overflow-y:hidden!important;white-space:nowrap!important;scrollbar-width:none;touch-action:pan-y pinch-zoom!important;cursor:pointer}'+
@@ -6231,17 +6250,16 @@
       '.faction-war ul.members-list li .wsnw-intel .wsnw-status.wsnw-hospital{background:#502e38!important;color:#ffe2e5!important;border-color:#97616c!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-status.wsnw-warning{background:#694821!important;color:#fff0b7!important;border-color:#d8a44c!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-status.wsnw-soon{background:#15543c!important;color:#caffe2!important;border-color:#42d493!important}'+
-      '.faction-war ul.members-list li .wsnw-intel .wsnw-role.wsnw-heavy{background:#623288!important;border:2px solid #dfb4ff!important;color:#fff!important;font-weight:900!important;letter-spacing:.2px!important}'+
-      '.faction-war ul.members-list li .wsnw-intel .wsnw-role.wsnw-heavy::before{content:"\\2620";font-size:13px;margin-right:3px}'+
-      '.faction-war ul.members-list li:not(.wsnw-expanded) .wsnw-intel .wsnw-role.wsnw-heavy::after{content:" TARGET"}'+
+      '.faction-war ul.members-list li .wsnw-intel .wsnw-role.wsnw-heavy{display:inline-flex!important;justify-content:center!important;align-items:center!important;flex:0 0 24px!important;width:24px!important;min-width:24px!important;max-width:24px!important;height:20px!important;padding:0!important;background:#7132a3!important;border:2px solid #e1baff!important;border-radius:4px!important;color:#fff!important;font:900 15px/1 system-ui,sans-serif!important;box-shadow:0 0 0 1px #2e1740!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-presence{color:#afcde0!important;background:#203549!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-online{color:#bbffe6!important;background:#14553e!important;border-color:#42d69b!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-country{color:#e7ddff!important;background:#23425d!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-intel-link,.faction-war ul.members-list li .wsnw-intel .wsnw-copy{position:static!important;float:none!important;flex:0 0 auto!important;min-height:23px!important;height:23px!important;padding:1px 6px!important;margin:0!important;background:#1b526f!important;border:1px solid #568fb0!important;border-radius:5px!important;color:#ecfaff!important;font:700 10px system-ui,sans-serif!important;cursor:pointer!important}'+
       '.faction-war ul.members-list li.wsnw-enhanced .wsnw-details-only{display:none!important}'+
-      '.faction-war ul.members-list li.wsnw-expanded{height:82px!important;min-height:82px!important}'+
-      '.faction-war ul.members-list li.wsnw-expanded > .member,.faction-war ul.members-list li.wsnw-expanded > .level,.faction-war ul.members-list li.wsnw-expanded > .points,.faction-war ul.members-list li.wsnw-expanded > .status,.faction-war ul.members-list li.wsnw-expanded > .attack{height:45px!important;max-height:45px!important}'+
-      '.faction-war ul.members-list li.wsnw-expanded > .wsnw-intel{top:45px!important;height:35px!important;gap:5px!important;padding:3px 5px!important;overflow-x:auto!important;touch-action:auto!important}'+
+      '.faction-war ul.members-list li.wsnw-expanded{height:var(--wsnw-expanded-height,132px)!important;min-height:var(--wsnw-expanded-height,132px)!important;overflow:visible!important}'+
+      '.faction-war ul.members-list li.wsnw-expanded > .wsnw-intel{top:36px!important;height:auto!important;min-height:24px!important;max-height:none!important;gap:5px!important;padding:5px 6px!important;flex-wrap:wrap!important;align-content:flex-start!important;align-items:center!important;white-space:normal!important;overflow-x:hidden!important;overflow-y:visible!important;touch-action:pan-y pinch-zoom!important}'+
+      '.faction-war ul.members-list li.wsnw-expanded .wsnw-intel .wsnw-owner{position:static!important;flex:0 0 100%!important;max-width:100%!important;white-space:normal!important;overflow-wrap:anywhere!important;box-shadow:none!important;padding:0 3px 3px!important}'+
+      '.faction-war ul.members-list li.wsnw-expanded .wsnw-intel .wsnw-chip{max-width:100%!important;height:auto!important;min-height:18px!important;white-space:normal!important;overflow:visible!important;overflow-wrap:anywhere!important}'+
       '.faction-war ul.members-list li.wsnw-expanded .wsnw-details-only{display:inline-flex!important}'+
       '.faction-war ul.members-list li.wsnw-recent{outline:2px solid #e8a558;outline-offset:-2px}'+
       '.faction-war ul.members-list li.wsnw-enhanced:nth-child(even):not(.wsnw-heavy-target) > .wsnw-intel{background:rgba(20,43,61,.98)!important}'+
@@ -6450,7 +6468,7 @@
           }else{timer.removeAttribute('data-wsnw-eta');timer.removeAttribute('data-wsnw-country');}
         }
         let role='';
-        if(enemy)role=band.heavy.has(id)?(expanded?'BLACK SKULL TARGET':'BLACK SKULL'):
+        if(enemy)role=band.heavy.has(id)?'\u2620':
           expanded?(band.regular.has(id)?'REGULAR':'UNKNOWN'):'';
         else if(cfg.blackSkulls[id])role='BLACK SKULL';
         const roleChip=chip('role',role,enemy&&band.heavy.has(id)?'wsnw-heavy':'',
@@ -6496,10 +6514,19 @@
           copy.classList.toggle('wsnw-details-only',!expanded);
           copy.setAttribute('aria-label','Copy '+p.name+' ['+id+']');
         }else copy?.remove();
+        // The intelligence bar is absolutely positioned above the Torn row; its
+        // wrapped height must be reflected on the parent or the next row overlaps it.
+        if(expanded){
+          const rowHeight=Math.max(90,36+Math.ceil(infoBar.scrollHeight)+5);
+          row.style.setProperty('--wsnw-expanded-height',rowHeight+'px');
+        }else row.style.removeProperty('--wsnw-expanded-height');
       }
       if(fresh&&!conflict)nativeWarSort(list,enemyMap,cfg.nativeWarSort||'availability');
     }
   }
+  window.addEventListener('resize',()=>{
+    if(nativeWarState.expandedId&&isNativeWarPage())syncNativeWar();
+  },{passive:true});
   async function pollNativeWar(){
     if(!isNativeWarPage()||document.hidden||cfg.nativeWarEnabled===false||
       !effectiveKey()||!positive(cfg.enemyId)||!activeWarNow()||
