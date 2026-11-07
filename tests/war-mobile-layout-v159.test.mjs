@@ -27,8 +27,9 @@ function element(tag='div',name=''){
   node.setAttribute=(k,v)=>{node.attrs[k]=v;};
   node.removeAttribute=k=>{delete node.attrs[k];if(k==='data-wsnw-expiry')delete node.dataset.wsnwExpiry;};
   node.hasAttribute=k=>k in node.attrs;
-  node.appendChild=child=>{child.isConnected=true;node.children.push(child);return child;};
-  node.insertBefore=(child,reference)=>{child.isConnected=true;const i=node.children.indexOf(reference);node.children.splice(i<0?0:i,0,child);return child;};
+  node.appendChild=child=>{if(child.parentNode)child.parentNode.children=child.parentNode.children.filter(x=>x!==child);child.parentNode=node;child.isConnected=true;node.children.push(child);return child;};
+  node.insertBefore=(child,reference)=>{if(child.parentNode)child.parentNode.children=child.parentNode.children.filter(x=>x!==child);child.parentNode=node;child.isConnected=true;const i=node.children.indexOf(reference);node.children.splice(i<0?0:i,0,child);return child;};
+  Object.defineProperty(node,'nextElementSibling',{get(){const a=node.parentNode?.children||[];return a[a.indexOf(node)+1]||null;}});
   Object.defineProperty(node,'firstChild',{get(){return node.children[0]||null;}});
   node.remove=()=>{node.isConnected=false;};
   node.classList={
@@ -57,6 +58,8 @@ test('Torn PDA: compact rows keep the native player/status cells intact',()=>{
     rosterFresh:()=>true,warScore:()=>null,chainStatus:()=>({fresh:false}),
     positive:x=>Number(x)>0?Number(x):0,memberState:p=>p.status.toLowerCase(),
     nativeWarFilters:()=>true,nativeWarTransition:()=>null,MIN:60000,
+    nativeWarLocation:()=>({country:'Torn',phase:'present',source:'Official roster'}),
+    nativeWarLastSeen:()=> 'Seen 4m',
     el:(tag,cls,text)=>{const n=element(tag,cls);n.textContent=text||'';return n;},
     age:()=> '20s',hospitalCountdown:()=> '3m 00s',nativeWarHospitalShort:()=> 'H 3m',flightEvidence:()=>({kind:'returning'}),
     enemyBattleEstimate:()=>({value:1500,verified:false,source:'FFScouter'}),
@@ -71,13 +74,13 @@ test('Torn PDA: compact rows keep the native player/status cells intact',()=>{
   assert.equal(row.children.length,1,'One intel subrow even after repeated refreshes');
   assert.match(row.children[0].className,/wsnw-intel/);
   const labels=row.children[0].children.map(x=>x.textContent);
-  assert.deepEqual(labels,['+ Example enemy','H 3m','SKULL','FFS ~62m','FF 1.32x','Intel','Copy']);
+  assert.deepEqual(labels,['+ Example enemy','H 3m','BLACK SKULL','Seen 4m','FFS ~62m','FF 1.32x','Intel','Copy']);
   const detailButtons=row.children[0].children.filter(x=>['Intel','Copy'].includes(x.textContent));
   assert.ok(detailButtons.every(x=>x.className.includes('wsnw-details-only')));
   nativeWarState.expandedId=123;render();
   assert.equal(row.classList.contains('wsnw-expanded'),true);
   assert.deepEqual(row.children[0].children.map(x=>x.textContent),
-    ['- Example enemy','HOSP 3m 00s','BLACK SKULL','FFS ~62m','Your FF 1.32x','Intel','Copy']);
+    ['- Example enemy','HOSP 3m 00s','BLACK SKULL TARGET','Seen 4m','FFS ~62m','Your FF 1.32x','Intel','Copy']);
   assert.ok(detailButtons.every(x=>!x.className.includes('wsnw-details-only')));
 });
 test('original Torn attack cells are allocated a separate fixed-height lane from the intelligence subrow',()=>{
@@ -86,6 +89,9 @@ test('original Torn attack cells are allocated a separate fixed-height lane from
   assert.match(css,/li\.wsnw-enhanced > \.wsnw-intel\{position:absolute!important;top:36px!important/);
   assert.match(css,/li\.wsnw-enhanced > \.attack\{height:36px!important;max-height:36px!important/);
   assert.match(css,/overflow-x:auto!important/);
+  assert.match(css,/overflow-x:hidden!important;overflow-y:hidden!important/);
+  assert.match(css,/touch-action:pan-y pinch-zoom!important/);
+  assert.match(css,/li\.wsnw-country-heading\{display:block!important/);
   assert.match(css,/li\.wsnw-expanded\{height:82px!important/);
   assert.match(css,/li\.wsnw-expanded \.wsnw-details-only\{display:inline-flex!important/);
   assert.match(css,/\.wsnw-owner\{position:sticky!important;left:0!important/);
