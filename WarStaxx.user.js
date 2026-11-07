@@ -6297,7 +6297,7 @@
           else timer.removeAttribute('data-wsnw-expiry');
         }
         let role='';
-        if(enemy)role=band.heavy.has(id)?(expanded?'BLACK SKULL':'SK'):
+        if(enemy)role=band.heavy.has(id)?(expanded?'BLACK SKULL':'SKULL'):
           expanded?(band.regular.has(id)?'REGULAR':'UNKNOWN'):'';
         else if(cfg.blackSkulls[id])role='BLACK SKULL';
         chip('role',role,enemy&&band.heavy.has(id)?'wsnw-heavy':'',
