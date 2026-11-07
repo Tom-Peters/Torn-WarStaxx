@@ -6257,6 +6257,7 @@
   function tickNativeWar(){
     if(!isNativeWarPage()||document.hidden)return;
     const now=Date.now();
+    if(cfg.nativeChainBubble===true&&activeWarNow())renderNativeChainBubble(chainStatus());
     for(const span of document.querySelectorAll('.faction-war .wsnw-detail[data-wsnw-expiry]')){
       const expiry=positive(span.dataset.wsnwExpiry);
       const row=span.closest('li.enemy,li.your');
@@ -6348,21 +6349,23 @@
   const nativeWarPolling=setInterval(()=>{if(!document.hidden)pollNativeWar();},20000);
   // Torn can navigate to an attack without a full reload.
   const warRouteTimer=setInterval(()=>{if(!document.hidden&&
-    state.stripRouteKey!==location.pathname+location.search+location.hash)renderWarStrip(true);},1000);
+    state.stripRouteKey!==location.pathname+location.search+location.hash){renderWarStrip(true);syncNativeWar();}},1000);
   document.addEventListener('click',e=>{
     const a=e.target?.closest?.('a[href]');if(!a)return;
     try{
       const u=new URL(a.href,location.href);
       if(u.hostname===location.hostname&&['/loader.php','/page.php'].includes(u.pathname.toLowerCase())&&
-        (u.searchParams.get('sid')||'').toLowerCase().startsWith('attack'))
+        (u.searchParams.get('sid')||'').toLowerCase().startsWith('attack')){
         document.getElementById('warstaxx-live-strip')?.remove();
+        document.getElementById('wsnw-chain-bubble')?.remove();
+      }
     }catch(_){}
   },true);
   const sharedPolling=setInterval(()=>{if(!document.hidden&&sharedEndpoint()&&sharedScope())
     sharedPull(false);},90000);
   window.addEventListener('scroll',handleWarScroll,{passive:true});
   document.addEventListener('scroll',handleWarScroll,{passive:true,capture:true});
-  window.addEventListener('popstate',()=>renderWarStrip(true));
+  window.addEventListener('popstate',()=>{renderWarStrip(true);syncNativeWar();});
   window.addEventListener('hashchange',()=>{renderWarStrip(true);syncNativeWar();});
   const refreshTimer=setInterval(()=>{
     if(!document.hidden&&effectiveKey()&&!state.loading&&Date.now()-state.lastRefresh>cfg.refreshSeconds*1000)refresh(false);
