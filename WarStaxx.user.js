@@ -6255,6 +6255,7 @@
       '#wsnw-chain-bubble{position:fixed;right:9px;bottom:64px;z-index:150;max-width:185px;min-width:95px;padding:7px;background:#0b273c;border:1px solid #4ba6d0;border-radius:10px;box-shadow:0 4px 14px #0008;color:#ecfaff;font:11px system-ui,sans-serif;touch-action:none;user-select:none;cursor:move}'+
       '#wsnw-chain-bubble button{margin-left:4px;background:#164d6a;border:1px solid #438caa;border-radius:5px;color:white;padding:3px 6px;font:10px system-ui,sans-serif;cursor:pointer}'+
       '@media(max-width:600px){#wsnw-toolbar{gap:3px;padding:4px 5px}#wsnw-toolbar button,#wsnw-toolbar select{min-height:27px;padding:3px 6px} .faction-war ul.members-list li.wsnw-enhanced > .wsnw-intel{gap:3px!important;padding:1px 2px!important} .faction-war ul.members-list li .wsnw-intel .wsnw-chip{font-size:11px!important;padding:1px 3px!important}}';
+    style.textContent+=".faction-war ul.members-list li.wsnw-enhanced:not(.wsnw-expanded){height:56px!important;min-height:56px!important}\n.faction-war ul.members-list li.wsnw-enhanced:not(.wsnw-expanded)>.wsnw-intel{display:grid!important;grid-template-columns:26px minmax(0,1.35fr) minmax(0,.8fr) minmax(0,1.15fr) minmax(0,.85fr)!important;gap:3px!important;top:36px!important;height:20px!important;min-height:20px!important;padding:0 4px!important;align-content:center!important;align-items:center!important;overflow:hidden!important;white-space:nowrap!important;touch-action:pan-y pinch-zoom!important}\n.faction-war ul.members-list li.wsnw-enhanced:not(.wsnw-expanded) .wsnw-owner{display:none!important}\n.faction-war ul.members-list li.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip=\"role\"]{grid-column:1;grid-row:1;justify-self:center}\n.faction-war ul.members-list li.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip=\"status\"]{grid-column:2;grid-row:1}\n.faction-war ul.members-list li.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip=\"presence\"]{grid-column:3;grid-row:1}\n.faction-war ul.members-list li.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip=\"bss\"]{grid-column:4;grid-row:1}\n.faction-war ul.members-list li.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip=\"ff\"]{grid-column:5;grid-row:1}\n.faction-war ul.members-list li.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip=\"country\"],.faction-war ul.members-list li.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip=\"order\"]{display:none!important}\n.faction-war ul.members-list li.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel .wsnw-chip:not(.wsnw-heavy){min-width:0!important;max-width:100%!important;justify-content:flex-start!important;font-size:10px!important;padding:1px 2px!important;border-radius:2px!important}\n.faction-war ul.members-list li.wsnw-expanded .wsnw-intel .wsnw-owner{display:block!important;position:static!important}\n.faction-war ul.members-list li.wsnw-country-heading{min-height:32px!important;margin:6px 0 2px!important;padding:5px 8px!important;box-shadow:none!important}\n.faction-war ul.members-list li.wsnw-country-heading .wsnw-country-title{font-size:12px!important}\n.faction-war ul.members-list li.wsnw-country-heading .wsnw-country-meta{font-size:10px!important}\n.faction-war .wsnw-legend{display:grid;grid-template-columns:26px minmax(0,1.35fr) minmax(0,.8fr) minmax(0,1.15fr) minmax(0,.85fr);align-items:center;gap:3px;padding:4px 7px;margin:3px 0 0;border:1px solid #2c536c;border-bottom:0;background:#173347;color:#a6d3e7;font:800 9px/1.1 system-ui,sans-serif;text-transform:uppercase;letter-spacing:.15px;box-sizing:border-box}\n.faction-war .wsnw-legend span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n.faction-war .wsnw-legend span:first-child{text-align:center}\n#wsnw-toolbar{gap:5px;padding:5px 7px;margin:4px 0;border-radius:6px}\n#wsnw-toolbar strong{font-size:11px}\n#wsnw-toolbar button,#wsnw-toolbar select{min-height:27px;padding:3px 6px}\n@media(max-width:600px){.faction-war .wsnw-legend{font-size:8px;gap:2px;padding:3px 4px}.faction-war ul.members-list li.wsnw-enhanced:not(.wsnw-expanded)>.wsnw-intel{gap:2px!important;padding:0 3px!important}}\n";
     document.head.appendChild(style);
   }
   // An opt-in small, draggable chain indicator. Never mounted over an attack page.
@@ -6319,12 +6320,24 @@
   }
   function clearNativeWar(){
     document.getElementById('wsnw-toolbar')?.remove();
+    document.querySelectorAll('.faction-war .wsnw-legend').forEach(el=>el.remove());
     document.getElementById('wsnw-chain-bubble')?.remove();
     for(const h of document.querySelectorAll('.faction-war ul.members-list li.wsnw-country-heading'))h.remove();
     for(const row of document.querySelectorAll('.faction-war ul.members-list li.wsnw-enhanced')){
       row.classList.remove('wsnw-enhanced','wsnw-recent','wsnw-hospital-soon','wsnw-hospital-warning','wsnw-filtered');
       row.classList.remove('wsnw-heavy-target','wsnw-newly-okay','wsnw-expanded');
       row.querySelectorAll('.wsnw-intel,.wsnw-detail,.wsnw-badge,.wsnw-copy').forEach(el=>el.remove());
+    }
+  }
+  function nativeWarLegend(list,rows){
+    if(!rows.some(row=>row.classList.contains('enemy'))||typeof list.before!=='function')return;
+    let heading=list.previousElementSibling;
+    if(!heading?.classList?.contains('wsnw-legend')){
+      heading=el('div','wsnw-legend');
+      heading.setAttribute('aria-label','WarStaxx tactical table column headings');
+      heading.innerHTML='<span>Skull</span><span>Timer / travel</span>'+
+        '<span>Seen</span><span>Stats</span><span>FF</span>';
+      list.before(heading);
     }
   }
   function nativeWarToolbar(box,conflict,score,chain){
@@ -6384,6 +6397,7 @@
     }
     for(const list of lists){
       const rows=nativeWarRows(list);
+      nativeWarLegend(list,rows);
       for(const row of rows){
         const id=nativeWarPlayerId(row),enemy=row.classList.contains('enemy'),
           p=(enemy?enemyMap:ourMap).get(id);
