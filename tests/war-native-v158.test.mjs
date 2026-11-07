@@ -11,7 +11,7 @@ function region(start,end){
 }
 function moduleSandbox(){
   const location={pathname:'/factions.php',search:'',hash:'#/war/123'};
-  const cfg={nativeWarEnabled:true,nativeWarSort:'availability',
+  const cfg={nativeWarEnabled:true,nativeWarCountryGroups:false,nativeWarSort:'availability',
     nativeWarFilter:'all',assignments:{},watchlist:{},blackSkulls:{}};
   const state={data:{war:{id:123},enemies:[],ours:[]},open:false};
   const document={hidden:false,hasFocus:()=>true,addEventListener:()=>{},
@@ -21,6 +21,10 @@ function moduleSandbox(){
     memberState:p=>String(p?.status||'unknown').toLowerCase(),
     flightEvidence:p=>({kind:p?.returning?'returning':p?.outbound?'outbound':'abroad-or-unclear',eta:p?.until||null}),
     enemyBattleEstimate:p=>({value:p.bss??null}),ffLabel:id=>({source:'unknown',ff:null}),
+    nativeWarLocation:p=>({country:'Torn',phase:'present'}),
+    nativeWarOwnLocation:()=>({country:'Torn',known:true,phase:'present'}),
+    nativeWarCountryCompare:(a,b)=>a.localeCompare(b),
+    nativeWarAvailabilityRank:p=>p.status==='okay'?0:p.status==='hospital'?1:3,
     MIN:60000,Date,URL,Array,Map,Set,WeakMap,
     n:x=>Number(x)||0,el:()=>({}),warQuick:()=>{},saveCfg:()=>{},
     activeWarNow:()=>true,esc:String,rosterFresh:()=>true,warScore:()=>null,chainStatus:()=>({fresh:false}),
@@ -36,13 +40,13 @@ function fakeRow(id){
     querySelector:()=>({href:'https://www.torn.com/profiles.php?XID='+id})};
 }
 function fakeList(rows){
-  return {children:rows,getAttribute:()=>null,querySelector:()=>null,
+  return {children:rows,getAttribute:()=>null,querySelector:()=>null,querySelectorAll:()=>[],
     appendChild(fragment){this.children=fragment.nodes.slice();}};
 }
 test('all userscript registration version surfaces agree and code parses',()=>{
-  assert.match(source,/^\/\/ @version\s+1\.5\.12$/m);
-  assert.match(source,/const id='war', version='1\.5\.12'/);
-  assert.match(source,/const ID='war', VER='1\.5\.12'/);
+  assert.match(source,/^\/\/ @version\s+1\.5\.13$/m);
+  assert.match(source,/const id='war', version='1\.5\.13'/);
+  assert.match(source,/const ID='war', VER='1\.5\.13'/);
   assert.doesNotThrow(()=>new Script(source));
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
 });
@@ -109,11 +113,12 @@ test('no new permissions or hidden automated game actions; rate-limited official
 
 test('mobile layout uses a reserved sibling intelligence subrow, never the name/status columns',()=>{
   const native=region('  // Torn native ranked-war enhancement:','  function mountFactionShortcut(){');
-  assert.match(native,/li\.wsnw-enhanced\{position:relative!important;height:80px!important;min-height:80px!important/);
-  assert.match(native,/> \.wsnw-intel\{position:absolute!important;top:49px!important/);
+  assert.match(native,/li\.wsnw-enhanced\{position:relative!important;height:58px!important;min-height:58px!important/);
+  assert.match(native,/> \.wsnw-intel\{position:absolute!important;top:36px!important/);
   assert.match(native,/infoBar=el\('div','wsnw-intel'\)/);
   assert.match(native,/row\.appendChild\(infoBar\)/);
   assert.match(native,/member\.querySelectorAll\('\.wsnw-detail,\.wsnw-badge,\.wsnw-copy'\)\.forEach/);
   assert.doesNotMatch(native,/member\.appendChild\(label\)|member\.appendChild\(desc\)/);
   assert.match(native,/\.wsnw-intel \[data-wsnw-expiry\]/);
+  assert.match(native,/\.wsnw-intel \[data-wsnw-eta\]/);
 });
