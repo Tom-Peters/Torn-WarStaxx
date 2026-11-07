@@ -6165,7 +6165,7 @@
       if(canCall('chain',30000)){
         try{
           const chain=await call('/faction/'+cfg.ourId+'/chain','chain',30000);
-          if(chain){const data=chainSnapshot(chain);if(data)state.data.chain=data;}
+          if(chain){const data=chainSnapshot(chain);if(data){state.data.chain=data;save();}}
         }catch(_){}
       }
       syncNativeWar();
@@ -6211,6 +6211,21 @@
       e.preventDefault();e.stopPropagation();
       warQuick(String(button.dataset.wsnwAction));
     }
+  },true);
+  // An explicit Torn column-header click hands ordering back to Torn instead of
+  // continually undoing the player's native sort choice.
+  document.addEventListener('click',e=>{
+    if(!isNativeWarPage()||cfg.nativeWarEnabled===false)return;
+    const header=e.target?.closest?.(
+      '.faction-war .white-grad .member,.faction-war .white-grad .level,'+
+      '.faction-war .white-grad .points,.faction-war .white-grad .status');
+    if(!header||cfg.nativeWarSort==='torn')return;
+    cfg.nativeWarSort='torn';saveCfg();
+    setTimeout(()=>{
+      const box=document.querySelector('.faction-war');
+      for(const list of box?.querySelectorAll('ul.members-list')||[])nativeWarState.original.delete(list);
+      syncNativeWar();
+    },350);
   },true);
   document.addEventListener('change',e=>{
     const sort=e.target?.closest?.('#wsnw-toolbar [data-wsnw-sort]'),
