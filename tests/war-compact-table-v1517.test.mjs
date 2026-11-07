@@ -28,7 +28,7 @@ test('native tactical rows retain Torn columns and align secondary intelligence 
   assert.match(style,/grid-template-columns:26px minmax/);
   assert.match(style,/wsnw-owner\{display:none!important/);
   for(const key of ['role','status','presence','bss','ff']){
-    assert.ok(style.includes('[data-wsnw-chip="'+key+'"]'),key);
+    assert.match(style,new RegExp('data-wsnw-chip=[^;]*'+key),key);
   }
   assert.match(style,/touch-action:pan-y pinch-zoom!important/);
   assert.match(style,/wsnw-expanded .wsnw-intel .wsnw-owner\{display:block/);
