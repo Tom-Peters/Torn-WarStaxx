@@ -6081,7 +6081,7 @@
       nativeWarState.original.set(list,new Map(rows.map((r,i)=>[nativeWarPlayerId(r),i])));
     }
     const original=nativeWarState.original.get(list),own=nativeWarOwnLocation(),
-      grouping=mode!=='torn';
+      grouping=mode!=='torn'&&cfg.nativeWarCountryGroups!==false;
     const sorted=rows.slice().sort((a,b)=>{
       const pa=playerMap.get(nativeWarPlayerId(a)),pb=playerMap.get(nativeWarPlayerId(b));
       if(!pa||!pb)return (original.get(nativeWarPlayerId(a))??Infinity)-
@@ -6090,6 +6090,9 @@
         const country=nativeWarCountryCompare(nativeWarLocation(pa).country,
           nativeWarLocation(pb).country,own);
         if(country)return country;
+      }
+      // Okay targets always precede hospitalised/jailed/flying players in each country.
+      if(mode!=='torn'){
         const availability=nativeWarAvailabilityRank(pa)-nativeWarAvailabilityRank(pb);
         if(availability)return availability;
       }
@@ -6311,7 +6314,7 @@
       cfg.nativeWarSort:'availability';
     const filter=['all','okay','hospital','returning','heavy','assigned','watched','active5','active60','offline'].includes(cfg.nativeWarFilter)?
       cfg.nativeWarFilter:'all';
-    const signature=[mode,filter,conflict,nativeWarState.toolbarExpanded].join(':');
+    const signature=[mode,filter,conflict,nativeWarState.toolbarExpanded,cfg.nativeWarCountryGroups].join(':');
     const scoreText=score?'Us '+fmt(score.our)+' / Them '+fmt(score.enemy):'LIVE WAR';
     const chainText=chain.fresh?'Chain '+fmt(chain.count)+' ('+chain.remaining+'s)':'Chain unknown';
     if(toolbar.dataset.signature===signature){
@@ -6410,26 +6413,41 @@
         else if(other)message=''; // External timer already sits in Torn's normal status cell.
         else if(kind==='hospital')message=expanded?'HOSP '+hospitalCountdown(p.until,now):nativeWarHospitalShort(p.until,now);
         else if(kind==='away'){
-          const flight=flightEvidence(p);
-          message=flight.kind==='returning'?'RETURN '+(flight.eta?flightCountdown(flight.eta):'ETA ?'):
-            flight.kind==='outbound'?'FLYING':'ABROAD';
+          const place=nativeWarLocation(p);
+          if(place.phase==='inbound')message='To '+place.country+' '+(place.eta?flightCountdown(place.eta,now):'ETA ?');
+          else if(place.phase==='abroad')message='In '+place.country;
+          else message='Travel destination ?';
         }else if(kind==='okay')message=''; // Torn already shows Okay in the main Status column.
         if(recent)message=recent.kind+' | '+(message||'OKAY');
+        const place=nativeWarLocation(p);
         const timer=chip('status',message,enemy&&kind==='hospital'&&positive(p.until)>now&&p.until-now<5*MIN?
-          'wsnw-soon':'','Torn roster observed '+age(state.data.updated[enemy?'enemies':'ours']));
+          'wsnw-soon':'','Torn roster observed '+age(state.data.updated[enemy?'enemies':'ours'])+
+          ' | '+place.country+' ('+place.source+')');
         if(timer){
           if(kind==='hospital'&&!other&&(!enemy||fresh))timer.dataset.wsnwExpiry=String(positive(p.until));
           else timer.removeAttribute('data-wsnw-expiry');
+          if(kind==='away'&&place.phase==='inbound'&&positive(place.eta)){
+            timer.dataset.wsnwEta=String(place.eta);
+            timer.dataset.wsnwCountry=place.country;
+          }else{timer.removeAttribute('data-wsnw-eta');timer.removeAttribute('data-wsnw-country');}
         }
         let role='';
-        if(enemy)role=band.heavy.has(id)?(expanded?'BLACK SKULL':'SKULL'):
+        if(enemy)role=band.heavy.has(id)?(expanded?'BLACK SKULL TARGET':'BLACK SKULL'):
           expanded?(band.regular.has(id)?'REGULAR':'UNKNOWN'):'';
         else if(cfg.blackSkulls[id])role='BLACK SKULL';
         chip('role',role,enemy&&band.heavy.has(id)?'wsnw-heavy':'',
-          enemy?'Black Skulls target strength partition (not a guaranteed win)':'Your Black Skulls member');
+          enemy?'BLACK SKULL TARGET: high-strength opponent reserved for Black Skulls; not a guaranteed win':'Your Black Skulls member');
+        const country=chip('country',place.country!=='Torn'&&place.country!=='Unknown'&&kind!=='away'?place.country:'',
+          'wsnw-country','Reported location: '+place.country+' | '+place.source);
+        const seen=chip('presence',nativeWarLastSeen(p,now),'wsnw-presence',
+          'Last Torn action '+age(p.lastAt)+' | status '+p.lastAction);
+        if(seen){seen.dataset.wsnwLastAt=String(positive(p.lastAt));
+          seen.dataset.wsnwAction=String(p.lastAction||'Unknown');}
         if(enemy){
           const strength=nativeWarStrength(p);
-          chip('bss',strength.short,'',strength.detail);
+          const strengthChip=chip('bss',strength.short,'',strength.detail);
+          if(country&&strengthChip&&country.nextElementSibling!==strengthChip)infoBar.insertBefore(country,strengthChip);
+          if(seen&&strengthChip&&seen.nextElementSibling!==strengthChip)infoBar.insertBefore(seen,strengthChip);
           const ff=ffLabel(id);
           chip('ff',ff.source==='estimate'?(expanded?'Your FF ':'FF ')+ff.value+
               (ff.ff>4.5?(expanded?' RISK':' !'):ff.ff>3?(expanded?' HARD':' !'):''):
@@ -6496,18 +6514,28 @@
     if(!isNativeWarPage()||document.hidden)return;
     const now=Date.now();
     if(cfg.nativeChainBubble===true&&activeWarNow())renderNativeChainBubble(chainStatus());
-    for(const span of document.querySelectorAll('.faction-war .wsnw-intel [data-wsnw-expiry]')){
+    for(const span of document.querySelectorAll('.faction-war .wsnw-intel [data-wsnw-expiry],.faction-war .wsnw-intel [data-wsnw-eta]')){
       const expiry=positive(span.dataset.wsnwExpiry);
       const row=span.closest('li.enemy,li.your');
       if(!row||!expiry)continue;
       const id=nativeWarPlayerId(row),p=state.data.enemies.find(x=>x.id===id)||
         state.data.ours.find(x=>x.id===id);
-      if(!p||memberState(p)!=='hospital')continue;
-      const recent=nativeWarTransition(id,now),value=(recent?recent.kind+' | ':'')+
-        (row.classList.contains('wsnw-expanded')?'HOSP '+hospitalCountdown(expiry,now):nativeWarHospitalShort(expiry,now));
+      if(!p)continue;
+      const recent=nativeWarTransition(id,now),kind=memberState(p),place=nativeWarLocation(p);
+      let value='';
+      if(kind==='hospital'&&expiry){
+        value=(recent?recent.kind+' | ':'')+
+          (row.classList.contains('wsnw-expanded')?'HOSP '+hospitalCountdown(expiry,now):nativeWarHospitalShort(expiry,now));
+      }else if(kind==='away'&&place.phase==='inbound'){
+        value='To '+place.country+' '+(place.eta?flightCountdown(place.eta,now):'ETA ?');
+      }else continue;
       if(span.textContent!==value)span.textContent=value;
       span.classList.toggle('wsnw-soon',expiry>now&&expiry-now<5*MIN);
-      row.classList.toggle('wsnw-hospital-soon',expiry>now&&expiry-now<5*MIN);
+      row.classList.toggle('wsnw-hospital-soon',kind==='hospital'&&expiry>now&&expiry-now<5*MIN);
+    }
+    for(const span of document.querySelectorAll('.faction-war .wsnw-intel [data-wsnw-last-at]')){
+      const next=nativeWarLastSeen({lastAt:Number(span.dataset.wsnwLastAt),lastAction:span.dataset.wsnwAction},now);
+      if(span.textContent!==next)span.textContent=next;
     }
   }
   document.addEventListener('click',e=>{
