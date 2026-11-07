@@ -12,6 +12,8 @@ function section(start,end){
 function element(tag='div',name=''){
   const node={tag,className:name,children:[],dataset:{},style:{},attrs:{},isConnected:false,textContent:'',title:''};
   node.querySelector=function(sel){
+    if(sel==='.wsnw-owner')return this.children.find(x=>x.className.includes('wsnw-owner'))||null;
+    if(sel==='.wsnw-intel-link')return this.children.find(x=>x.className.includes('wsnw-intel-link'))||null;
     if(sel===':scope > .wsnw-intel')return this.children.find(x=>x.className.includes('wsnw-intel'))||null;
     if(sel==='.twse-copy-btn')return null;
     if(sel==='.wsnw-copy')return this.children.find(x=>x.className.includes('wsnw-copy'))||null;
@@ -26,6 +28,8 @@ function element(tag='div',name=''){
   node.removeAttribute=k=>{delete node.attrs[k];if(k==='data-wsnw-expiry')delete node.dataset.wsnwExpiry;};
   node.hasAttribute=k=>k in node.attrs;
   node.appendChild=child=>{child.isConnected=true;node.children.push(child);return child;};
+  node.insertBefore=(child,reference)=>{child.isConnected=true;const i=node.children.indexOf(reference);node.children.splice(i<0?0:i,0,child);return child;};
+  Object.defineProperty(node,'firstChild',{get(){return node.children[0]||null;}});
   node.remove=()=>{node.isConnected=false;};
   node.classList={
     add(k){node.className+=' '+k;},
@@ -34,7 +38,7 @@ function element(tag='div',name=''){
   };
   return node;
 }
-test('Torn PDA: v1.5.9 never inserts intel labels inside the existing player or status columns',()=>{
+test('Torn PDA: v1.5.10 never inserts intel labels inside the existing player or status columns',()=>{
   const row=element('li','enemy'),member=element('div','member'),status=element('div','status');
   row.id=123;
   row.querySelector=sel=>sel==='div.member'?member:sel==='div.status'?status:
@@ -55,6 +59,7 @@ test('Torn PDA: v1.5.9 never inserts intel labels inside the existing player or 
     el:(tag,cls,text)=>{const n=element(tag,cls);n.textContent=text||'';return n;},
     age:()=> '20s',hospitalCountdown:()=> '3m 00s',flightEvidence:()=>({kind:'returning'}),
     enemyBattleEstimate:()=>({value:1500,verified:false,source:'FFScouter'}),
+    nativeWarStrength:()=>({short:'FFS ~62m',detail:'Modelled 62m; public BSS 15,500'}),
     ffLabel:()=>({source:'estimate',value:'1.32x'}),fmt:String,nativeWarSort:()=>{}
   };
   const code=section('  function syncNativeWar(){','  async function pollNativeWar(){');
@@ -65,11 +70,11 @@ test('Torn PDA: v1.5.9 never inserts intel labels inside the existing player or 
   assert.equal(row.children.length,1,'One intel subrow even after repeated refreshes');
   assert.match(row.children[0].className,/wsnw-intel/);
   const labels=row.children[0].children.map(x=>x.textContent);
-  assert.deepEqual(labels,['HOSP 3m 00s','SKULL','~BSS 1500','FF 1.32x','Copy']);
+  assert.deepEqual(labels,['Example enemy','HOSP 3m 00s','SKULL','FFS ~62m','Your FF 1.32x','Intel','Copy']);
 });
 test('original Torn attack cells are allocated a separate fixed-height lane from the intelligence subrow',()=>{
   const css=section('  function nativeWarStyle(){','  // An opt-in small, draggable chain indicator.');
-  assert.match(css,/li\.wsnw-enhanced\{position:relative!important;height:80px!important;min-height:80px!important/);
+  assert.match(css,/li\.wsnw-enhanced\{position:relative!important;height:79px!important;min-height:79px!important/);
   assert.match(css,/li\.wsnw-enhanced > \.wsnw-intel\{position:absolute!important;top:49px!important/);
   assert.match(css,/li\.wsnw-enhanced > \.attack\{height:49px!important;max-height:49px!important/);
   assert.match(css,/overflow-x:auto!important/);
@@ -79,4 +84,22 @@ test('combat navigation still hides both live strip and optional chain bubble',(
   assert.match(source,/if\(path==='\/attack\.php'\|\|path==='\/attack'/);
   assert.match(source,/document\.getElementById\('warstaxx-live-strip'\)\?\.remove\(\)/);
   assert.match(source,/document\.getElementById\('wsnw-chain-bubble'\)\?\.remove\(\)/);
+});
+
+test('FFScouter modelled total and its square-root BSS remain separate provenance-aware metrics',()=>{
+  const helper=section('  function nativeCompactTotal(value){','  function nativeWarStyle(){');
+  const context={
+    Number,Date,fmt:String,age:()=> '5d',positive:Number,
+    enemyBattleEstimate:()=>({value:15448,source:'FFScouter BSS',verified:false}),
+    spy:()=>null,bsScore:()=>null,ffscouter:()=>({
+      bsEstimate:62000000,bss:15448,updatedAt:Date.now()-5*86400000,at:Date.now()
+    }),ffIsStale:()=>false
+  };
+  const result=runInNewContext(helper+';({nativeCompactTotal,nativeWarStrength})',context);
+  const summary=result.nativeWarStrength({id:123});
+  assert.equal(result.nativeCompactTotal(62000000),'62m');
+  assert.equal(summary.short,'FFS ~62m');
+  assert.match(summary.detail,/public BSS 15448/);
+  assert.match(summary.detail,/YATA uses another model/);
+  context.ffscouter=()=>null;
 });
