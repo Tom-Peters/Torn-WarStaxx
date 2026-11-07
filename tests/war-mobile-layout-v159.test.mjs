@@ -75,13 +75,13 @@ test('Torn PDA: compact rows keep the native player/status cells intact',()=>{
   assert.equal(row.children.length,1,'One intel subrow even after repeated refreshes');
   assert.match(row.children[0].className,/wsnw-intel/);
   const labels=row.children[0].children.map(x=>x.textContent);
-  assert.deepEqual(labels,['+ Example enemy','BLACK SKULL','H 3m','Seen 4m','FFS ~62m','FF 1.32x','Intel','Copy']);
+  assert.deepEqual(labels,['+ Example enemy','\u2620','H 3m','Seen 4m','FFS ~62m','FF 1.32x','Intel','Copy']);
   const detailButtons=row.children[0].children.filter(x=>['Intel','Copy'].includes(x.textContent));
   assert.ok(detailButtons.every(x=>x.className.includes('wsnw-details-only')));
   nativeWarState.expandedId=123;render();
   assert.equal(row.classList.contains('wsnw-expanded'),true);
   assert.deepEqual(row.children[0].children.map(x=>x.textContent),
-    ['- Example enemy','BLACK SKULL TARGET','HOSP 3m 00s','Seen 4m','FFS ~62m','Your FF 1.32x','Intel','Copy']);
+    ['- Example enemy','\u2620','HOSP 3m 00s','Seen 4m','FFS ~62m','Your FF 1.32x','Intel','Copy']);
   assert.ok(detailButtons.every(x=>!x.className.includes('wsnw-details-only')));
 });
 test('original Torn attack cells are allocated a separate fixed-height lane from the intelligence subrow',()=>{
@@ -89,11 +89,11 @@ test('original Torn attack cells are allocated a separate fixed-height lane from
   assert.match(css,/li\.wsnw-enhanced\{position:relative!important;height:58px!important;min-height:58px!important/);
   assert.match(css,/li\.wsnw-enhanced > \.wsnw-intel\{position:absolute!important;top:36px!important/);
   assert.match(css,/li\.wsnw-enhanced > \.attack\{height:36px!important;max-height:36px!important/);
-  assert.match(css,/overflow-x:auto!important/);
+  assert.match(css,/overflow-x:hidden!important;overflow-y:visible!important/);
   assert.match(css,/overflow-x:hidden!important;overflow-y:hidden!important/);
   assert.match(css,/touch-action:pan-y pinch-zoom!important/);
-  assert.match(css,/li\.wsnw-country-heading\{display:block!important/);
-  assert.match(css,/li\.wsnw-expanded\{height:82px!important/);
+  assert.match(css,/li\.wsnw-country-heading\{display:flex!important/);
+  assert.match(css,/li\.wsnw-expanded\{height:var\(--wsnw-expanded-height/);
   assert.match(css,/li\.wsnw-expanded \.wsnw-details-only\{display:inline-flex!important/);
   assert.match(css,/\.wsnw-owner\{position:sticky!important;left:0!important/);
   assert.doesNotThrow(()=>new Script(source));
