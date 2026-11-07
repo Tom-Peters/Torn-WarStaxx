@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.5.7
+// @version      1.5.8
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='1.5.7';
+  const id='war', version='1.5.8';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.5.7', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.5.8', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -199,7 +199,7 @@
   const link=id=>'https://www.torn.com/profiles.php?XID='+positive(id);
   const attackLink=id=>'https://www.torn.com/loader.php?sid=attack&user2ID='+positive(id);
   const apiKeyPda=typeof window.PDA_APIKEY==='string'?window.PDA_APIKEY:'###PDA-APIKEY###';
-  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},controlAssignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,warStripCompact:false,warStripScope:'contextual',priorityNotifications:true,hitterRisk:{},heavyPolicy:{mode:'percent',percent:40,minBss:0},shared:{enabled:false,endpoint:'',token:'',canWrite:false},hidden:false};
+  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},controlAssignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,warStripCompact:false,warStripScope:'contextual',nativeWarEnabled:true,nativeWarSort:'availability',nativeWarFilter:'all',priorityNotifications:true,hitterRisk:{},heavyPolicy:{mode:'percent',percent:40,minBss:0},shared:{enabled:false,endpoint:'',token:'',canWrite:false},hidden:false};
   const cfg=Object.assign({},defaults,safeRead(CONFIG,{}));
   cfg.assignments=cfg.assignments&&typeof cfg.assignments==='object'?cfg.assignments:{};
   cfg.ordersByEnemy=cfg.ordersByEnemy&&typeof cfg.ordersByEnemy==='object'?cfg.ordersByEnemy:{};
@@ -2001,7 +2001,9 @@
         const old=state.data.enemies.slice(),oldAt=n(state.data.updated.enemies);
         const enemy=await call('/faction/'+cfg.enemyId+'/members','enemies',force?0:90*1000);
         if(enemy){
-          const fresh=roster(enemy);state.data.enemies=fresh;
+          const fresh=roster(enemy);
+          if(oldAt&&Date.now()-oldAt<5*MIN&&activeWarNow())observeNativeWarTransitions(old,fresh,positive(state.data.war?.id));
+          state.data.enemies=fresh;
           if(previousWarId&&state.data.war&&previousWarId===positive(state.data.war.id)&&
             oldAt&&Date.now()-oldAt<5*MIN)recordAvailability(old,fresh,previousWarId);
         }
@@ -2025,7 +2027,7 @@
       if(sharedEndpoint()&&sharedScope())sharedPull(false);
       state.lastRefresh=Date.now();
     }catch(e){state.error=String(e.message||e);}
-    finally{state.loading=false;state.spinner='';save();publish();render();}
+    finally{state.loading=false;state.spinner='';save();publish();render();syncNativeWar();}
   }
   function el(tag,cls,text){const a=document.createElement(tag);if(cls)a.className=cls;if(text!==undefined)a.textContent=String(text);return a;}
   const root=el('div');root.id='warstaxx-root';
@@ -3055,6 +3057,7 @@
     const sid=(new URLSearchParams(location.search).get('sid')||'').toLowerCase();
     if(path==='/attack.php'||path==='/attack'||(path==='/loader.php'&&sid.startsWith('attack'))||
       /(?:^|[?#&])sid=attack(?:[&#]|$)/i.test(location.hash))return 'hidden';
+    if(isNativeWarPage())return 'hidden';
     if(factionRoute()||(path==='/item.php'&&itemIntent()))return 'full';
     if(cfg.warStripScope==='faction')return 'hidden';
     return cfg.warStripScope==='everywhere'?'full':'mini';
@@ -5187,6 +5190,11 @@
       (state.data.errors.identity?' | '+esc(state.data.errors.identity):'')+'</p>'+
       '<label>My faction ID (manual fallback when automatic detection is disabled)<input type="number" id="ws-our" min="1" value="'+(positive(cfg.ourId)||'')+'"></label>'+
       '<label>Opponent faction ID (auto-updated if a ranked war is detected)<input type="number" id="ws-enemy" min="1" value="'+(positive(cfg.enemyId)||'')+'"></label>'+
+      '<label><input type="checkbox" id="ws-native-war" '+(cfg.nativeWarEnabled!==false?'checked':'')+'> Enhance Torn native ranked-war player rows (status countdowns, Black Skulls, filters, copy)</label>'+
+      '<label>Native ranked-war default sorting<select id="ws-native-sort">'+
+      [['availability','Available first'],['hospital','Hospital first'],['bss','Highest BSS first'],['ff','Highest FF first'],['activity','Most recently active'],['torn','Leave Torn order unchanged']].map(([value,label])=>
+        '<option value="'+value+'" '+((cfg.nativeWarSort||'availability')===value?'selected':'')+'>'+label+'</option>').join('')+
+      '</select></label><p class="ws-small">Native controls appear inside Torn faction ranked-war lists, not on attack pages. If TWSE or FFScouter is sorting, WarStaxx will not override their order. No new background API requests.</p>'+
       '<label>War bar visibility<select id="ws-strip-scope">'+
       [['contextual','Compact summary outside war pages (recommended)'],
        ['faction','Only show on faction / war pages'],
@@ -5739,6 +5747,9 @@
           state.data.updated[key]=0;
       }
       if(setOpponent(positive($('#ws-enemy',root)?.value)))state.data.war=null;
+      cfg.nativeWarEnabled=Boolean($('#ws-native-war',root)?.checked);
+      const nativeSort=String($('#ws-native-sort',root)?.value||'availability');
+      cfg.nativeWarSort=['availability','hospital','bss','ff','activity','torn'].includes(nativeSort)?nativeSort:'availability';
       const stripScope=String($('#ws-strip-scope',root)?.value||'contextual');
       cfg.warStripScope=['contextual','faction','everywhere'].includes(stripScope)?stripScope:'contextual';
       cfg.refreshSeconds=Math.max(90,Math.min(300,positive($('#ws-interval',root)?.value)||120));
@@ -5899,6 +5910,283 @@
     return /^\/(factions|war)\.php$/i.test(location.pathname) ||
       (/^\/page\.php$/i.test(location.pathname) && /^(rankedwar|factionwar|war)$/i.test(new URLSearchParams(location.search).get('sid')||''));
   }
+
+  // Torn native ranked-war enhancement: use Torn's own member rows, not a floating overlay.
+  // All source data is from existing WarStaxx API observations and opt-in FFScouter.
+  const nativeWarState={transitions:new Map(),original:new WeakMap(),lastWar:0};
+  function isNativeWarPage(){
+    return /^\/factions\.php$/i.test(location.pathname)&&/^#\/war(?:\/|$)/i.test(location.hash||'');
+  }
+  function nativeWarForeground(){
+    return !document.hidden&&Boolean(window.flutter_inappwebview||document.hasFocus?.());
+  }
+  function nativeWarRows(list){
+    return Array.from(list?.children||[]).filter(el=>el.matches?.('li.enemy,li.your'));
+  }
+  function nativeWarPlayerId(row){
+    const anchor=row.querySelector('a[href*="profiles.php"]');
+    if(!anchor)return 0;
+    try{return positive(new URL(anchor.href,location.href).searchParams.get('XID'));}catch(_){return 0;}
+  }
+  function nativeWarConflict(list){
+    return list?.getAttribute('data-ffscouter-active-filter')==='true'||
+      Boolean(list?.querySelector('.twse-copy-btn,[data-twse-overridden],[data-twse-last-action-timestamp]'));
+  }
+  function observeNativeWarTransitions(before,after,warId,at=Date.now()){
+    if(!positive(warId)||!Array.isArray(before)||!Array.isArray(after))return;
+    if(nativeWarState.lastWar&&nativeWarState.lastWar!==warId)nativeWarState.transitions.clear();
+    nativeWarState.lastWar=warId;
+    for(const [id,x] of nativeWarState.transitions)if(at-x.at>20000)nativeWarState.transitions.delete(id);
+    // A state-change observation is not proof of the actual exact release time.
+    for(const next of after){
+      const prev=before.find(p=>p.id===next.id);
+      if(!prev||memberState(next)!=='okay'||!['hospital','away'].includes(memberState(prev)))continue;
+      const early=memberState(prev)==='hospital'&&positive(prev.until)>at+2000;
+      nativeWarState.transitions.set(next.id,{at,warId,kind:early?'EARLY MED / REVIVE':
+        memberState(prev)==='away'?'LANDED / RETURNED':'NEWLY OKAY'});
+    }
+  }
+  function nativeWarTransition(id,at=Date.now()){
+    const t=nativeWarState.transitions.get(id);
+    return t&&t.warId===positive(state.data.war?.id)&&at-t.at<15000&&at>=t.at&&
+      nativeWarForeground()?t:null;
+  }
+  function nativeWarClass(p){
+    const m=memberState(p),flight=m==='away'?flightEvidence(p):null;
+    if(m==='okay')return 1;
+    if(m==='hospital')return 2;
+    if(flight?.kind==='returning')return 3;
+    if(m==='away')return 4;
+    return 5;
+  }
+  function nativeWarOrder(p,mode,at=Date.now()){
+    const t=nativeWarTransition(p.id,at),kind=memberState(p),group=nativeWarClass(p);
+    const eta=kind==='hospital'?positive(p.until)||Infinity:
+      kind==='away'&&flightEvidence(p).kind==='returning'?flightEvidence(p).eta||Infinity:Infinity;
+    if(mode==='activity')return [p.lastAt?-p.lastAt:Infinity,p.id];
+    if(mode==='bss'){
+      const est=enemyBattleEstimate(p).value;
+      return [est===null?1:0,est===null?0:-est,p.id];
+    }
+    if(mode==='ff'){
+      const info=ffLabel(p.id),ff=info.source==='estimate'?Number(info.ff):NaN;
+      return [Number.isFinite(ff)?0:1,Number.isFinite(ff)?-ff:0,p.id];
+    }
+    if(mode==='hospital')return [kind==='hospital'?0:1,kind==='hospital'?eta:group,p.id];
+    return [t?0:group,t?-t.at:eta,p.id];
+  }
+  function nativeWarSort(list,playerMap,mode){
+    if(!list||mode==='torn'||nativeWarConflict(list))return false;
+    const all=Array.from(list.children),rows=nativeWarRows(list);
+    if(rows.length<2||all.length!==rows.length||rows.some(r=>!r.classList.contains('enemy')))return false;
+    if(!nativeWarState.original.has(list)){
+      nativeWarState.original.set(list,new Map(rows.map((r,i)=>[nativeWarPlayerId(r),i])));
+    }
+    const original=nativeWarState.original.get(list);
+    const sort=rows.slice().sort((a,b)=>{
+      const pa=playerMap.get(nativeWarPlayerId(a)),pb=playerMap.get(nativeWarPlayerId(b));
+      if(!pa||!pb)return (original.get(nativeWarPlayerId(a))??Infinity)-
+        (original.get(nativeWarPlayerId(b))??Infinity);
+      const ak=mode==='torn'?[original.get(pa.id)??Infinity]:nativeWarOrder(pa,mode);
+      const bk=mode==='torn'?[original.get(pb.id)??Infinity]:nativeWarOrder(pb,mode);
+      for(let i=0;i<Math.max(ak.length,bk.length);i++){
+        if((ak[i]??0)!==(bk[i]??0))return (ak[i]??0)-(bk[i]??0);
+      }
+      return pa.id-pb.id;
+    });
+    if(rows.some((row,i)=>row!==sort[i])){
+      const frag=document.createDocumentFragment();
+      for(const row of sort)frag.appendChild(row);
+      list.appendChild(frag);
+    }
+    return true;
+  }
+  function nativeWarFilters(p,band,filter){
+    if(filter==='okay')return memberState(p)==='okay';
+    if(filter==='hospital')return memberState(p)==='hospital';
+    if(filter==='returning')return flightEvidence(p).kind==='returning';
+    if(filter==='heavy')return band.heavy.has(p.id);
+    if(filter==='assigned')return Object.values(cfg.assignments).some(id=>positive(id)===p.id);
+    if(filter==='watched')return Boolean(cfg.watchlist[p.id]);
+    return true;
+  }
+  function nativeWarStyle(){
+    if(document.getElementById('wsnw-style'))return;
+    const style=document.createElement('style');style.id='wsnw-style';
+    style.textContent=
+      '#wsnw-toolbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:7px 9px;margin:6px 0;border:1px solid #315d79;border-radius:9px;background:#0b253c;color:#e4f5fc;font:11px system-ui,sans-serif}'+
+      '#wsnw-toolbar strong{font-size:12px}#wsnw-toolbar button,#wsnw-toolbar select{background:#14405d;border:1px solid #387493;border-radius:6px;color:#eaf8ff;padding:5px 7px;min-height:30px;font:inherit}'+
+      '#wsnw-toolbar .wsnw-note{color:#97bdcf;font-size:10px}'+
+      '.faction-war ul.members-list li .wsnw-detail{display:block;font:700 10px/1.25 system-ui,sans-serif;color:#8dd8f6;white-space:normal;margin-top:2px}'+
+      '.faction-war ul.members-list li .wsnw-detail.wsnw-soon{color:#74e6af}'+
+      '.faction-war ul.members-list li .wsnw-badge{display:inline-block;font:750 9px/1.2 system-ui,sans-serif;background:#0f4560;color:#b5e9fb;border:1px solid #387e9f;border-radius:4px;padding:1px 4px;margin-left:4px;vertical-align:middle}'+
+      '.faction-war ul.members-list li .wsnw-badge.wsnw-heavy{color:#f0cefd;background:#392b58;border-color:#8065a8}'+
+      '.faction-war ul.members-list li .wsnw-badge.wsnw-return{color:#b5ffdc;background:#215447;border-color:#409e74}'+
+      '.faction-war ul.members-list li .wsnw-copy{margin-left:4px;padding:2px 5px;min-height:23px;border:1px solid #3f7894;border-radius:5px;background:#15405d;color:#d4f3ff;font:10px system-ui,sans-serif;cursor:pointer}'+
+      '.faction-war ul.members-list li.wsnw-recent{outline:2px solid #e8a558;outline-offset:-2px;background:rgba(201,113,39,.16)}'+
+      '.faction-war ul.members-list li.wsnw-hospital-soon{box-shadow:inset 3px 0 #42ce95}'+
+      '.faction-war ul.members-list li.wsnw-filtered{display:none !important}'+
+      '@media(max-width:600px){#wsnw-toolbar{gap:4px;padding:5px}#wsnw-toolbar .wsnw-note{flex-basis:100%}}';
+    document.head.appendChild(style);
+  }
+  function clearNativeWar(){
+    document.getElementById('wsnw-toolbar')?.remove();
+    for(const row of document.querySelectorAll('.faction-war ul.members-list li.wsnw-enhanced')){
+      row.classList.remove('wsnw-enhanced','wsnw-recent','wsnw-hospital-soon','wsnw-filtered');
+      row.querySelectorAll('.wsnw-detail,.wsnw-badge,.wsnw-copy').forEach(el=>el.remove());
+    }
+  }
+  function nativeWarToolbar(box,conflict,score,chain){
+    let toolbar=document.getElementById('wsnw-toolbar');
+    if(!toolbar){toolbar=document.createElement('div');toolbar.id='wsnw-toolbar';
+      toolbar.setAttribute('aria-label','WarStaxx native ranked war controls');}
+    if(toolbar.nextElementSibling!==box)box.before(toolbar);
+    const mode=['availability','hospital','bss','ff','activity','torn'].includes(cfg.nativeWarSort)?
+      cfg.nativeWarSort:'availability';
+    const filter=['all','okay','hospital','returning','heavy','assigned','watched'].includes(cfg.nativeWarFilter)?
+      cfg.nativeWarFilter:'all';
+    const signature=[mode,filter,conflict,score?.our,score?.enemy,chain.fresh?chain.count:0,chain.remaining].join(':');
+    if(toolbar.dataset.signature===signature)return;
+    toolbar.dataset.signature=signature;
+    toolbar.innerHTML='<strong>WARSTAXX | '+(score?'Us '+fmt(score.our)+' / Them '+fmt(score.enemy):'LIVE WAR')+'</strong>'+
+      (chain.fresh?'<span>Chain '+fmt(chain.count)+' ('+chain.remaining+'s)</span>':'')+
+      '<label>Sort <select data-wsnw-sort>'+
+      [['availability','Availability'],['hospital','Hospital expiry'],['bss','BSS highest'],['ff','FF highest'],['activity','Recent activity'],['torn','Torn order']].map(x=>
+        '<option value="'+x[0]+'" '+(mode===x[0]?'selected':'')+'>'+x[1]+'</option>').join('')+
+      '</select></label><label>Show <select data-wsnw-filter>'+
+      [['all','All'],['okay','Okay'],['hospital','Hospital'],['returning','Returning'],['heavy','Black Skull targets'],['assigned','Assigned'],['watched','Watched']].map(x=>
+        '<option value="'+x[0]+'" '+(filter===x[0]?'selected':'')+'>'+x[1]+'</option>').join('')+
+      '</select></label>'+
+      '<button type="button" data-wsnw-action="war">War Room</button>'+
+      '<button type="button" data-wsnw-action="skulls">Skulls</button>'+
+      '<button type="button" data-wsnw-action="turtle">Turtle</button>'+
+      '<button type="button" data-wsnw-action="hit">HIT</button>'+
+      '<span class="wsnw-note">'+(conflict?'External roster sorting detected; WarStaxx will not reorder rows. ':
+        'Only observed Torn roster data; no automated attacks. ')+
+        'Refresh in War Room for updated statuses.</span>';
+  }
+  function syncNativeWar(){
+    if(!isNativeWarPage()||cfg.nativeWarEnabled===false||!activeWarNow()){
+      if(document.getElementById('wsnw-toolbar'))clearNativeWar();return;
+    }
+    const box=document.querySelector('.faction-war');
+    if(!box||!box.parentNode)return;
+    const lists=Array.from(box.querySelectorAll('ul.members-list'));
+    if(!lists.length)return;
+    nativeWarStyle();
+    const enemyMap=new Map(state.data.enemies.map(p=>[p.id,p])),
+      ourMap=new Map(state.data.ours.map(p=>[p.id,p])),
+      band=enemyRoleBands(),fresh=rosterFresh('enemies'),score=warScore(),chain=chainStatus();
+    const conflict=lists.some(nativeWarConflict);
+    nativeWarToolbar(box,conflict,score,chain);
+    const orders=new Map();
+    for(const [friendId,targetId] of Object.entries(cfg.assignments)){
+      const name=ourMap.get(positive(friendId))?.name;
+      if(name&&positive(targetId))orders.set(positive(targetId),name);
+    }
+    for(const list of lists){
+      const rows=nativeWarRows(list);
+      for(const row of rows){
+        const id=nativeWarPlayerId(row),enemy=row.classList.contains('enemy'),
+          p=(enemy?enemyMap:ourMap).get(id);
+        if(!p)continue;
+        const status=row.querySelector('div.status'),member=row.querySelector('div.member');
+        if(!status||!member)continue;
+        row.classList.add('wsnw-enhanced');
+        row.classList.toggle('wsnw-filtered',enemy&&!nativeWarFilters(p,band,cfg.nativeWarFilter||'all'));
+        const now=Date.now(),recent=enemy&&fresh?nativeWarTransition(id,now):null;
+        row.classList.toggle('wsnw-recent',Boolean(recent));
+        const kind=memberState(p);
+        row.classList.toggle('wsnw-hospital-soon',enemy&&fresh&&kind==='hospital'&&
+          positive(p.until)>now&&p.until-now<5*MIN);
+        const other=Boolean(status.hasAttribute('data-twse-overridden')||row.querySelector('.twse-copy-btn')),
+          desc=status.querySelector('.wsnw-detail')||el('span','wsnw-detail');
+        if(!desc.isConnected)status.appendChild(desc);
+        let message='';
+        if(!fresh&&enemy)message='Roster stale - refresh';
+        else if(other)message=''; // TWSE already provides countdowns and flight labels.
+        else if(kind==='hospital'){
+          message='HOSP '+hospitalCountdown(p.until,now);
+          desc.dataset.wsnwExpiry=String(positive(p.until));
+        }else if(kind==='away'){
+          const flight=flightEvidence(p);
+          message=flight.kind==='returning'?'RETURNING'+(flight.eta?' '+flightCountdown(flight.eta):''):
+            flight.kind==='outbound'?'OUTBOUND':'ABROAD / TRAVEL';
+          desc.removeAttribute('data-wsnw-expiry');
+        }else{
+          message=kind==='okay'?'OKAY':p.status;
+          desc.removeAttribute('data-wsnw-expiry');
+        }
+        if(recent)message=recent.kind+' | '+message;
+        if(desc.textContent!==message)desc.textContent=message;
+        desc.classList.toggle('wsnw-soon',enemy&&kind==='hospital'&&positive(p.until)>now&&p.until-now<5*MIN);
+        if(!message)desc.remove();
+        const label=member.querySelector('.wsnw-badge')||el('span','wsnw-badge');
+        let badge='';
+        if(enemy){
+          const strength=enemyBattleEstimate(p);
+          badge=band.heavy.has(id)?'SKULL TARGET':band.regular.has(id)?'REGULAR':'BSS UNKNOWN';
+          if(strength.value!==null)badge+=' | '+fmt(strength.value)+' BSS';
+          if(orders.has(id))badge+=' | ORDER: '+orders.get(id);
+          if(cfg.watchlist[id])badge+=' | WATCH';
+        }else if(cfg.blackSkulls[id])badge='BLACK SKULL';
+        if(badge){if(!label.isConnected)member.appendChild(label);if(label.textContent!==badge)label.textContent=badge;
+          label.classList.toggle('wsnw-heavy',enemy&&band.heavy.has(id));}
+        else label.remove();
+        const copy=member.querySelector('.wsnw-copy')||el('button','wsnw-copy','Copy');
+        if(!row.querySelector('.twse-copy-btn')){
+          if(!copy.isConnected)member.appendChild(copy);
+          copy.type='button';copy.dataset.wsnwCopy=String(id);
+          copy.setAttribute('aria-label','Copy '+p.name+' ID');
+        }else copy.remove();
+      }
+      if(fresh&&!conflict)nativeWarSort(list,enemyMap,cfg.nativeWarSort||'availability');
+    }
+  }
+  function tickNativeWar(){
+    if(!isNativeWarPage()||document.hidden)return;
+    const now=Date.now();
+    for(const span of document.querySelectorAll('.faction-war .wsnw-detail[data-wsnw-expiry]')){
+      const expiry=positive(span.dataset.wsnwExpiry);
+      const row=span.closest('li.enemy,li.your');
+      if(!row||!expiry)continue;
+      const id=nativeWarPlayerId(row),p=state.data.enemies.find(x=>x.id===id)||
+        state.data.ours.find(x=>x.id===id);
+      if(!p||memberState(p)!=='hospital')continue;
+      const recent=nativeWarTransition(id,now),value=(recent?recent.kind+' | ':'')+
+        'HOSP '+hospitalCountdown(expiry,now);
+      if(span.textContent!==value)span.textContent=value;
+      span.classList.toggle('wsnw-soon',expiry>now&&expiry-now<5*MIN);
+      row.classList.toggle('wsnw-hospital-soon',expiry>now&&expiry-now<5*MIN);
+    }
+  }
+  document.addEventListener('click',e=>{
+    const copy=e.target?.closest?.('[data-wsnw-copy]');
+    if(copy&&isNativeWarPage()){
+      e.preventDefault();e.stopPropagation();
+      const id=positive(copy.dataset.wsnwCopy),
+        p=state.data.enemies.find(x=>x.id===id)||state.data.ours.find(x=>x.id===id);
+      if(!p)return;
+      const value=p.name+' ['+p.id+']';
+      const done=()=>{if(copy.isConnected){copy.textContent='Copied';setTimeout(()=>{
+        if(copy.isConnected)copy.textContent='Copy';},1300);}};
+      if(navigator.clipboard?.writeText)navigator.clipboard.writeText(value).then(done).catch(()=>{});
+      else{const t=el('textarea');t.value=value;t.style.cssText='position:fixed;left:-9999px';
+        document.body.appendChild(t);t.select();try{if(document.execCommand('copy'))done();}catch(_){}t.remove();}
+      return;
+    }
+    const button=e.target?.closest?.('#wsnw-toolbar [data-wsnw-action]');
+    if(button&&isNativeWarPage()){
+      e.preventDefault();e.stopPropagation();
+      warQuick(String(button.dataset.wsnwAction));
+    }
+  },true);
+  document.addEventListener('change',e=>{
+    const sort=e.target?.closest?.('#wsnw-toolbar [data-wsnw-sort]'),
+      filter=e.target?.closest?.('#wsnw-toolbar [data-wsnw-filter]');
+    if(sort){cfg.nativeWarSort=String(sort.value);saveCfg();syncNativeWar();}
+    if(filter){cfg.nativeWarFilter=String(filter.value);saveCfg();syncNativeWar();}
+  });
   function mountFactionShortcut(){
     // The persistent strip replaces the old faction-only duplicate shortcut.
     document.getElementById('warstaxx-faction-open')?.remove();
@@ -5907,7 +6195,7 @@
     if(!document.body){document.addEventListener('DOMContentLoaded',boot,{once:true});return;}
     styleSheet();document.body.appendChild(root);
     // Show a low-profile, on-page fallback on faction routes; never create another floating FAB.
-    renderWarStrip();mountFactionShortcut();
+    renderWarStrip();mountFactionShortcut();syncNativeWar();
     if(!root.querySelector('.ws-panel')||!root.querySelector('.ws-tabs')||
        !root.querySelector('.ws-content')||!root.querySelector('.ws-sync'))
        throw new Error('War panel elements are missing');
@@ -5924,11 +6212,13 @@
   }
   // Registration maintenance is local-only; it does not query the Torn API.
   const registrationTimer=setInterval(()=>{if(!document.hidden){
-    announce();renderWarStrip();mountFactionShortcut();
+    announce();renderWarStrip();mountFactionShortcut();syncNativeWar();
     document.dispatchEvent(new CustomEvent('staxx:ping'));
   }},45000);
   const warStripTimer=setInterval(()=>{if(!document.hidden)renderWarStrip();},10000);
   const hospitalClockTimer=setInterval(()=>{if(!document.hidden)updateHospitalCountdowns();},10000);
+  const nativeWarTimer=setInterval(()=>{if(!document.hidden)syncNativeWar();},5000);
+  const nativeWarClock=setInterval(tickNativeWar,1000);
   // Torn can navigate to an attack without a full reload.
   const warRouteTimer=setInterval(()=>{if(!document.hidden&&
     state.stripRouteKey!==location.pathname+location.search+location.hash)renderWarStrip(true);},1000);
@@ -5946,11 +6236,11 @@
   window.addEventListener('scroll',handleWarScroll,{passive:true});
   document.addEventListener('scroll',handleWarScroll,{passive:true,capture:true});
   window.addEventListener('popstate',()=>renderWarStrip(true));
-  window.addEventListener('hashchange',()=>renderWarStrip(true));
+  window.addEventListener('hashchange',()=>{renderWarStrip(true);syncNativeWar();});
   const refreshTimer=setInterval(()=>{
     if(!document.hidden&&effectiveKey()&&!state.loading&&Date.now()-state.lastRefresh>cfg.refreshSeconds*1000)refresh(false);
   },30000);
-  window.addEventListener('beforeunload',()=>{clearInterval(refreshTimer);clearInterval(registrationTimer);clearInterval(warStripTimer);clearInterval(warRouteTimer);clearInterval(hospitalClockTimer);},{once:true});
+  window.addEventListener('beforeunload',()=>{clearInterval(refreshTimer);clearInterval(registrationTimer);clearInterval(warStripTimer);clearInterval(warRouteTimer);clearInterval(hospitalClockTimer);clearInterval(nativeWarTimer);clearInterval(nativeWarClock);clearNativeWar();},{once:true});
   try{boot();}catch(err){
     window.__warStaxxReady=false;
     window.__warStaxxStartError='Startup failed ('+(err?.name||'Error')+')';
