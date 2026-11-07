@@ -78,6 +78,7 @@ test('original Torn attack cells are allocated a separate fixed-height lane from
   assert.match(css,/li\.wsnw-enhanced > \.wsnw-intel\{position:absolute!important;top:49px!important/);
   assert.match(css,/li\.wsnw-enhanced > \.attack\{height:49px!important;max-height:49px!important/);
   assert.match(css,/overflow-x:auto!important/);
+  assert.match(css,/\.wsnw-owner\{position:sticky!important;left:0!important/);
   assert.doesNotThrow(()=>new Script(source));
 });
 test('combat navigation still hides both live strip and optional chain bubble',()=>{
