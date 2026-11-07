@@ -6177,8 +6177,8 @@
         row.classList.toggle('wsnw-hospital-soon',enemy&&fresh&&kind==='hospital'&&
           positive(p.until)>now&&p.until-now<5*MIN);
         const other=Boolean(status.hasAttribute('data-twse-overridden')||row.querySelector('.twse-copy-btn')),
-          desc=status.querySelector('.wsnw-detail')||el('span','wsnw-detail');
-        if(!desc.isConnected)status.appendChild(desc);
+          desc=member.querySelector('.wsnw-detail')||el('span','wsnw-detail');
+        // Keep Torn's original status cell text untouched (TWSE relies on its exact value).
         let message='';
         if(!fresh&&enemy){message='Roster stale - refresh';desc.removeAttribute('data-wsnw-expiry');}
         else if(other){message='';desc.removeAttribute('data-wsnw-expiry');} // TWSE already provides countdowns and flight labels.
@@ -6197,6 +6197,7 @@
         if(recent)message=recent.kind+' | '+message;
         if(desc.textContent!==message)desc.textContent=message;
         desc.classList.toggle('wsnw-soon',enemy&&kind==='hospital'&&positive(p.until)>now&&p.until-now<5*MIN);
+        if(message&&!desc.isConnected)member.appendChild(desc);
         if(!message)desc.remove();
         const label=member.querySelector('.wsnw-badge')||el('span','wsnw-badge');
         let badge='';
@@ -6213,12 +6214,12 @@
         if(badge){if(!label.isConnected)member.appendChild(label);if(label.textContent!==badge)label.textContent=badge;
           label.classList.toggle('wsnw-heavy',enemy&&band.heavy.has(id));}
         else label.remove();
-        const copy=member.querySelector('.wsnw-copy')||el('button','wsnw-copy','Copy');
+        let copy=member.querySelector('.wsnw-copy');
         if(!row.querySelector('.twse-copy-btn')){
-          if(!copy.isConnected)member.appendChild(copy);
+          if(!copy){copy=el('button','wsnw-copy','Copy');member.appendChild(copy);}
           copy.type='button';copy.dataset.wsnwCopy=String(id);
           copy.setAttribute('aria-label','Copy '+p.name+' ID');
-        }else copy.remove();
+        }else copy?.remove();
       }
       if(fresh&&!conflict)nativeWarSort(list,enemyMap,cfg.nativeWarSort||'availability');
     }
