@@ -3230,8 +3230,8 @@
     bar.innerHTML='<div class="wsw-top"><span class="wsw-kicker">WAR</span>'+
       '<strong class="wsw-score">'+(score?fmt(score.our)+' - '+fmt(score.enemy):'? - ?')+'</strong>'+
       '<span class="wsw-kicker">NET '+(score?(score.net>=0?'+':'')+fmt(score.net):'?')+'</span>'+
-      (chain.fresh?'<span class="wsw-kicker">CHAIN '+fmt(chain.count)+' / '+chain.remaining+'s</span>':'')+
-      '<span class="wsw-shortcuts">'+btn('Turtle','turtle')+
+      (chain.fresh&&chain.count>0?'<span class="wsw-kicker">CHAIN '+fmt(chain.count)+' / '+chain.remaining+'s</span>':'')+
+      '<span class="wsw-shortcuts">'+btn('TURTLE','turtle')+
       btn(actionLabel,'hit')+btn('Room','war')+btn(compact?'More':'Less','compact')+'</span></div>'+
       (compact?'':'<div class="wsw-meta"><span>YOU: '+esc(self.kind)+
         (self.energy===null?'':' | '+fmt(self.energy)+' E')+'</span>'+
@@ -6397,7 +6397,7 @@
     }
     for(const list of lists){
       const rows=nativeWarRows(list);
-      nativeWarLegend(list,rows);
+      if(typeof nativeWarLegend==='function')nativeWarLegend(list,rows);
       for(const row of rows){
         const id=nativeWarPlayerId(row),enemy=row.classList.contains('enemy'),
           p=(enemy?enemyMap:ourMap).get(id);
