@@ -3226,7 +3226,7 @@
     if(!force&&bar.dataset.signature===sig)return;
     bar.dataset.signature=sig;
     const actionLabel=state.quickHitPending?'CHECKING':self.kind==='hospital'?'HEAL':
-      mission.hasOrder&&!target?'ORDER':'HIT';
+      mission.hasOrder&&!target?'REVIEW ORDER':'HIT';
     bar.innerHTML='<div class="wsw-top"><span class="wsw-kicker">WAR</span>'+
       '<strong class="wsw-score">'+(score?fmt(score.our)+' - '+fmt(score.enemy):'? - ?')+'</strong>'+
       '<span class="wsw-kicker">NET '+(score?(score.net>=0?'+':'')+fmt(score.net):'?')+'</span>'+
@@ -3235,7 +3235,7 @@
       btn(actionLabel,'hit')+btn('Room','war')+btn(compact?'More':'Less','compact')+'</span></div>'+
       (compact?'':'<div class="wsw-meta"><span>YOU: '+esc(self.kind)+
         (self.energy===null?'':' | '+fmt(self.energy)+' E')+'</span>'+
-        '<span>'+(mission.hasOrder?'ORDER: '+(mission.assigned?esc(mission.assigned.name):'#'+mission.assignedId)+
+        '<span>'+(mission.hasOrder?'MY ORDER: '+(mission.assigned?esc(mission.assigned.name):'#'+mission.assignedId)+
           (target?' | verified':' | review: '+esc(mission.issue)):
           target?'Suggested: '+esc(target.player.name)+' | '+fmt(target.pointsPer25)+' pts / 25 E':
             'No verified safe hit')+'</span>'+
