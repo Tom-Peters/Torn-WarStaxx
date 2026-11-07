@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.5.14
+// @version      1.5.15
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='1.5.14';
+  const id='war', version='1.5.15';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.5.14', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.5.15', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -521,8 +521,8 @@
     const desc=String(p.statusText||'')+' '+String(p.statusDetails||'');
     // Explicitly distinguish an inbound return from an outbound flight.
     // A generic status expiry is NOT proof of a return-to-Torn flight.
-    const inbound=/(returning from|returning to torn|travell?ing to torn|flight back|flying back|back to torn)/i.test(desc);
-    const outbound=!inbound&&/(travell?ing to|flying to|departing for|flight to)/i.test(desc);
+    const inbound=/(returning from|returning to torn|travell?ing (?:from [^,.;|]{1,50} )?to torn|flight back|flying back|back to torn)/i.test(desc);
+    const outbound=!inbound&&/(travell?ing (?:from [^,.;|]{1,50} )?to|flying to|departing for|flight to)/i.test(desc);
     const kind=inbound?'returning':outbound?'outbound':'abroad-or-unclear';
     const eta=n(p.until);
     const valid=eta>at-5*MIN&&eta<at+20*HOUR;
@@ -551,7 +551,7 @@
     const desc=[p.statusText,p.statusDetails].filter(Boolean).join(' ').trim();
     const explicit=nativeCountryName(p.destinationHint),current=nativeCountryName(p.locationHint);
     if(kind==='away'){
-      const to=desc.match(/\b(?:travell?ing|traveling|flying|heading|departing|returning|flight)\s+(?:back\s+)?to\s+([^.,;|]+)/i);
+      const to=desc.match(/\bto\s+([^.,;|]+)/i);
       const dest=explicit||nativeCountryName(to?.[1]);
       if(dest)return {country:dest,phase:'inbound',eta:positive(p.until),source:'Torn flight destination'};
       if(/\b(?:returning from|flying back from|flight back|flying back|back to torn)\b/i.test(desc))
@@ -572,8 +572,8 @@
   }
   function nativeWarOwnLocation(){
     const id=positive(state.data.meta?.ownerId),me=state.data.ours.find(p=>p.id===id);
-    if(me){const info=nativeWarLocation(me);if(info.country!=='Unknown')
-      return {country:info.country,known:true,phase:info.phase};}
+    if(me){const info=nativeWarLocation(me);if(info.phase==='inbound')return {country:'Torn',known:false,phase:'inbound'};
+      if(info.country!=='Unknown')return {country:info.country,known:true,phase:info.phase};}
     return {country:'Torn',known:false,phase:'unknown'};
   }
   function nativeWarCountryCompare(a,b,own=nativeWarOwnLocation()){
@@ -4865,7 +4865,9 @@
     for(const el of $$('[data-ws-hospital-until]',root)){
       const until=positive(el.getAttribute('data-ws-hospital-until'));
       el.textContent=hospitalCountdown(until);
-      el.classList.toggle('ws-timer-soon',Boolean(until&&until-Date.now()<=5*MIN));
+      const remaining=until-Date.now();
+      el.classList.toggle('ws-timer-soon',Boolean(until&&remaining>0&&remaining<=5*MIN));
+      el.classList.toggle('ws-timer-warning',Boolean(until&&remaining>5*MIN&&remaining<=15*MIN));
     }
   }
   function hospitalWatchCard(){
@@ -5992,7 +5994,8 @@
       const clockCss=document.createElement('style');clockCss.id='ws-status-clock-css';
       clockCss.textContent='.ws-roster-timing{display:grid;gap:3px;margin-top:4px;font-size:11px;color:#98d8f2;white-space:normal}'+
         '.ws-roster-timing small{color:#98aabb;font-size:10px}'+
-        '.ws-roster-timing .ws-timer-soon{color:#9bf1bd;font-weight:800}';
+        '.ws-roster-timing .ws-timer-soon{color:#9bf1bd;font-weight:850}'+
+        '.ws-roster-timing .ws-timer-warning{color:#ffca79;font-weight:850}';
       document.head.appendChild(clockCss);
     }
   };
@@ -6190,6 +6193,11 @@
       source:estimate.source,detail:'Battle Stat Score, not total stats. '+estimate.source};
     return {short:'Stats unknown',source:'None',detail:'No usable current estimate'};
   }
+  function nativeWarHospitalTier(until,at=Date.now()){
+    const remaining=positive(until)-at;
+    if(!positive(until)||remaining<=0)return '';
+    return remaining<=5*MIN?'wsnw-soon':remaining<=15*MIN?'wsnw-warning':'';
+  }
   function nativeWarHospitalShort(until,at=Date.now()){
     if(!positive(until))return 'H ?';
     const seconds=Math.ceil((until-at)/1000);
@@ -6215,14 +6223,18 @@
       '.faction-war ul.members-list li.wsnw-enhanced > .wsnw-intel{position:absolute!important;top:36px!important;left:0!important;right:0!important;width:auto!important;height:20px!important;z-index:2;box-sizing:border-box!important;padding:1px 3px!important;display:flex!important;flex-direction:row!important;align-items:center!important;gap:4px!important;background:rgba(11,31,49,.98)!important;border-top:1px solid rgba(109,172,207,.25)!important;overflow-x:hidden!important;overflow-y:hidden!important;white-space:nowrap!important;scrollbar-width:none;touch-action:pan-y pinch-zoom!important;cursor:pointer}'+
       '.faction-war ul.members-list li.wsnw-enhanced > .wsnw-intel::-webkit-scrollbar{display:none}'+
       '.faction-war ul.members-list li.wsnw-enhanced > .wsnw-intel *{touch-action:pan-y pinch-zoom!important}'+
-      '.faction-war ul.members-list li .wsnw-intel .wsnw-owner{position:sticky!important;left:0!important;z-index:3!important;float:none!important;flex:0 0 auto!important;max-width:105px!important;min-width:40px!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;color:#fff!important;font:800 11px system-ui,sans-serif!important;margin-right:2px!important;padding:0 3px 0 2px!important;background:#0b1f31!important;box-shadow:3px 0 5px #0b1f31!important}'+
-      '.faction-war ul.members-list li .wsnw-intel .wsnw-chip{position:static!important;float:none!important;flex:0 0 auto!important;display:inline-flex!important;align-items:center!important;max-width:140px!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;padding:1px 3px!important;margin:0!important;border-radius:4px!important;background:#123d56!important;border:1px solid #2b617d!important;color:#b7dffa!important;font:650 10px/1.2 system-ui,sans-serif!important}'+
+      '.faction-war ul.members-list li .wsnw-intel .wsnw-owner{position:sticky!important;left:0!important;z-index:3!important;float:none!important;flex:0 0 auto!important;max-width:105px!important;min-width:40px!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;color:#fff!important;font:850 12px system-ui,sans-serif!important;margin-right:2px!important;padding:0 3px 0 2px!important;background:#0b1f31!important;box-shadow:3px 0 5px #0b1f31!important}'+
+      '.faction-war ul.members-list li .wsnw-intel .wsnw-chip{position:static!important;float:none!important;flex:0 0 auto!important;display:inline-flex!important;align-items:center!important;max-width:140px!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;padding:1px 3px!important;margin:0!important;border-radius:4px!important;background:#123d56!important;border:1px solid #2b617d!important;color:#b7dffa!important;font:800 11px/1.2 system-ui,sans-serif!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-ff-danger{background:#5a2434!important;color:#ffd5d9!important;border-color:#af6470!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-ff-risk{background:#554422!important;color:#ffe6aa!important;border-color:#a58141!important}'+
-      '.faction-war ul.members-list li .wsnw-intel .wsnw-status{background:#123b4a!important;color:#95e8df!important}'+
-      '.faction-war ul.members-list li .wsnw-intel .wsnw-status.wsnw-soon{background:#164e40!important;color:#a5f6c2!important}'+
-      '.faction-war ul.members-list li .wsnw-intel .wsnw-role.wsnw-heavy{background:#613c82!important;border:1px solid #c298eb!important;color:#fff0ff!important;font-weight:850!important;letter-spacing:.2px!important}'+
+      '.faction-war ul.members-list li .wsnw-intel .wsnw-status{background:#502e38!important;color:#ffe2e5!important;border-color:#97616c!important}'+
+      '.faction-war ul.members-list li .wsnw-intel .wsnw-status.wsnw-warning{background:#694821!important;color:#fff0b7!important;border-color:#d8a44c!important}'+
+      '.faction-war ul.members-list li .wsnw-intel .wsnw-status.wsnw-soon{background:#15543c!important;color:#caffe2!important;border-color:#42d493!important}'+
+      '.faction-war ul.members-list li .wsnw-intel .wsnw-role.wsnw-heavy{background:#623288!important;border:2px solid #dfb4ff!important;color:#fff!important;font-weight:900!important;letter-spacing:.2px!important}'+
+      '.faction-war ul.members-list li .wsnw-intel .wsnw-role.wsnw-heavy::before{content:"\\2620";font-size:13px;margin-right:3px}'+
+      '.faction-war ul.members-list li:not(.wsnw-expanded) .wsnw-intel .wsnw-role.wsnw-heavy::after{content:" TARGET"}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-presence{color:#afcde0!important;background:#203549!important}'+
+      '.faction-war ul.members-list li .wsnw-intel .wsnw-online{color:#bbffe6!important;background:#14553e!important;border-color:#42d69b!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-country{color:#e7ddff!important;background:#23425d!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-intel-link,.faction-war ul.members-list li .wsnw-intel .wsnw-copy{position:static!important;float:none!important;flex:0 0 auto!important;min-height:23px!important;height:23px!important;padding:1px 6px!important;margin:0!important;background:#1b526f!important;border:1px solid #568fb0!important;border-radius:5px!important;color:#ecfaff!important;font:700 10px system-ui,sans-serif!important;cursor:pointer!important}'+
       '.faction-war ul.members-list li.wsnw-enhanced .wsnw-details-only{display:none!important}'+
@@ -6233,10 +6245,11 @@
       '.faction-war ul.members-list li.wsnw-recent{outline:2px solid #e8a558;outline-offset:-2px}'+
       '.faction-war ul.members-list li.wsnw-enhanced:nth-child(even):not(.wsnw-heavy-target) > .wsnw-intel{background:rgba(20,43,61,.98)!important}'+
       '.faction-war ul.members-list li.wsnw-hospital-soon > .wsnw-intel{border-top-color:#42ce95!important}'+
+      '.faction-war ul.members-list li.wsnw-hospital-warning > .wsnw-intel{border-top-color:#d8a44c!important}'+
       '.faction-war ul.members-list li.wsnw-filtered{display:none!important}'+
       '#wsnw-chain-bubble{position:fixed;right:9px;bottom:64px;z-index:150;max-width:185px;min-width:95px;padding:7px;background:#0b273c;border:1px solid #4ba6d0;border-radius:10px;box-shadow:0 4px 14px #0008;color:#ecfaff;font:11px system-ui,sans-serif;touch-action:none;user-select:none;cursor:move}'+
       '#wsnw-chain-bubble button{margin-left:4px;background:#164d6a;border:1px solid #438caa;border-radius:5px;color:white;padding:3px 6px;font:10px system-ui,sans-serif;cursor:pointer}'+
-      '@media(max-width:600px){#wsnw-toolbar{gap:3px;padding:4px 5px}#wsnw-toolbar button,#wsnw-toolbar select{min-height:27px;padding:3px 6px} .faction-war ul.members-list li.wsnw-enhanced > .wsnw-intel{gap:3px!important;padding:1px 2px!important} .faction-war ul.members-list li .wsnw-intel .wsnw-chip{font-size:9px!important;padding:1px 3px!important}}';
+      '@media(max-width:600px){#wsnw-toolbar{gap:3px;padding:4px 5px}#wsnw-toolbar button,#wsnw-toolbar select{min-height:27px;padding:3px 6px} .faction-war ul.members-list li.wsnw-enhanced > .wsnw-intel{gap:3px!important;padding:1px 2px!important} .faction-war ul.members-list li .wsnw-intel .wsnw-chip{font-size:11px!important;padding:1px 3px!important}}';
     document.head.appendChild(style);
   }
   // An opt-in small, draggable chain indicator. Never mounted over an attack page.
@@ -6304,7 +6317,7 @@
     document.getElementById('wsnw-chain-bubble')?.remove();
     for(const h of document.querySelectorAll('.faction-war ul.members-list li.wsnw-country-heading'))h.remove();
     for(const row of document.querySelectorAll('.faction-war ul.members-list li.wsnw-enhanced')){
-      row.classList.remove('wsnw-enhanced','wsnw-recent','wsnw-hospital-soon','wsnw-filtered');
+      row.classList.remove('wsnw-enhanced','wsnw-recent','wsnw-hospital-soon','wsnw-hospital-warning','wsnw-filtered');
       row.classList.remove('wsnw-heavy-target','wsnw-newly-okay','wsnw-expanded');
       row.querySelectorAll('.wsnw-intel,.wsnw-detail,.wsnw-badge,.wsnw-copy').forEach(el=>el.remove());
     }
@@ -6381,8 +6394,9 @@
         row.classList.toggle('wsnw-expanded',expanded);
         row.classList.toggle('wsnw-heavy-target',enemy&&band.heavy.has(id));
         const kind=memberState(p);
-        row.classList.toggle('wsnw-hospital-soon',enemy&&fresh&&kind==='hospital'&&
-          positive(p.until)>now&&p.until-now<5*MIN);
+        const hospitalTier=kind==='hospital'&&(!enemy||fresh)?nativeWarHospitalTier(p.until,now):'';
+        row.classList.toggle('wsnw-hospital-soon',hospitalTier==='wsnw-soon');
+        row.classList.toggle('wsnw-hospital-warning',hospitalTier==='wsnw-warning');
         const other=Boolean(status.hasAttribute('data-twse-overridden')||row.querySelector('.twse-copy-btn'));
         // v1.5.9 migration: remove the former labels from the fixed-height player-name cell.
         member.querySelectorAll('.wsnw-detail,.wsnw-badge,.wsnw-copy').forEach(x=>x.remove());
@@ -6418,14 +6432,13 @@
         else if(kind==='hospital')message=expanded?'HOSP '+hospitalCountdown(p.until,now):nativeWarHospitalShort(p.until,now);
         else if(kind==='away'){
           const place=nativeWarLocation(p);
-          if(place.phase==='inbound')message='To '+place.country+' '+(place.eta?flightCountdown(place.eta,now):'ETA ?');
+          if(place.phase==='inbound')message='TO '+place.country+(place.eta?' '+flightCountdown(place.eta,now):'');
           else if(place.phase==='abroad')message='In '+place.country;
-          else message='Travel destination ?';
+          else message=place.phase==='unknown-travel'?'FLIGHT | DEST HIDDEN':'LOCATION UNKNOWN';
         }else if(kind==='okay')message=''; // Torn already shows Okay in the main Status column.
         if(recent)message=recent.kind+' | '+(message||'OKAY');
         const place=nativeWarLocation(p);
-        const timer=chip('status',message,enemy&&kind==='hospital'&&positive(p.until)>now&&p.until-now<5*MIN?
-          'wsnw-soon':'','Torn roster observed '+age(state.data.updated[enemy?'enemies':'ours'])+
+        const timer=chip('status',message,hospitalTier,'Torn roster observed '+age(state.data.updated[enemy?'enemies':'ours'])+
           ' | '+place.country+' ('+place.source+')');
         if(timer){
           if(kind==='hospital'&&!other&&(!enemy||fresh))timer.dataset.wsnwExpiry=String(positive(p.until));
@@ -6439,11 +6452,13 @@
         if(enemy)role=band.heavy.has(id)?(expanded?'BLACK SKULL TARGET':'BLACK SKULL'):
           expanded?(band.regular.has(id)?'REGULAR':'UNKNOWN'):'';
         else if(cfg.blackSkulls[id])role='BLACK SKULL';
-        chip('role',role,enemy&&band.heavy.has(id)?'wsnw-heavy':'',
+        const roleChip=chip('role',role,enemy&&band.heavy.has(id)?'wsnw-heavy':'',
           enemy?'BLACK SKULL TARGET: high-strength opponent reserved for Black Skulls; not a guaranteed win':'Your Black Skulls member');
+        if(roleChip&&enemy&&band.heavy.has(id)&&timer&&roleChip.nextElementSibling!==timer)
+          infoBar.insertBefore(roleChip,timer);
         const country=chip('country',place.country!=='Torn'&&place.country!=='Unknown'&&kind!=='away'?place.country:'',
           'wsnw-country','Reported location: '+place.country+' | '+place.source);
-        const seen=chip('presence',nativeWarLastSeen(p,now),'wsnw-presence',
+        const seen=chip('presence',nativeWarLastSeen(p,now),isOnline(p)?'wsnw-online':'wsnw-presence',
           'Last Torn action '+age(p.lastAt)+' | status '+p.lastAction);
         if(seen){seen.dataset.wsnwLastAt=String(positive(p.lastAt));
           seen.dataset.wsnwAction=String(p.lastAction||'Unknown');}
@@ -6538,11 +6553,14 @@
         value=(recent?recent.kind+' | ':'')+
           (row.classList.contains('wsnw-expanded')?'HOSP '+hospitalCountdown(expiry,now):nativeWarHospitalShort(expiry,now));
       }else if(kind==='away'&&place.phase==='inbound'){
-        value='To '+place.country+' '+(place.eta?flightCountdown(place.eta,now):'ETA ?');
+        value='TO '+place.country+(place.eta?' '+flightCountdown(place.eta,now):'');
       }else continue;
       if(span.textContent!==value)span.textContent=value;
-      span.classList.toggle('wsnw-soon',expiry>now&&expiry-now<5*MIN);
-      row.classList.toggle('wsnw-hospital-soon',kind==='hospital'&&expiry>now&&expiry-now<5*MIN);
+      const tier=kind==='hospital'?nativeWarHospitalTier(expiry,now):'';
+      span.classList.toggle('wsnw-soon',tier==='wsnw-soon');
+      span.classList.toggle('wsnw-warning',tier==='wsnw-warning');
+      row.classList.toggle('wsnw-hospital-soon',tier==='wsnw-soon');
+      row.classList.toggle('wsnw-hospital-warning',tier==='wsnw-warning');
     }
     for(const span of document.querySelectorAll('.faction-war .wsnw-intel [data-wsnw-last-at]')){
       const next=nativeWarLastSeen({lastAt:Number(span.dataset.wsnwLastAt),lastAction:span.dataset.wsnwAction},now);
