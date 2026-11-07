@@ -35,8 +35,8 @@ test('expanded details grow down, do not create a sideways scroller',()=>{
   assert.ok(css.includes('flex-wrap:wrap!important'));
   assert.ok(css.includes('wsnw-expanded > .wsnw-intel{top:36px!important;height:auto!important'));
   assert.ok(css.includes('white-space:normal!important;overflow-x:hidden!important'));
-  assert.ok(native.includes('Math.ceil(infoBar.scrollHeight)'));
-  assert.ok(native.includes("row.style.setProperty('--wsnw-expanded-height'"));
+  assert.ok(native.includes('Math.ceil(Number(infoBar.scrollHeight)||0)'));
+  assert.ok(native.includes("row.style?.setProperty?.('--wsnw-expanded-height'"));
   assert.ok(native.includes("window.addEventListener('resize'"));
   assert.ok(!css.includes('overflow-x:auto!important;touch-action:auto!important'));
   assert.doesNotThrow(()=>new Script(source));
