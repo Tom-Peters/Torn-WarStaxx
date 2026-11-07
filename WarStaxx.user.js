@@ -199,7 +199,7 @@
   const link=id=>'https://www.torn.com/profiles.php?XID='+positive(id);
   const attackLink=id=>'https://www.torn.com/loader.php?sid=attack&user2ID='+positive(id);
   const apiKeyPda=typeof window.PDA_APIKEY==='string'?window.PDA_APIKEY:'###PDA-APIKEY###';
-  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},controlAssignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,warStripCompact:false,warStripScope:'contextual',nativeWarEnabled:true,nativeWarSort:'availability',nativeWarFilter:'all',priorityNotifications:true,hitterRisk:{},heavyPolicy:{mode:'percent',percent:40,minBss:0},shared:{enabled:false,endpoint:'',token:'',canWrite:false},hidden:false};
+  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},controlAssignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,warStripCompact:false,warStripScope:'contextual',nativeWarEnabled:true,nativeWarSort:'availability',nativeWarFilter:'all',nativeChainBubble:false,priorityNotifications:true,hitterRisk:{},heavyPolicy:{mode:'percent',percent:40,minBss:0},shared:{enabled:false,endpoint:'',token:'',canWrite:false},hidden:false};
   const cfg=Object.assign({},defaults,safeRead(CONFIG,{}));
   cfg.assignments=cfg.assignments&&typeof cfg.assignments==='object'?cfg.assignments:{};
   cfg.ordersByEnemy=cfg.ordersByEnemy&&typeof cfg.ordersByEnemy==='object'?cfg.ordersByEnemy:{};
@@ -5190,6 +5190,7 @@
       (state.data.errors.identity?' | '+esc(state.data.errors.identity):'')+'</p>'+
       '<label>My faction ID (manual fallback when automatic detection is disabled)<input type="number" id="ws-our" min="1" value="'+(positive(cfg.ourId)||'')+'"></label>'+
       '<label>Opponent faction ID (auto-updated if a ranked war is detected)<input type="number" id="ws-enemy" min="1" value="'+(positive(cfg.enemyId)||'')+'"></label>'+
+      '<label><input type="checkbox" id="ws-native-bubble" '+(cfg.nativeChainBubble===true?'checked':'')+'> Optional draggable chain bubble on the ranked-war page (off by default, never on attacks)</label>'+
       '<label><input type="checkbox" id="ws-native-war" '+(cfg.nativeWarEnabled!==false?'checked':'')+'> Enhance Torn native ranked-war player rows (status countdowns, Black Skulls, filters, copy)</label>'+
       '<label>Native ranked-war default sorting<select id="ws-native-sort">'+
       [['availability','Available first'],['hospital','Hospital first'],['bss','Highest BSS first'],['ff','Highest FF first'],['activity','Most recently active'],['torn','Leave Torn order unchanged']].map(([value,label])=>
@@ -5747,6 +5748,7 @@
           state.data.updated[key]=0;
       }
       if(setOpponent(positive($('#ws-enemy',root)?.value)))state.data.war=null;
+      cfg.nativeChainBubble=Boolean($('#ws-native-bubble',root)?.checked);
       cfg.nativeWarEnabled=Boolean($('#ws-native-war',root)?.checked);
       const nativeSort=String($('#ws-native-sort',root)?.value||'availability');
       cfg.nativeWarSort=['availability','hospital','bss','ff','activity','torn'].includes(nativeSort)?nativeSort:'availability';
@@ -6006,6 +6008,9 @@
     if(filter==='okay')return memberState(p)==='okay';
     if(filter==='hospital')return memberState(p)==='hospital';
     if(filter==='returning')return flightEvidence(p).kind==='returning';
+    if(filter==='active5')return positive(p.lastAt)>0&&Date.now()-p.lastAt<5*MIN;
+    if(filter==='active60')return positive(p.lastAt)>0&&Date.now()-p.lastAt<60*MIN;
+    if(filter==='offline')return String(p.lastAction||'').toLowerCase()==='offline';
     if(filter==='heavy')return band.heavy.has(p.id);
     if(filter==='assigned')return Object.values(cfg.assignments).some(id=>positive(id)===p.id);
     if(filter==='watched')return Boolean(cfg.watchlist[p.id]);
@@ -6027,11 +6032,74 @@
       '.faction-war ul.members-list li.wsnw-recent{outline:2px solid #e8a558;outline-offset:-2px;background:rgba(201,113,39,.16)}'+
       '.faction-war ul.members-list li.wsnw-hospital-soon{box-shadow:inset 3px 0 #42ce95}'+
       '.faction-war ul.members-list li.wsnw-filtered{display:none !important}'+
+      '#wsnw-chain-bubble{position:fixed;right:9px;bottom:64px;z-index:150;max-width:185px;min-width:95px;padding:7px;background:#0b273c;border:1px solid #4ba6d0;border-radius:10px;box-shadow:0 4px 14px #0008;color:#ecfaff;font:11px system-ui,sans-serif;touch-action:none;user-select:none;cursor:move}'+
+      '#wsnw-chain-bubble button{margin-left:4px;background:#164d6a;border:1px solid #438caa;border-radius:5px;color:white;padding:3px 6px;font:10px system-ui,sans-serif;cursor:pointer}'+
       '@media(max-width:600px){#wsnw-toolbar{gap:4px;padding:5px}#wsnw-toolbar .wsnw-note{flex-basis:100%}}';
     document.head.appendChild(style);
   }
+  // An opt-in small, draggable chain indicator. Never mounted over an attack page.
+  // The user's saved screen position stays on-device; external TWSE bubbles take precedence.
+  function renderNativeChainBubble(chain){
+    if(cfg.nativeChainBubble!==true||!isNativeWarPage()||
+      cfg.nativeWarEnabled===false||document.getElementById('twse-chain-bubble')){
+      document.getElementById('wsnw-chain-bubble')?.remove();return;
+    }
+    let bubble=document.getElementById('wsnw-chain-bubble');
+    if(!bubble){
+      bubble=document.createElement('div');bubble.id='wsnw-chain-bubble';
+      bubble.setAttribute('aria-label','Optional WarStaxx chain bubble; drag to reposition');
+      document.body.appendChild(bubble);
+      const place=cfg.nativeBubblePosition;
+      if(place&&Number.isFinite(Number(place.x))&&Number.isFinite(Number(place.y))){
+        bubble.style.right='auto';bubble.style.bottom='auto';
+        bubble.style.left=Math.max(0,Math.min(window.innerWidth-100,Number(place.x)))+'px';
+        bubble.style.top=Math.max(0,Math.min(window.innerHeight-42,Number(place.y)))+'px';
+      }
+      bubble.addEventListener('pointerdown',e=>{
+        if(e.target.closest('button')||e.button>0)return;
+        const rect=bubble.getBoundingClientRect();
+        nativeWarState.drag={id:e.pointerId,dx:e.clientX-rect.left,dy:e.clientY-rect.top};
+        try{bubble.setPointerCapture(e.pointerId);}catch(_){}
+      });
+      bubble.addEventListener('pointermove',e=>{
+        if(nativeWarState.drag?.id!==e.pointerId)return;
+        const x=Math.max(0,Math.min(window.innerWidth-bubble.offsetWidth,e.clientX-nativeWarState.drag.dx));
+        const y=Math.max(0,Math.min(window.innerHeight-bubble.offsetHeight,e.clientY-nativeWarState.drag.dy));
+        bubble.style.right='auto';bubble.style.bottom='auto';
+        bubble.style.left=x+'px';bubble.style.top=y+'px';
+      });
+      const end=e=>{
+        if(nativeWarState.drag?.id!==e.pointerId)return;
+        nativeWarState.drag=null;
+        cfg.nativeBubblePosition={x:parseFloat(bubble.style.left)||0,y:parseFloat(bubble.style.top)||0};
+        saveCfg();
+      };
+      bubble.addEventListener('pointerup',end);
+      bubble.addEventListener('pointercancel',end);
+      bubble.addEventListener('click',e=>{
+        const btn=e.target.closest('[data-wsnw-bubble]');
+        if(!btn)return;
+        e.preventDefault();e.stopPropagation();
+        if(btn.dataset.wsnwBubble==='toggle'){
+          cfg.nativeBubbleMinimized=!cfg.nativeBubbleMinimized;saveCfg();
+          bubble.dataset.signature='';
+          renderNativeChainBubble(chainStatus());
+        }else if(btn.dataset.wsnwBubble==='war')warQuick('war');
+      });
+    }
+    const mini=Boolean(cfg.nativeBubbleMinimized),
+      signature=[mini,chain.fresh,chain.count,chain.remaining,chain.nextIn].join(':');
+    if(bubble.dataset.signature===signature)return;
+    bubble.dataset.signature=signature;
+    bubble.innerHTML='<span>'+(!chain.fresh?'Chain unknown':
+      'Chain #'+fmt(chain.count)+(mini?'':' | '+chain.remaining+'s'))+'</span>'+
+      '<button type="button" data-wsnw-bubble="toggle" aria-label="'+(mini?'Expand':'Minimise')+
+      ' chain bubble">'+(mini?'+':'-')+'</button>'+
+      (mini?'':'<button type="button" data-wsnw-bubble="war">War</button>');
+  }
   function clearNativeWar(){
     document.getElementById('wsnw-toolbar')?.remove();
+    document.getElementById('wsnw-chain-bubble')?.remove();
     for(const row of document.querySelectorAll('.faction-war ul.members-list li.wsnw-enhanced')){
       row.classList.remove('wsnw-enhanced','wsnw-recent','wsnw-hospital-soon','wsnw-filtered');
       row.querySelectorAll('.wsnw-detail,.wsnw-badge,.wsnw-copy').forEach(el=>el.remove());
@@ -6044,7 +6112,7 @@
     if(toolbar.nextElementSibling!==box)box.before(toolbar);
     const mode=['availability','hospital','bss','ff','activity','torn'].includes(cfg.nativeWarSort)?
       cfg.nativeWarSort:'availability';
-    const filter=['all','okay','hospital','returning','heavy','assigned','watched'].includes(cfg.nativeWarFilter)?
+    const filter=['all','okay','hospital','returning','heavy','assigned','watched','active5','active60','offline'].includes(cfg.nativeWarFilter)?
       cfg.nativeWarFilter:'all';
     const signature=[mode,filter,conflict,score?.our,score?.enemy,chain.fresh?chain.count:0,chain.remaining].join(':');
     if(toolbar.dataset.signature===signature)return;
@@ -6055,7 +6123,7 @@
       [['availability','Availability'],['hospital','Hospital expiry'],['bss','BSS highest'],['ff','FF highest'],['activity','Recent activity'],['torn','Torn order']].map(x=>
         '<option value="'+x[0]+'" '+(mode===x[0]?'selected':'')+'>'+x[1]+'</option>').join('')+
       '</select></label><label>Show <select data-wsnw-filter>'+
-      [['all','All'],['okay','Okay'],['hospital','Hospital'],['returning','Returning'],['heavy','Black Skull targets'],['assigned','Assigned'],['watched','Watched']].map(x=>
+      [['all','All'],['okay','Okay'],['hospital','Hospital'],['returning','Returning'],['active5','Active 5m'],['active60','Active 1h'],['offline','Offline'],['heavy','Black Skull targets'],['assigned','Assigned'],['watched','Watched']].map(x=>
         '<option value="'+x[0]+'" '+(filter===x[0]?'selected':'')+'>'+x[1]+'</option>').join('')+
       '</select></label>'+
       '<button type="button" data-wsnw-action="war">War Room</button>'+
@@ -6080,6 +6148,7 @@
       band=enemyRoleBands(),fresh=rosterFresh('enemies'),score=warScore(),chain=chainStatus();
     const conflict=lists.some(nativeWarConflict);
     nativeWarToolbar(box,conflict,score,chain);
+    renderNativeChainBubble(chain);
     const orders=new Map();
     for(const [friendId,targetId] of Object.entries(cfg.assignments)){
       const name=ourMap.get(positive(friendId))?.name;
@@ -6127,7 +6196,10 @@
         if(enemy){
           const strength=enemyBattleEstimate(p);
           badge=band.heavy.has(id)?'SKULL TARGET':band.regular.has(id)?'REGULAR':'BSS UNKNOWN';
-          if(strength.value!==null)badge+=' | '+fmt(strength.value)+' BSS';
+          if(strength.value!==null)badge+=' | '+fmt(strength.value)+(strength.verified?' SPY BSS':' EST BSS');
+          const ff=ffLabel(id);
+          if(ff.source==='estimate')badge+=' | MY FF '+ff.value;
+          else if(ff.source==='observed')badge+=' | TEAM FF '+ff.value;
           if(orders.has(id))badge+=' | ORDER: '+orders.get(id);
           if(cfg.watchlist[id])badge+=' | WATCH';
         }else if(cfg.blackSkulls[id])badge='BLACK SKULL';
