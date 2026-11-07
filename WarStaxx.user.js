@@ -3050,8 +3050,16 @@
     if(!activeWarNow()||!positive(id)||!state.data.enemies.some(p=>p.id===id))return;
     open({section:'targets'});state.chosen=id;state.playerOpen=true;render();
   }
+  function warStripPageMode(){
+    const path=location.pathname.toLowerCase();
+    const sid=(new URLSearchParams(location.search).get('sid')||'').toLowerCase();
+    if(path==='/attack.php'||path==='/attack'||(path==='/loader.php'&&sid.startsWith('attack'))||
+      /(?:^|[?#&])sid=attack(?:[&#]|$)/i.test(location.hash))return 'hidden';
+    if(factionRoute()||(path==='/item.php'&&itemIntent()))return 'full';
+    return 'mini';
+  }
   function handleWarScroll(e){
-    if(!activeWarNow())return;
+    if(!activeWarNow()||warStripPageMode()!=='full')return;
     // Captured scroll events also come from tables, dialogs and Torn widgets.
     // Only the document or Torn's own main page scroller may resize the bar.
     const t=e?.target;
@@ -3070,8 +3078,11 @@
     renderWarStrip(true);
   }
   function renderWarStrip(force=false){
-    let host=document.querySelector('#mainContent,#main-content,#mainContainer,#mainWrapper,main,[role="main"]')||document.body;
+    const mode=warStripPageMode();
+    state.stripRouteKey=location.pathname+location.search+location.hash;
     let bar=document.getElementById('warstaxx-live-strip');
+    if(mode==='hidden'||(mode==='mini'&&!activeWarNow())){bar?.remove();return;}
+    let host=document.querySelector('#mainContent,#main-content,#mainContainer,#mainWrapper,main,[role="main"]')||document.body;
     if(!host||host.closest('#warstaxx-root,#staxx-hub-root'))return;
     document.getElementById('warstaxx-faction-open')?.remove();
     if(!document.getElementById('warstaxx-live-style')){
@@ -3093,7 +3104,11 @@
         '#warstaxx-live-strip.wsw-standby .wsw-top strong{font-size:11px;font-weight:650}'+
         '#warstaxx-live-strip .wsw-standby-actions{margin-left:auto;display:flex;gap:5px;align-items:center}'+
         '#warstaxx-live-strip .wsw-standby-actions button{min-height:31px;padding:4px 8px;font-size:10px}'+
-        '@media(max-width:600px){#warstaxx-live-strip{margin:6px 2px;padding:8px}#warstaxx-live-strip .wsw-actions{grid-template-columns:repeat(3,minmax(0,1fr))}#warstaxx-live-strip button{font-size:11px;min-height:44px}}';
+        '#warstaxx-live-strip.wsw-mini{position:static;z-index:auto;margin:2px 4px 4px;padding:4px 8px;box-shadow:none;border-color:#284f69;background:#0b2239}'+
+        '#warstaxx-live-strip.wsw-mini .wsw-top{flex-wrap:nowrap;gap:8px}'+
+        '#warstaxx-live-strip.wsw-mini .wsw-top strong{font-size:12px;white-space:nowrap}'+
+        '#warstaxx-live-strip.wsw-mini button{margin-left:auto;min-height:30px;padding:3px 9px;font-size:11px}'+
+        '@media(max-width:600px){#warstaxx-live-strip{margin:6px 2px;padding:8px}#warstaxx-live-strip .wsw-actions{grid-template-columns:repeat(3,minmax(0,1fr))}#warstaxx-live-strip button{font-size:11px;min-height:44px}#warstaxx-live-strip.wsw-mini{padding:3px 5px}#warstaxx-live-strip.wsw-mini .wsw-top{gap:5px}#warstaxx-live-strip.wsw-mini .wsw-top strong{font-size:10px}#warstaxx-live-strip.wsw-mini button{min-height:30px}}';
       document.head.appendChild(style);
     }
     if(!bar){
@@ -3105,9 +3120,20 @@
       });
     }
     if(bar.parentNode!==host)host.insertBefore(bar,host.firstChild);
+    bar.classList.toggle('wsw-mini',mode==='mini');
     const btn=(name,action)=>'<button type="button" data-ws-quick="'+esc(action)+'">'+esc(name)+'</button>';
-    // The strip is always available, including between ranked wars.
-    // It shrinks to a quiet navigation shortcut rather than falsely showing a live score.
+    if(mode==='mini'){
+      const score=warScore(),chain=chainStatus(),sig=['mini',state.data.war?.id,score?.our,score?.enemy,
+        chain.fresh?chain.count:0,chain.fresh?chain.remaining:0].join(':');
+      if(!force&&bar.dataset.signature===sig)return;
+      bar.dataset.signature=sig;bar.classList.remove('wsw-standby');
+      bar.innerHTML='<div class="wsw-top"><span class="wsw-kicker">WAR</span>'+
+        '<strong>Us '+(score?fmt(score.our):'?')+' / Them '+(score?fmt(score.enemy):'?')+'</strong>'+
+        (chain.fresh?'<span class="wsw-kicker">Chain '+fmt(chain.count)+' ('+chain.remaining+'s)</span>':'')+
+        btn('WAR ROOM','war')+'</div>';
+      return;
+    }
+    // Full commands remain on faction and war pages or while using item shortcuts.
     if(!activeWarNow()){
       const signature=['standby',cfg.enemyId,state.lastRefresh>0,Math.floor(Date.now()/MIN)].join(':');
       if(!force&&bar.dataset.signature===signature)return;
@@ -5804,6 +5830,18 @@
     document.dispatchEvent(new CustomEvent('staxx:ping'));
   }},45000);
   const warStripTimer=setInterval(()=>{if(!document.hidden)renderWarStrip();},10000);
+  // Torn can navigate to an attack without a full reload.
+  const warRouteTimer=setInterval(()=>{if(!document.hidden&&
+    state.stripRouteKey!==location.pathname+location.search+location.hash)renderWarStrip(true);},1000);
+  document.addEventListener('click',e=>{
+    const a=e.target?.closest?.('a[href]');if(!a)return;
+    try{
+      const u=new URL(a.href,location.href);
+      if(u.hostname===location.hostname&&u.pathname.toLowerCase()==='/loader.php'&&
+        (u.searchParams.get('sid')||'').toLowerCase().startsWith('attack'))
+        document.getElementById('warstaxx-live-strip')?.remove();
+    }catch(_){}
+  },true);
   const sharedPolling=setInterval(()=>{if(!document.hidden&&sharedEndpoint()&&sharedScope())
     sharedPull(false);},90000);
   window.addEventListener('scroll',handleWarScroll,{passive:true});
@@ -5813,7 +5851,7 @@
   const refreshTimer=setInterval(()=>{
     if(!document.hidden&&effectiveKey()&&!state.loading&&Date.now()-state.lastRefresh>cfg.refreshSeconds*1000)refresh(false);
   },30000);
-  window.addEventListener('beforeunload',()=>{clearInterval(refreshTimer);clearInterval(registrationTimer);clearInterval(warStripTimer);},{once:true});
+  window.addEventListener('beforeunload',()=>{clearInterval(refreshTimer);clearInterval(registrationTimer);clearInterval(warStripTimer);clearInterval(warRouteTimer);},{once:true});
   try{boot();}catch(err){
     window.__warStaxxReady=false;
     window.__warStaxxStartError='Startup failed ('+(err?.name||'Error')+')';
