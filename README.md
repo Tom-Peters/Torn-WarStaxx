@@ -3,7 +3,7 @@
 ## v1.5.12 - Compact, scan-first ranked-war roster (7 November 2026)
 
 - **Compact default:** Opponent and friendly war rows now reserve 58 CSS px, down from 79 px (about 27% shorter). The first 36 px retain Torn's original member/score/status/Attack cells; the 20 px intelligence strip contains only the decisive information.
-- **Scan order:** Always identify the player first (+ Name to expand). Show a short hospital/return timer where relevant, a purple SK badge only for Black Skull targets, a clearly sourced FFScouter estimated total or BSS, and a concise FF value. Extreme FF remains highlighted as dangerous, never a recommendation.
+- **Scan order:** Always identify the player first (+ Name to expand). Show a short hospital/return timer where relevant, a purple SKULL badge only for Black Skull targets, a clearly sourced FFScouter estimated total or BSS, and a concise FF value. Extreme FF remains highlighted as dangerous, never a recommendation.
 - **Tap to expand one player:** The chosen row grows temporarily to 82 px with the full hospital countdown, role name, source-labelled FF, local orders and the preserved Intel / Copy controls. Tap it again to collapse; other players remain compact. The strip supports keyboard Enter/Space as well as touch.
 - **Compact top toolbar:** Sort, Show and War Room remain directly visible. The three additional Skulls / Turtle / HIT shortcuts move behind a More/Less button. No automation or new network permissions.
 - **Stability:** Preserves existing data, API refresh cadence, sorting, FFS source details, faction roster, attack-page no-overlay guard and native page compatibility. Mobile-specific test fixtures cover both row modes. Device screenshots are still the final visual check.
