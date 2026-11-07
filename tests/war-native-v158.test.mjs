@@ -53,6 +53,8 @@ test('native enhancement mounts only on Torn ranked-war route',()=>{
   assert.equal(x.isNativeWarPage(),false);
   x.location.pathname='/loader.php';x.location.hash='#/war/123';
   assert.equal(x.isNativeWarPage(),false);
+  x.location.pathname='/page.php';
+  assert.equal(x.isNativeWarPage(),false);
 });
 test('hospital before returning before abroad and early releases first',()=>{
   const x=moduleSandbox();
