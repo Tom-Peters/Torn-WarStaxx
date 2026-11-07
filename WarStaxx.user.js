@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.5.10
+// @version      1.5.11
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='1.5.10';
+  const id='war', version='1.5.11';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.5.10', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.5.11', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -243,6 +243,12 @@
   if(state.data.war&&!Array.isArray(state.data.war.factions))state.data.war=null;
   for(const [key,value] of Object.entries(state.data.reports))
     if(!value||typeof value!=='object'||!Array.isArray(value.factions))delete state.data.reports[key];
+  // v1.5.11 fixes the old parser's incorrect 3.00 cap on FFScouter estimates.
+  // Invalidate only its lookup timestamp so previously rejected >3 estimates can refetch.
+  if(state.data.meta.ffEstimateParserVersion!==2){
+    if(cfg.ffConsent&&cfg.ffEnabled)state.data.updated.ffscouter=0;
+    state.data.meta.ffEstimateParserVersion=2;
+  }
   const effectiveKey=()=>String(cfg.key||'').trim()||(apiKeyPda.includes('PDA-APIKEY')?'':apiKeyPda);
   const saveCfg=()=>{try{localStorage.setItem(CONFIG,JSON.stringify(cfg));return true;}catch(_){state.localKeyError=true;return false;}};
   const save=()=>{try{localStorage.setItem(DATA,JSON.stringify(state.data));return true;}catch(_){
@@ -849,8 +855,12 @@
   // Fair Fight from FFScouter uses the API-key owner's battle stats, not a
   // selected teammate's. A true per-hitter figure needs both BSS inputs.
   const ffApiKey=()=>String(cfg.ffKey||'').trim()||effectiveKey();
+  // Torn awarded attack FF is capped at 3.00. FFScouter's calculated / modelled
+  // attacker-relative FF is UNcapped and may legitimately be above 3 (e.g. 9.29).
   const validFF=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))&&Number(v)>=1&&Number(v)<=3?
     Number(v):null;
+  const validScouterFF=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))&&
+    Number(v)>=1&&Number(v)<=1e6?Number(v):null;
   const ffTimestamp=v=>{
     if(typeof v==='number')return v>1e12?v:v>1e9?v*1000:0;
     if(typeof v==='string'&&/^\d+$/.test(v))return ffTimestamp(Number(v));
@@ -862,7 +872,7 @@
     for(const p of rows){
       const id=positive(p?.player_id);
       if(!allowed.has(id))continue;
-      const ff=validFF(p?.fair_fight);
+      const ff=validScouterFF(p?.fair_fight);
       const bss=Number(p?.bss_public),estimate=Number(p?.bs_estimate);
       out[id]={ff,bss:Number.isFinite(bss)&&bss>0?bss:null,
         bsEstimate:Number.isFinite(estimate)&&estimate>0?estimate:null,
@@ -911,9 +921,10 @@
   }
   function ffBadge(id,action=true){
     const x=ffLabel(id),cl=x.source==='unknown'?'ws-ff-none':x.source==='stale'?'ws-ff-stale':
-      x.source==='observed'?'ws-ff-actual':x.ff>=2.5?'ws-ff-high':x.ff>=2?'ws-ff-mid':'ws-ff-low';
+      x.source==='observed'?'ws-ff-actual':x.ff>4.5?'ws-ff-danger':
+      x.ff>3?'ws-ff-risk':x.ff>=2.5?'ws-ff-high':x.ff>=2?'ws-ff-mid':'ws-ff-low';
     const title=x.tag+' | '+x.age+' | '+(x.source==='estimate'?
-      'FF for API-key owner; other hitters have different FF':
+      'FFScouter calculated FF for API-key owner; over 3.00 is uncapped difficulty, NOT awarded Torn FF. Other hitters have different FF':
       x.source==='observed'?'Actual recorded FF from faction attacks; not a personal matchup':
       'No guaranteed win probability');
     const html='<span class="ws-ff '+cl+'" title="'+esc(title)+'">FF '+esc(x.value)+'</span>';
@@ -1943,7 +1954,7 @@
   }
   async function refreshFF(force=false){
     if(!cfg.ffEnabled||!cfg.ffConsent||!ffApiKey()||!state.data.enemies.length)return;
-    if(!canCall('ffscouter',10*MIN))return;
+    if(!canCall('ffscouter',force?0:10*MIN))return;
     const ids=[...new Set([...state.data.enemies,...state.data.ours].map(p=>p.id).concat(positive(state.data.meta?.ownerId)).filter(Boolean))].slice(0,205);
     if(!ids.length)return;
     const url='https://ffscouter.com/api/v1/get-stats?key='+encodeURIComponent(ffApiKey())+
@@ -2112,6 +2123,8 @@
     '#warstaxx-root .ws-ff-button{border:0;background:transparent;padding:1px;min-height:24px;display:inline-flex;align-items:center;vertical-align:middle}',
     '#warstaxx-root .ws-ff{display:inline-block;white-space:nowrap;font-size:11px;font-weight:850;border-radius:7px;line-height:19px;padding:1px 6px;background:#193d58;color:#cdf0ff;border:1px solid #4c7195;letter-spacing:.1px}',
     '#warstaxx-root .ws-ff-high{color:#a3ffe2;border-color:#2f9374;background:#12443b}',
+    '#warstaxx-root .ws-ff-risk{color:#ffdcaa;border-color:#b88738;background:#55411b}',
+    '#warstaxx-root .ws-ff-danger{color:#ffc0ca;border-color:#be6475;background:#4e2132}',
     '#warstaxx-root .ws-ff-mid{color:#bdefff;border-color:#387b9f;background:#17415e}',
     '#warstaxx-root .ws-ff-low{color:#ffb6bf;border-color:#a04e5c;background:#4d2934}',
     '#warstaxx-root .ws-ff-actual{color:#d5ecff;border-color:#778ed0;background:#253e68}',
@@ -2528,7 +2541,7 @@
       .filter(x=>x.intel.source==='estimate'&&memberState(x.p)==='okay')
       .sort((a,b)=>b.intel.ff-a.intel.ff).slice(0,8);
     return card('High-FF opponents to review | FFScouter',
-      rows.length?'<p>Highest *fair-fight multipliers for the API-key owner* among currently Okay players. This is not a list of easy wins: verify battle strength and check target status before acting.</p>'+
+      rows.length?'<p>Highest calculated FFScouter multipliers for the API-key owner. Values above 3.00 are uncapped difficulty estimates (Torn awarded FF stays capped at 3.00). High values can mean a much stronger, unsafe opponent. Verify strength and status.</p>'+
         rows.map(x=>'<div class="ws-row"><span>'+infoButton(x.p.name,x.p.id)+' '+ffBadge(x.p.id)+
         '<br><small>Previous reported score '+scoreLabel(lastKnownMemberScore('enemies',x.p.id))+
         ' | '+esc(x.p.lastAction)+'</small></span>'+b('Compare','tab:matchups')+'</div>').join(''):
@@ -2548,7 +2561,7 @@
       (state.data.errors.ffscouter?'<div class="ws-note ws-warn">FFScouter: '+esc(state.data.errors.ffscouter)+'</div>':'')+
       '<div class="ws-toolbar">'+b('Refresh FF','refresh-ff')+b('Check registered key','check-ff-key')+
       b('FF settings','tab:settings')+'</div>'+
-      '<p class="ws-small">Blue/green badges are estimates; actual logged Torn attack FF is labelled as observed. A large FF alone does not mean an easy or winnable hit.</p>');
+      '<p class="ws-small">FFScouter calculated FF can exceed 3.00: that means an increasingly tough opponent, NOT bonus respect above 3.00. Torn awarded FF stays between 1.00 and 3.00; logged attacks are labelled observed.</p>');
   }
   async function manualFFCheck(onlyCheck=false){
     if(state.loading||state.ffLoading)return;
@@ -6067,6 +6080,8 @@
       '.faction-war ul.members-list li.wsnw-enhanced > .wsnw-intel::-webkit-scrollbar{display:none}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-owner{position:sticky!important;left:0!important;z-index:3!important;float:none!important;flex:0 0 auto!important;max-width:115px!important;min-width:45px!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;color:#fff!important;font:800 11px system-ui,sans-serif!important;margin-right:3px!important;padding:1px 4px 1px 2px!important;background:#0b1f31!important;box-shadow:3px 0 5px #0b1f31!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-chip{position:static!important;float:none!important;flex:0 0 auto!important;display:inline-flex!important;align-items:center!important;max-width:150px!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;padding:2px 4px!important;margin:0!important;border-radius:4px!important;background:#123d56!important;border:1px solid #2b617d!important;color:#b7dffa!important;font:650 10px/1.35 system-ui,sans-serif!important}'+
+      '.faction-war ul.members-list li .wsnw-intel .wsnw-ff-danger{background:#5a2434!important;color:#ffd5d9!important;border-color:#af6470!important}'+
+      '.faction-war ul.members-list li .wsnw-intel .wsnw-ff-risk{background:#554422!important;color:#ffe6aa!important;border-color:#a58141!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-status{background:#123b4a!important;color:#95e8df!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-status.wsnw-soon{background:#164e40!important;color:#a5f6c2!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-role.wsnw-heavy{background:#3a2b52!important;border-color:#765696!important;color:#ebcdf9!important}'+
@@ -6269,10 +6284,13 @@
           const strength=nativeWarStrength(p);
           chip('bss',strength.short,'',strength.detail);
           const ff=ffLabel(id);
-          chip('ff',ff.source==='estimate'?'Your FF '+ff.value:
+          chip('ff',ff.source==='estimate'?'Your FF '+ff.value+
+              (ff.ff>4.5?' RISK':ff.ff>3?' HARD':''):
             ff.source==='observed'?'Team FF '+ff.value:'',
-            '',ff.source==='estimate'?'FF for your API-key owner, not for other squad members':
-              'Recorded team FF, not your predicted attack FF');
+            ff.source==='estimate'&&ff.ff>4.5?'wsnw-ff-danger':
+              ff.source==='estimate'&&ff.ff>3?'wsnw-ff-risk':'',
+            ff.source==='estimate'?'Uncapped FFScouter strength/difficulty estimate for the API-key owner. Torn awarded FF max 3.00; an FF above 4.5 can indicate a much stronger target.':
+              'Historical team FF from attacks, never a predicted win');
           chip('order',orders.has(id)?'TO '+orders.get(id):cfg.watchlist[id]?'WATCH':'',
             '',orders.has(id)?'Local assigned hitter':'Watchlisted target');
         }else{
