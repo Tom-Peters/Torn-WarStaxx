@@ -572,7 +572,7 @@
   function nativeWarOwnLocation(){
     const id=positive(state.data.meta?.ownerId),me=state.data.ours.find(p=>p.id===id);
     if(me){const info=nativeWarLocation(me);if(info.country!=='Unknown')
-      return {country:info.country,known:true,phase:info.phase};}
+      return {country:info.country,known:info.phase!=='inbound',phase:info.phase};}
     return {country:'Torn',known:false,phase:'unknown'};
   }
   function nativeWarCountryCompare(a,b,own=nativeWarOwnLocation()){
@@ -6064,17 +6064,35 @@
     return [t?0:group,t?-t.at:eta,p.id];
   }
   function nativeWarSort(list,playerMap,mode){
-    if(!list||nativeWarConflict(list))return false;
-    const all=Array.from(list.children),rows=nativeWarRows(list);
-    if(rows.length<2||all.length!==rows.length||rows.some(r=>!r.classList.contains('enemy')))return false;
+    if(!list)return false;
+    const priorHeaders=Array.from(list.querySelectorAll(':scope > li.wsnw-country-heading'));
+    if(nativeWarConflict(list)){
+      // An external sorter wins. Remove only WarStaxx-generated group headings.
+      priorHeaders.forEach(h=>h.remove());
+      return false;
+    }
+    const children=Array.from(list.children),all=children.filter(el=>!el.classList.contains('wsnw-country-heading')),
+      rows=nativeWarRows(list);
+    if(!rows.length||all.length!==rows.length||rows.some(r=>!r.classList.contains('enemy'))){
+      priorHeaders.forEach(h=>h.remove());
+      return false;
+    }
     if(!nativeWarState.original.has(list)){
       nativeWarState.original.set(list,new Map(rows.map((r,i)=>[nativeWarPlayerId(r),i])));
     }
-    const original=nativeWarState.original.get(list);
-    const sort=rows.slice().sort((a,b)=>{
+    const original=nativeWarState.original.get(list),own=nativeWarOwnLocation(),
+      grouping=mode!=='torn';
+    const sorted=rows.slice().sort((a,b)=>{
       const pa=playerMap.get(nativeWarPlayerId(a)),pb=playerMap.get(nativeWarPlayerId(b));
       if(!pa||!pb)return (original.get(nativeWarPlayerId(a))??Infinity)-
         (original.get(nativeWarPlayerId(b))??Infinity);
+      if(grouping){
+        const country=nativeWarCountryCompare(nativeWarLocation(pa).country,
+          nativeWarLocation(pb).country,own);
+        if(country)return country;
+        const availability=nativeWarAvailabilityRank(pa)-nativeWarAvailabilityRank(pb);
+        if(availability)return availability;
+      }
       const ak=mode==='torn'?[original.get(pa.id)??Infinity]:nativeWarOrder(pa,mode);
       const bk=mode==='torn'?[original.get(pb.id)??Infinity]:nativeWarOrder(pb,mode);
       for(let i=0;i<Math.max(ak.length,bk.length);i++){
@@ -6082,9 +6100,43 @@
       }
       return pa.id-pb.id;
     });
-    if(rows.some((row,i)=>row!==sort[i])){
+    const expected=[],headersByCountry=new Map(priorHeaders.map(h=>[h.dataset.wsnwCountry,h]));
+    if(grouping){
+      const counts=new Map();
+      for(const row of sorted){
+        if(row.classList.contains('wsnw-filtered'))continue;
+        const player=playerMap.get(nativeWarPlayerId(row));
+        if(!player)continue;
+        const info=nativeWarLocation(player),rec=counts.get(info.country)||{total:0,okay:0,flights:0};
+        rec.total++;
+        if(memberState(player)==='okay')rec.okay++;
+        if(info.phase==='inbound')rec.flights++;
+        counts.set(info.country,rec);
+      }
+      let lastCountry=null;
+      for(const row of sorted){
+        const player=playerMap.get(nativeWarPlayerId(row)),
+          country=player?nativeWarLocation(player).country:'Unknown';
+        if(country!==lastCountry&&counts.has(country)){
+          let heading=headersByCountry.get(country);
+          if(!heading){heading=el('li','wsnw-country-heading');heading.dataset.wsnwCountry=country;}
+          const amount=counts.get(country);
+          const name=country+(own.known&&own.phase!=='inbound'&&own.country===country?' | YOUR LOCATION':'');
+          const headline=name+' | '+amount.total+' player'+(amount.total===1?'':'s')+
+            ' | '+amount.okay+' Okay'+(amount.flights?' | '+amount.flights+' flying in':'');
+          if(heading.textContent!==headline)heading.textContent=headline;
+          heading.setAttribute('aria-label',headline);
+          expected.push(heading);
+        }
+        expected.push(row);
+        lastCountry=country;
+      }
+    }else expected.push(...sorted);
+    for(const old of priorHeaders)if(!expected.includes(old))old.remove();
+    const existing=Array.from(list.children);
+    if(existing.length!==expected.length||expected.some((row,i)=>row!==existing[i])){
       const frag=document.createDocumentFragment();
-      for(const row of sort)frag.appendChild(row);
+      for(const row of expected)frag.appendChild(row);
       list.appendChild(frag);
     }
     return true;
