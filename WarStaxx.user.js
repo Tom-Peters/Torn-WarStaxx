@@ -4747,6 +4747,48 @@
     return {score:Math.min(100,Math.max(0,score)),reason,known:last!==null,
       note:'Priority index is derived from historical points and observed activity, never hidden battle strength.'};
   }
+  // Times are read-only countdowns from the most recent Torn API roster, not predicted releases.
+  function hospitalCountdown(until,at=Date.now()){
+    if(!positive(until))return 'Hospital time unknown';
+    const seconds=Math.ceil((until-at)/1000);
+    if(seconds<=0)return 'Due now - refresh status';
+    const h=Math.floor(seconds/3600),m=Math.floor(seconds%3600/60),sec=seconds%60;
+    return h?h+'h '+String(m).padStart(2,'0')+'m '+String(sec).padStart(2,'0')+'s':
+      m+'m '+String(sec).padStart(2,'0')+'s';
+  }
+  function rosterStatusExtra(p){
+    const kind=memberState(p);
+    if(kind==='hospital'){
+      const until=positive(p.until);
+      return '<div class="ws-roster-timing"><span data-ws-hospital-until="'+until+
+        '" class="'+(until&&until-Date.now()<=5*MIN?'ws-timer-soon':'')+'">'+
+        esc(hospitalCountdown(until))+'</span><small>Observed expiry, not a confirmed release</small></div>';
+    }
+    if(kind==='away'){
+      const flight=flightEvidence(p);
+      const label=flight.kind==='returning'?'Returning to Torn':
+        flight.kind==='outbound'?'Departing / flying out':'Abroad / flight unclear';
+      return '<div class="ws-roster-timing"><span>'+esc(label)+
+        (flight.kind==='returning'&&flight.eta?' | '+esc(flightCountdown(flight.eta)):'')+
+        '</span></div>';
+    }
+    return '';
+  }
+  function updateHospitalCountdowns(){
+    if(!state.open)return;
+    for(const el of $$('[data-ws-hospital-until]',root)){
+      const until=positive(el.getAttribute('data-ws-hospital-until'));
+      el.textContent=hospitalCountdown(until);
+      el.classList.toggle('ws-timer-soon',Boolean(until&&until-Date.now()<=5*MIN));
+    }
+  }
+  function availabilitySortKey(p){
+    const kind=memberState(p),flight=kind==='away'?flightEvidence(p):null;
+    const rank=kind==='okay'?0:kind==='hospital'?1:
+      flight?.kind==='returning'?2:flight?.kind==='outbound'?3:kind==='away'?4:5;
+    return [rank,kind==='hospital'?positive(p.until)||Infinity:
+      flight?.kind==='returning'?flight.eta||Infinity:Infinity];
+  }
   function targetRows(){
     const q=state.search.trim().toLowerCase(),filter=state.filter;
     return state.data.enemies.filter(p=>{
@@ -4762,6 +4804,14 @@
       if(filter==='ff'&&ffLabel(p.id).source!=='estimate')return false;
       return true;
     }).sort((a,b)=>{
+      if(state.sort==='availability'||state.sort==='hospital'){
+        const ak=availabilitySortKey(a),bk=availabilitySortKey(b);
+        if(state.sort==='hospital'){
+          if(ak[0]===1&&bk[0]!==1)return -1;
+          if(bk[0]===1&&ak[0]!==1)return 1;
+        }
+        return ak[0]-bk[0]||ak[1]-bk[1]||evaluate(b).score-evaluate(a).score||a.id-b.id;
+      }
       if(state.sort==='ff')return (ffLabel(b.id).source==='estimate'?ffLabel(b.id).ff:-1)-(ffLabel(a.id).source==='estimate'?ffLabel(a.id).ff:-1)||a.id-b.id;
       if(state.sort==='threat')return threatRating(b).score-threatRating(a).score||a.id-b.id;
       if(state.sort==='lastwar')return (lastKnownMemberScore('enemies',b.id)??-1)-(lastKnownMemberScore('enemies',a.id)??-1)||a.id-b.id;
@@ -4782,7 +4832,7 @@
       '<p>Live state, last action, official war performance and observed travel are separate evidence sources. Unknown scores are never treated as zero.</p></div>'+
       '<div class="ws-toolbar"><input type="search" id="ws-search" placeholder="Search name, ID or role" value="'+esc(state.search)+'" aria-label="Find enemy player">'+
       '<select id="ws-sort" aria-label="Sort enemy players">'+
-      [['warScore','Recommended priority'],['ff','FF highest first'],['threat','Historical threat index'],['lastwar','Last reported war score'],['activity','Most recently active'],['online','Observed online rate'],['level','Level high to low']]
+      [['warScore','Recommended priority'],['availability','Availability: Okay first'],['hospital','Hospital release soonest'],['ff','FF highest first'],['threat','Historical threat index'],['lastwar','Last reported war score'],['activity','Most recently active'],['online','Observed online rate'],['level','Level high to low']]
       .map(x=>'<option value="'+x[0]+'" '+(state.sort===x[0]?'selected':'')+'>'+x[1]+'</option>').join('')+'</select></div>'+
       '<div class="ws-toolbar">'+chips+'</div>'+ffStatusPanel();
     if(!row.length)return html+empty('No matching opponents. Clear filters, refresh, or configure a faction in Settings.');
@@ -4792,7 +4842,7 @@
         return '<tr><td>'+infoButton(p.name,p.id)+' '+ffBadge(p.id)+'<br><small>#'+p.id+' | Lv'+fmt(p.level)+
           (p.position?' | '+esc(p.position):'')+'</small></td>'+
           '<td>'+pill(p.status,ev.ready?'good':ev.kind==='hospital'?'bad':'')+
-          '<br><small>'+esc(p.statusText)+'</small></td>'+
+          '<br><small>'+esc(p.statusText)+'</small>'+rosterStatusExtra(p)+'</td>'+
           '<td>'+pill(p.lastAction,isOnline(p)?'good':'')+'<br><small>'+esc(age(p.lastAt))+'</small></td>'+
           '<td><b>'+scoreLabel(score)+'</b><br><small>'+ev.hist.wars+' report(s) | avg '+scoreLabel(ev.hist.avg)+'</small></td>'+ 
           '<td>'+pill('Threat '+threatRating(p).score+'/100')+'<br><small>'+esc(threatRating(p).reason)+'</small></td>'+
@@ -4800,7 +4850,7 @@
           (flightEvidence(p).kind==='returning'?'<br>Inbound '+(flightEvidence(p).eta?esc(stamp(flightEvidence(p).eta))+' ('+esc(flightCountdown(flightEvidence(p).eta))+')':'ETA unknown'):'')+
           '<br>Recorded team FF: '+(ff.avg===null?'No hits':ff.avg.toFixed(2)+'x / '+ff.count+' hits')+
           (third?.bss?'<br>Estimated BSS: '+fmt(third.bss):'')+'</small></td>'+
-          '<td>'+b(cfg.watchlist[p.id]?'Unwatch':'Watch','watch:'+p.id)+' '+infoButton('Full intel',p.id)+' '+a('Attack',attackLink(p.id))+' '+a('Profile',link(p.id))+'</td></tr>';
+          '<td>'+b(cfg.watchlist[p.id]?'Unwatch':'Watch','watch:'+p.id)+' '+b('Copy ID','copy-player:'+p.id)+' '+infoButton('Full intel',p.id)+' '+a('Attack',attackLink(p.id))+' '+a('Profile',link(p.id))+'</td></tr>';
       }).join('')+'</tbody></table></div>'+
       '<p class="ws-small">Scores shown only where official detailed reports exist. Attack links open Torn for manual action; no attack is submitted.</p>';
   }
@@ -5356,6 +5406,23 @@
   }
   function handle(action){
     if(action==='refresh'){refresh(true);return;}
+    if(action.startsWith('copy-player:')){
+      const id=positive(action.slice(12));
+      const p=[...state.data.enemies,...state.data.ours].find(x=>x.id===id);
+      if(!p)return;
+      const value=p.name+' ['+p.id+']';
+      const done=()=>{confirmed('Copied '+p.name+' ['+p.id+']');render();};
+      const failed=()=>{state.error='Copy unavailable on this device.';render();};
+      if(navigator.clipboard?.writeText)navigator.clipboard.writeText(value).then(done).catch(failed);
+      else{
+        const area=document.createElement('textarea');
+        area.value=value;area.style.cssText='position:fixed;left:-9999px';
+        document.body.appendChild(area);area.select();
+        let ok=false;try{ok=document.execCommand('copy');}catch(_){}
+        area.remove();ok?done():failed();
+      }
+      return;
+    }
     if(action==='scan-public'){
       if(state.scanning||state.loading)return;
       if(!effectiveKey()||!state.data.enemies.length){
@@ -5796,7 +5863,15 @@
     storage:state.localKeyError?'error':'ready',ui:root.isConnected?'ready':'missing',
     detail:'War data sampled while Torn is in the foreground; no automatic game actions.'
   }));
-  const styleSheet=()=>{if(!$('#warstaxx-css')){css.id='warstaxx-css';document.head.appendChild(css);}};
+  const styleSheet=()=>{if(!$('#warstaxx-css')){css.id='warstaxx-css';document.head.appendChild(css);}
+    if(!document.getElementById('ws-status-clock-css')){
+      const clockCss=document.createElement('style');clockCss.id='ws-status-clock-css';
+      clockCss.textContent='.ws-roster-timing{display:grid;gap:3px;margin-top:4px;font-size:11px;color:#98d8f2;white-space:normal}'+
+        '.ws-roster-timing small{color:#98aabb;font-size:10px}'+
+        '.ws-roster-timing .ws-timer-soon{color:#9bf1bd;font-weight:800}';
+      document.head.appendChild(clockCss);
+    }
+  };
   function factionRoute(){
     return /^\/(factions|war)\.php$/i.test(location.pathname) ||
       (/^\/page\.php$/i.test(location.pathname) && /^(rankedwar|factionwar|war)$/i.test(new URLSearchParams(location.search).get('sid')||''));
@@ -5830,6 +5905,7 @@
     document.dispatchEvent(new CustomEvent('staxx:ping'));
   }},45000);
   const warStripTimer=setInterval(()=>{if(!document.hidden)renderWarStrip();},10000);
+  const hospitalClockTimer=setInterval(()=>{if(!document.hidden)updateHospitalCountdowns();},10000);
   // Torn can navigate to an attack without a full reload.
   const warRouteTimer=setInterval(()=>{if(!document.hidden&&
     state.stripRouteKey!==location.pathname+location.search+location.hash)renderWarStrip(true);},1000);
@@ -5851,7 +5927,7 @@
   const refreshTimer=setInterval(()=>{
     if(!document.hidden&&effectiveKey()&&!state.loading&&Date.now()-state.lastRefresh>cfg.refreshSeconds*1000)refresh(false);
   },30000);
-  window.addEventListener('beforeunload',()=>{clearInterval(refreshTimer);clearInterval(registrationTimer);clearInterval(warStripTimer);clearInterval(warRouteTimer);},{once:true});
+  window.addEventListener('beforeunload',()=>{clearInterval(refreshTimer);clearInterval(registrationTimer);clearInterval(warStripTimer);clearInterval(warRouteTimer);clearInterval(hospitalClockTimer);},{once:true});
   try{boot();}catch(err){
     window.__warStaxxReady=false;
     window.__warStaxxStartError='Startup failed ('+(err?.name||'Error')+')';
