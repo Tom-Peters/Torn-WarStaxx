@@ -6016,6 +6016,37 @@
     if(filter==='watched')return Boolean(cfg.watchlist[p.id]);
     return true;
   }
+  function nativeCompactTotal(value){
+    const num=Number(value);
+    if(!Number.isFinite(num)||num<=0)return '';
+    const fmtUnit=(div,suffix)=>{
+      const v=num/div,dp=v>=100?0:v>=10?1:2;
+      return Number(v.toFixed(dp)).toLocaleString('en-GB')+suffix;
+    };
+    return num>=1e12?fmtUnit(1e12,'t'):num>=1e9?fmtUnit(1e9,'b'):
+      num>=1e6?fmtUnit(1e6,'m'):num>=1e3?fmtUnit(1e3,'k'):fmt(num);
+  }
+  // Total stats and the square-root Battle Stat Score are separate measures.
+  function nativeWarStrength(p){
+    const estimate=enemyBattleEstimate(p),report=spy(p.id);
+    if(estimate.verified&&bsScore(report)!==null){
+      const total=['strength','speed','defense','dexterity'].reduce((sum,k)=>sum+Number(report[k]),0);
+      return {short:'Spy '+nativeCompactTotal(total),source:estimate.source,
+        detail:'Torn spy total '+fmt(total)+' | BSS '+fmt(bsScore(report))+
+          ' | observed '+age(report.observedAt)+' ago'};
+    }
+    const f=ffscouter(p.id);
+    if(f&&!ffIsStale(f)&&Number.isFinite(f.bsEstimate)&&f.bsEstimate>0){
+      const when=positive(f.updatedAt)||positive(f.at);
+      return {short:'FFS ~'+nativeCompactTotal(f.bsEstimate),source:'FFScouter model',
+        detail:'FFScouter modelled total '+fmt(f.bsEstimate)+
+          ' | public BSS '+(Number.isFinite(f.bss)?fmt(f.bss):'unknown')+
+          ' | updated '+age(when)+' | YATA uses another model'};
+    }
+    if(estimate.value!==null)return {short:'BSS '+(estimate.verified?'':'~')+fmt(estimate.value),
+      source:estimate.source,detail:'Battle Stat Score, not total stats. '+estimate.source};
+    return {short:'Stats unknown',source:'None',detail:'No usable current estimate'};
+  }
   function nativeWarStyle(){
     if(document.getElementById('wsnw-style'))return;
     const style=document.createElement('style');style.id='wsnw-style';
@@ -6024,16 +6055,21 @@
       '#wsnw-toolbar strong{font-size:12px}#wsnw-toolbar button,#wsnw-toolbar select{background:#14405d;border:1px solid #387493;border-radius:6px;color:#eaf8ff;padding:5px 7px;min-height:30px;font:inherit}'+
       '#wsnw-toolbar .wsnw-note{color:#97bdcf;font-size:10px}'+
       // Torn's name cell cannot grow: create a full-width 28px intelligence row BELOW it.
-      '.faction-war ul.members-list li.wsnw-enhanced{position:relative!important;height:80px!important;min-height:80px!important;box-sizing:border-box!important}'+
+      '.faction-war ul.members-list li.wsnw-enhanced{position:relative!important;height:79px!important;min-height:79px!important;box-sizing:border-box!important;border-left:3px solid #32718e!important;border-bottom:3px solid #34536b!important}'+
+      '.faction-war ul.members-list li.wsnw-heavy-target{border-left-color:#a46fd1!important}'+
+      '.faction-war ul.members-list li.wsnw-newly-okay{border-left-color:#42d69f!important}'+
       '.faction-war ul.members-list li.wsnw-enhanced > .member,.faction-war ul.members-list li.wsnw-enhanced > .level,.faction-war ul.members-list li.wsnw-enhanced > .points,.faction-war ul.members-list li.wsnw-enhanced > .status,.faction-war ul.members-list li.wsnw-enhanced > .attack{height:49px!important;max-height:49px!important;box-sizing:border-box!important}'+
-      '.faction-war ul.members-list li.wsnw-enhanced > .wsnw-intel{position:absolute!important;top:49px!important;left:2px!important;right:2px!important;width:auto!important;height:29px!important;z-index:2;box-sizing:border-box!important;padding:2px 4px!important;display:flex!important;flex-direction:row!important;align-items:center!important;gap:4px!important;background:rgba(5,26,43,.92)!important;border-top:1px solid rgba(109,172,207,.3)!important;overflow-x:auto!important;overflow-y:hidden!important;white-space:nowrap!important;scrollbar-width:none;touch-action:pan-x}'+
+      '.faction-war ul.members-list li.wsnw-enhanced > .wsnw-intel{position:absolute!important;top:49px!important;left:0!important;right:0!important;width:auto!important;height:27px!important;z-index:2;box-sizing:border-box!important;padding:2px 4px!important;display:flex!important;flex-direction:row!important;align-items:center!important;gap:4px!important;background:rgba(11,31,49,.96)!important;border-top:1px solid rgba(109,172,207,.25)!important;overflow-x:auto!important;overflow-y:hidden!important;white-space:nowrap!important;scrollbar-width:none;touch-action:pan-x}'+
       '.faction-war ul.members-list li.wsnw-enhanced > .wsnw-intel::-webkit-scrollbar{display:none}'+
+      '.faction-war ul.members-list li .wsnw-intel .wsnw-owner{position:static!important;float:none!important;flex:0 0 auto!important;max-width:115px!important;min-width:45px!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;color:#fff!important;font:800 11px system-ui,sans-serif!important;margin-right:3px!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-chip{position:static!important;float:none!important;flex:0 0 auto!important;display:inline-flex!important;align-items:center!important;max-width:150px!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;padding:2px 4px!important;margin:0!important;border-radius:4px!important;background:#123d56!important;border:1px solid #2b617d!important;color:#b7dffa!important;font:650 10px/1.35 system-ui,sans-serif!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-status{background:#123b4a!important;color:#95e8df!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-status.wsnw-soon{background:#164e40!important;color:#a5f6c2!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-role.wsnw-heavy{background:#3a2b52!important;border-color:#765696!important;color:#ebcdf9!important}'+
+      '.faction-war ul.members-list li .wsnw-intel .wsnw-intel-link{position:static!important;float:none!important;flex:0 0 auto!important;min-height:23px!important;height:23px!important;padding:1px 6px!important;margin:0!important;background:#1b526f!important;border:1px solid #568fb0!important;border-radius:5px!important;color:#ecfaff!important;font:700 10px system-ui,sans-serif!important;cursor:pointer!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-copy{position:static!important;float:none!important;flex:0 0 auto!important;min-height:23px!important;height:23px!important;padding:1px 6px!important;margin:0!important;background:#13516c!important;border:1px solid #4d91a9!important;color:white!important;border-radius:5px!important;font:650 10px system-ui,sans-serif!important;cursor:pointer!important}'+
       '.faction-war ul.members-list li.wsnw-recent{outline:2px solid #e8a558;outline-offset:-2px}'+
+      '.faction-war ul.members-list li.wsnw-enhanced:nth-child(even) > .wsnw-intel{background:rgba(20,43,61,.96)!important}'+
       '.faction-war ul.members-list li.wsnw-hospital-soon > .wsnw-intel{border-top-color:#42ce95!important}'+
       '.faction-war ul.members-list li.wsnw-filtered{display:none !important}'+
       '#wsnw-chain-bubble{position:fixed;right:9px;bottom:64px;z-index:150;max-width:185px;min-width:95px;padding:7px;background:#0b273c;border:1px solid #4ba6d0;border-radius:10px;box-shadow:0 4px 14px #0008;color:#ecfaff;font:11px system-ui,sans-serif;touch-action:none;user-select:none;cursor:move}'+
@@ -6106,6 +6142,7 @@
     document.getElementById('wsnw-chain-bubble')?.remove();
     for(const row of document.querySelectorAll('.faction-war ul.members-list li.wsnw-enhanced')){
       row.classList.remove('wsnw-enhanced','wsnw-recent','wsnw-hospital-soon','wsnw-filtered');
+      row.classList.remove('wsnw-heavy-target','wsnw-newly-okay');
       row.querySelectorAll('.wsnw-intel,.wsnw-detail,.wsnw-badge,.wsnw-copy').forEach(el=>el.remove());
     }
   }
