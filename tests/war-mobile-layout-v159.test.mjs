@@ -71,7 +71,7 @@ test('Torn PDA: compact rows keep the native player/status cells intact',()=>{
   assert.equal(row.children.length,1,'One intel subrow even after repeated refreshes');
   assert.match(row.children[0].className,/wsnw-intel/);
   const labels=row.children[0].children.map(x=>x.textContent);
-  assert.deepEqual(labels,['+ Example enemy','H 3m','SK','FFS ~62m','FF 1.32x','Intel','Copy']);
+  assert.deepEqual(labels,['+ Example enemy','H 3m','SKULL','FFS ~62m','FF 1.32x','Intel','Copy']);
   const detailButtons=row.children[0].children.filter(x=>['Intel','Copy'].includes(x.textContent));
   assert.ok(detailButtons.every(x=>x.className.includes('wsnw-details-only')));
   nativeWarState.expandedId=123;render();
