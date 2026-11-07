@@ -6227,7 +6227,8 @@
       '.faction-war ul.members-list li .wsnw-intel .wsnw-chip{position:static!important;float:none!important;flex:0 0 auto!important;display:inline-flex!important;align-items:center!important;max-width:140px!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;padding:1px 3px!important;margin:0!important;border-radius:4px!important;background:#123d56!important;border:1px solid #2b617d!important;color:#b7dffa!important;font:800 11px/1.2 system-ui,sans-serif!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-ff-danger{background:#5a2434!important;color:#ffd5d9!important;border-color:#af6470!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-ff-risk{background:#554422!important;color:#ffe6aa!important;border-color:#a58141!important}'+
-      '.faction-war ul.members-list li .wsnw-intel .wsnw-status{background:#502e38!important;color:#ffe2e5!important;border-color:#97616c!important}'+
+      '.faction-war ul.members-list li .wsnw-intel .wsnw-status{background:#123b4a!important;color:#95e8df!important}'+
+      '.faction-war ul.members-list li .wsnw-intel .wsnw-status.wsnw-hospital{background:#502e38!important;color:#ffe2e5!important;border-color:#97616c!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-status.wsnw-warning{background:#694821!important;color:#fff0b7!important;border-color:#d8a44c!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-status.wsnw-soon{background:#15543c!important;color:#caffe2!important;border-color:#42d493!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-role.wsnw-heavy{background:#623288!important;border:2px solid #dfb4ff!important;color:#fff!important;font-weight:900!important;letter-spacing:.2px!important}'+
@@ -6438,7 +6439,7 @@
         }else if(kind==='okay')message=''; // Torn already shows Okay in the main Status column.
         if(recent)message=recent.kind+' | '+(message||'OKAY');
         const place=nativeWarLocation(p);
-        const timer=chip('status',message,hospitalTier,'Torn roster observed '+age(state.data.updated[enemy?'enemies':'ours'])+
+        const timer=chip('status',message,(kind==='hospital'&&(!enemy||fresh)?'wsnw-hospital ':'')+hospitalTier,'Torn roster observed '+age(state.data.updated[enemy?'enemies':'ours'])+
           ' | '+place.country+' ('+place.source+')');
         if(timer){
           if(kind==='hospital'&&!other&&(!enemy||fresh))timer.dataset.wsnwExpiry=String(positive(p.until));
@@ -6541,7 +6542,7 @@
     const now=Date.now();
     if(cfg.nativeChainBubble===true&&activeWarNow())renderNativeChainBubble(chainStatus());
     for(const span of document.querySelectorAll('.faction-war .wsnw-intel [data-wsnw-expiry],.faction-war .wsnw-intel [data-wsnw-eta]')){
-      const expiry=positive(span.dataset.wsnwExpiry);
+      const expiry=positive(span.dataset.wsnwExpiry)||positive(span.dataset.wsnwEta);
       const row=span.closest('li.enemy,li.your');
       if(!row||!expiry)continue;
       const id=nativeWarPlayerId(row),p=state.data.enemies.find(x=>x.id===id)||
