@@ -1,5 +1,13 @@
 > **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v1.5.2). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
 
+## v1.5.7 - Attack-safe war controls and enemy status monitoring (7 November 2026)
+
+- **No war bar during attacks:** WarStaxx removes the banner on Torn attack routes, including in-page navigation, so it does not cover the fight. It reappears on the relevant war/faction page.
+- **Context-aware layout:** Full quick actions remain on faction/war pages and explicit item-assistance flows. Active wars elsewhere show a tiny non-sticky score/chain/War Room summary; no-war pages have no extra banner outside the faction screen. Settings now let you choose contextual (default), faction-only, or expanded elsewhere. All modes suppress the bar in combat.
+- **Enemy roster quality-of-life:** 10-second read-only hospital countdowns from Torn roster expiry, near-release highlighting, flight/return labels, "Availability: Okay first" and "Hospital release soonest" sorting, plus one-tap local copy of Name [ID]. Expired hospital timers explicitly ask for an official refresh; they do not claim the target is Okay.
+- **Privacy & data accuracy:** No TWSE community data-sharing service, auto-attack, item use, or extra permissions are introduced. Existing FFScouter remains explicitly opt-in. Timers and states are snapshots, not continuous or guaranteed arrivals.
+- **Compatibility:** Existing TornStaxx hub/module interface and installer URL are unchanged.
+
 ## v1.5.4 - Automatic battle-stat and opponent API accuracy (5 November 2026)
 
 - Owner's exact four battle stats are read from Torn's `user/battlestats`, including nested API response formats; null or missing stats never become zeros.
