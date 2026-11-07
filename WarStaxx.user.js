@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.5.12
+// @version      1.5.13
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='1.5.12';
+  const id='war', version='1.5.13';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.5.12', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.5.13', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -563,7 +563,8 @@
       return {country:'Unknown',phase:'unknown-travel',eta:positive(p.until),source:'Destination not provided'};
     }
     if(['okay','hospital','jail','fallen'].includes(kind)){
-      const where=current||nativeCountryName(desc);
+      // Hospital descriptions can include player names: do not treat a name "Canada" as a country.
+      const where=current||(/\b(?:in|at|abroad)\s+/i.test(desc)?nativeCountryName(desc):'');
       if(where)return {country:where,phase:'present',source:'Torn member status'};
       return {country:'Torn',phase:'present',source:'Inferred from non-travel status'};
     }
@@ -5277,6 +5278,7 @@
       '<label>Opponent faction ID (auto-updated if a ranked war is detected)<input type="number" id="ws-enemy" min="1" value="'+(positive(cfg.enemyId)||'')+'"></label>'+
       '<label><input type="checkbox" id="ws-native-bubble" '+(cfg.nativeChainBubble===true?'checked':'')+'> Optional draggable chain bubble on the ranked-war page (off by default, never on attacks)</label>'+
       '<label><input type="checkbox" id="ws-native-war" '+(cfg.nativeWarEnabled!==false?'checked':'')+'> Enhance Torn native ranked-war player rows (status countdowns, Black Skulls, filters, copy)</label>'+
+      '<label><input type="checkbox" id="ws-native-countries" '+(cfg.nativeWarCountryGroups!==false?'checked':'')+'> Group enemies by country (your location first, then alphabetical; Okay first)</label>'+
       '<label>Native ranked-war default sorting<select id="ws-native-sort">'+
       [['availability','Available first'],['hospital','Hospital first'],['bss','Highest BSS first'],['ff','Highest FF first'],['activity','Most recently active'],['torn','Leave Torn order unchanged']].map(([value,label])=>
         '<option value="'+value+'" '+((cfg.nativeWarSort||'availability')===value?'selected':'')+'>'+label+'</option>').join('')+
@@ -5835,6 +5837,7 @@
       if(setOpponent(positive($('#ws-enemy',root)?.value)))state.data.war=null;
       cfg.nativeChainBubble=Boolean($('#ws-native-bubble',root)?.checked);
       cfg.nativeWarEnabled=Boolean($('#ws-native-war',root)?.checked);
+      cfg.nativeWarCountryGroups=Boolean($('#ws-native-countries',root)?.checked);
       const nativeSort=String($('#ws-native-sort',root)?.value||'availability');
       cfg.nativeWarSort=['availability','hospital','bss','ff','activity','torn'].includes(nativeSort)?nativeSort:'availability';
       const stripScope=String($('#ws-strip-scope',root)?.value||'contextual');
@@ -6497,6 +6500,13 @@
         if(oldAt&&Date.now()-oldAt<5*MIN)
           recordAvailability(prior,next,positive(state.data.war?.id));
         save();publish();if(state.open)render();syncNativeWar();
+      }
+      // Keep the API-key owner's real location current without adding a new endpoint.
+      if(positive(cfg.ourId)&&canCall('ours',60000)){
+        try{
+          const ours=await call('/faction/'+cfg.ourId+'/members','ours',60000);
+          if(ours){state.data.ours=roster(ours);save();}
+        }catch(_){}
       }
       if(canCall('chain',30000)){
         try{
