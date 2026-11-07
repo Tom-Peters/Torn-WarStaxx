@@ -6517,16 +6517,17 @@
         // The intelligence bar is absolutely positioned above the Torn row; its
         // wrapped height must be reflected on the parent or the next row overlaps it.
         if(expanded){
-          const rowHeight=Math.max(90,36+Math.ceil(infoBar.scrollHeight)+5);
-          row.style.setProperty('--wsnw-expanded-height',rowHeight+'px');
-        }else row.style.removeProperty('--wsnw-expanded-height');
+          const rowHeight=Math.max(90,36+Math.ceil(Number(infoBar.scrollHeight)||0)+5);
+          row.style?.setProperty?.('--wsnw-expanded-height',rowHeight+'px');
+        }else row.style?.removeProperty?.('--wsnw-expanded-height');
       }
       if(fresh&&!conflict)nativeWarSort(list,enemyMap,cfg.nativeWarSort||'availability');
     }
   }
-  window.addEventListener('resize',()=>{
-    if(nativeWarState.expandedId&&isNativeWarPage())syncNativeWar();
-  },{passive:true});
+  if(typeof window!=='undefined'&&typeof window.addEventListener==='function')
+    window.addEventListener('resize',()=>{
+      if(nativeWarState.expandedId&&isNativeWarPage())syncNativeWar();
+    },{passive:true});
   async function pollNativeWar(){
     if(!isNativeWarPage()||document.hidden||cfg.nativeWarEnabled===false||
       !effectiveKey()||!positive(cfg.enemyId)||!activeWarNow()||
