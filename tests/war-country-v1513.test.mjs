@@ -16,7 +16,7 @@ function geography(){
   const values=runInNewContext(code+';({nativeCountryName,nativeWarLocation,'+
     'nativeWarOwnLocation,nativeWarCountryCompare,nativeWarAvailabilityRank,nativeWarLastSeen})',{
       state,Date,Number,MIN:60000,positive:x=>Number(x)>0?Number(x):0,
-      memberState:p=>String(p?.status||'unknown').toLowerCase()
+      memberState:p=>{const q=String(p?.status||'unknown').toLowerCase();return /trav|abroad/.test(q)?'away':/hospital/.test(q)?'hospital':/jail/.test(q)?'jail':/okay/.test(q)?'okay':'unknown';}
     });
   return {state,...values};
 }
