@@ -55,8 +55,9 @@ test('Skull Capo can choose top percentage or minimum BSS without misclassifying
   'const n=Number,positive=Number;',
   "const cfg={heavyPolicy:{mode:'percent',percent:50,minBss:0}};",
   "const state={data:{enemies:[{id:1,bss:1000,level:10},{id:2,bss:800,level:99},"+
-  "{id:3,bss:500,level:20},{id:4,bss:200,level:10},{id:5,bss:null,level:100}]}};",
-  'const enemyBattleEstimate=p=>({value:p.bss,source:"spy"});'
+  "{id:3,bss:500,level:20},{id:4,bss:200,level:10},{id:5,bss:null,level:100}],ours:[]}};",
+  'const enemyBattleEstimate=p=>({value:p.bss,source:"spy"});',
+  'const concessionSnapshot=()=>null;'
  ].join('\n');
  const f=fixture(setup,'  function heavyRule(','  function enemyRole(',
    '({cfg,heavyRule,enemyRoleBands})');
@@ -84,7 +85,8 @@ test('Black Skulls coverage reports uncovered enemy targets separately from veri
     "known:2,unknown:0,rule:{mode:'percent',percent:100,minBss:0}});",
   'const roleMatch=(friend,enemy)=>({match:{ratio:friend.id===10?.2:.3},score:99});',
   'const heavyTargetPriorities=()=>new Map([[101,{score:60}],[102,{score:50}]]);',
-  'const hitterReadiness=()=>({energyEnough:true});'
+  'const hitterReadiness=()=>({energyEnough:true});',
+  'const enemyBattleEstimate=p=>({value:800,source:"BSS"});'
  ].join('\n');
  const x=fixture(setup,'  function blackSkullsCoverage(','  function personalShortlist(',
     '({blackSkullsCoverage,cfg})');
@@ -105,7 +107,8 @@ test('Enemy scoring hits are tracked as conceded points, not a deduction from ou
     "{side:'enemies',attacker:100,defender:10,respect:8,at:2},"+
     "{side:'enemies',attacker:101,defender:10,respect:0,at:3},"+
     "{side:'enemies',attacker:100,defender:20,respect:12,at:4}];",
-  'const warAttackRows=()=>attacks;'
+  'const warAttackRows=()=>attacks;',
+  'const concessionSnapshot=()=>null;'
  ].join('\n');
  const f=fixture(setup,'  function inboundWarImpact(','  function ownHistoricalEfficiency(',
    '({inboundWarImpact,setAttacks:x=>attacks=x})');
