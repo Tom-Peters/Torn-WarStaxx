@@ -4860,10 +4860,12 @@
         '<div class="ws-toolbar">'+b('Pull orders','shared-pull')+
         (cfg.shared.canWrite?b('Publish orders','shared-push'):'')+'</div>'):'')+
       card('Skull Capo | define heavy targets',
-        '<p>Choose the top percentage of opponents with known BSS or an absolute minimum BSS. '+
-        'Lower-BSS opponents remain in the regular-member pool. Unknown BSS requires scouting.</p>'+
+        '<p>Default: a higher BSS than the strongest known regular automatically reserves a target for Black Skulls. '+
+        'Enemies with a recorded win against that regular also qualify, even at lower BSS. '+
+        'Pin extras manually below. Incomplete regular BSS makes the boundary provisional.</p>'+
         '<div class="ws-toolbar"><label>Strength cutoff method<select id="ws-heavy-mode">'+
-        [['percent','Top percentage'],['min-bss','Minimum BSS']].map(([v,label])=>
+        [['relative','Strongest regular + observed winning attacks (default)'],
+          ['percent','Legacy top percentage'],['min-bss','Legacy minimum BSS']].map(([v,label])=>
           '<option value="'+v+'" '+(bands.rule.mode===v?'selected':'')+'>'+label+'</option>').join('')+
         '</select></label>'+
         '<label>Top % (5-100)<input id="ws-heavy-percent" type="number" min="5" max="100" step="1" value="'+bands.rule.percent+'"></label>'+
@@ -4872,7 +4874,7 @@
           fmt(bands.regularCount)+' regular, '+fmt(bands.unknown)+' unknown. '+
           'This controls targets only; it does not prove a win.</p>'+
         b('Save strength cutoff','save-heavy-cutoff'))+
-      blackSkullsCoverageCard(40)+
+      blackSkullsCoverageCard(40)+manualBlackSkullTargetsCard()+
       liveBlackSkullsImpactCard()+blackSkullsPerformanceCard()+comparableStrengthCard()+bonusTargetCard()+leaderboardCard(12)+
       card('BLACK SKULLS | strongest enemy targets',teamRows(black,'Black Skulls'))+
       card('REGULAR ATTACKERS | lower BSS targets',teamRows(regular,'regular attackers'))+
@@ -4882,6 +4884,26 @@
         b('Performance leaderboard','tab:reports')+
         b('Full planning','tab:command')+'</div>';
   }
+  function manualBlackSkullTargetsCard(limit=60){
+    const bands=enemyRoleBands(),ranked=state.data.enemies.map(p=>({
+      p,estimate:enemyBattleEstimate(p)
+    })).sort((a,b)=>(b.estimate.value??-1)-(a.estimate.value??-1)||
+      a.p.name.localeCompare(b.p.name));
+    return card('Manual Black Skull targets | extra opponents',
+      '<p>Pin or unpin enemies as additional Black Skull targets. Overrides are stored per enemy faction. '+
+      'Unpinning does not remove a target that still meets the automatic rule.</p>'+
+      (ranked.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr>'+
+        '<th>Opponent</th><th>BSS</th><th>Classification</th><th>Manual action</th></tr></thead><tbody>'+
+        ranked.slice(0,limit).map(({p,estimate})=>
+          '<tr><td>'+infoButton(p.name,p.id)+'</td><td>'+
+          (estimate.value===null?'Unknown':fmt(estimate.value)+(estimate.verified?'':' ~'))+
+          '</td><td>'+esc(bands.reasons.get(p.id)?.join('; ')||
+            (estimate.value===null?'Unclassified (scout required)':'Regular target'))+
+          '</td><td>'+b(bands.manual.has(p.id)?'Unpin':'Pin extra',
+            'toggle-heavy-target:'+p.id)+'</td></tr>').join('')+
+        '</tbody></table></div>':empty('Enemy roster not loaded.')));
+  }
+
   function blackSkullsRoom(){
     const self=ourWarReadiness(),skulls=state.data.ours.filter(p=>cfg.blackSkulls[p.id]),
       bands=enemyRoleBands(),personal=bestEfficiencyHit(),myId=positive(self.id),
@@ -5982,16 +6004,16 @@
       render();syncNativeWar();return;
     }
     if(action==='save-heavy-cutoff'){
-      const mode=String($('#ws-heavy-mode',root)?.value||'percent'),
+      const mode=String($('#ws-heavy-mode',root)?.value||'relative'),
         percent=Number($('#ws-heavy-percent',root)?.value),
         minBss=Number($('#ws-heavy-bss',root)?.value);
-      if(!['percent','min-bss'].includes(mode)||!Number.isInteger(percent)||
+      if(!['relative','percent','min-bss'].includes(mode)||!Number.isInteger(percent)||
         percent<5||percent>100||!Number.isFinite(minBss)||minBss<0||minBss>1e15){
         state.error='Cutoff must use 5-100% or a non-negative BSS up to 1e15.';
         render();return;
       }
       cfg.heavyPolicy=heavyRule({mode,percent,minBss});saveCfg();markSharedDirty();
-      confirmed('Black Skulls strength cutoff saved. Check coverage and existing orders.');
+      confirmed('Black Skull target policy saved. Review automatic and manual targets.');
       render();return;
     }
     if(action.startsWith('skull-assign:')){
