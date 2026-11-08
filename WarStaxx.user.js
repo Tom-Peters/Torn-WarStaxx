@@ -7116,6 +7116,35 @@
       '<span>Role</span><span>Timer / place</span><span>Seen</span><span>Stats</span><span>FF</span><span>War pts</span>';
     if(heading.innerHTML!==columns)heading.innerHTML=columns;
     heading.removeAttribute('title');
+    // Compact faction-wide observed impact and an explicit Black Skulls-only
+    // filter immediately above our native Torn member roster.
+    if(ours){
+      let bar=heading.previousElementSibling;
+      if(!bar?.classList?.contains('wsnw-faction-summary')){
+        bar=el('div','wsnw-faction-summary');heading.before(bar);
+      }
+      const snap=concessionSnapshot(),complete=Boolean(snap?.complete),
+        known=Boolean(snap?.known),prefix=complete?'':'≥',
+        earned=known?prefix+(nativeCompactTotal(snap.ourTotal)||'0'):'—',
+        conceded=known?prefix+(nativeCompactTotal(snap.total)||'0'):'—',
+        delta=known?snap.ourTotal-snap.total:null,
+        net=delta===null?'—':'~'+(delta>=0?'+':'−')+
+          (nativeCompactTotal(Math.abs(delta))||'0'),
+        black=cfg.nativeFriendlyFilter==='black',
+        count=state.data.ours.filter(p=>cfg.blackSkulls[p.id]).length;
+      const html='<span class="wsnw-summary-values">'+
+        '<b>E '+earned+'</b><b>G '+conceded+'</b><strong class="'+
+        (delta===null?'':delta>=0?'wsnw-positive':'wsnw-negative')+
+        '">NET '+net+'</strong></span>'+
+        '<span class="wsnw-summary-filters">'+
+        '<button type="button" data-wsnw-friendly-filter="all" aria-pressed="'+
+          (!black?'true':'false')+'">All '+state.data.ours.length+'</button>'+
+        '<button type="button" data-wsnw-friendly-filter="black" aria-pressed="'+
+          (black?'true':'false')+'">☠ Skulls '+count+'</button></span>';
+      if(bar.innerHTML!==html)bar.innerHTML=html;
+      bar.setAttribute('aria-label','Captured faction earned and conceded attack points, '+
+        (complete?'scan caught up':'partial scan')+'; net is an estimate');
+    }
   }
   // Android/Torn PDA can leave WebView title tooltips stuck on screen.
   // Keep extended explanations in expanded rows and screen-reader aria labels,
@@ -7539,6 +7568,12 @@
       else{const t=el('textarea');t.value=value;t.style.cssText='position:fixed;left:-9999px';
         document.body.appendChild(t);t.select();try{if(document.execCommand('copy'))done();}catch(_){}t.remove();}
       return;
+    }
+    const ourFilter=e.target?.closest?.('.faction-war [data-wsnw-friendly-filter]');
+    if(ourFilter&&isNativeWarPage()){
+      e.preventDefault();e.stopPropagation();
+      cfg.nativeFriendlyFilter=ourFilter.dataset.wsnwFriendlyFilter==='black'?'black':'all';
+      saveCfg();syncNativeWar();return;
     }
     const sortHeading=e.target?.closest?.('.faction-war .wsnw-our-legend [data-wsnw-sort-field]');
     if(sortHeading&&isNativeWarPage()){
