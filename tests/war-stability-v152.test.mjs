@@ -10,7 +10,7 @@ function region(start,end){
   return source.slice(a,b);
 }
 
-test('all three Torn PDA version surfaces match 1.5.27 and script remains parser safe',()=>{
+test('all three Torn PDA version surfaces match 1.5.28 and script remains parser safe',()=>{
   assert.ok(source.startsWith('// ==UserScript==\n'));
   assert.match(source,/^\/\/ @version\s+1\.5\.27$/m);
   assert.match(source,/const id='war', version='1\.5\.27'/);
