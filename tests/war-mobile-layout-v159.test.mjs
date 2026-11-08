@@ -55,7 +55,7 @@ test('Torn PDA: compact rows keep the native player/status cells intact',()=>{
     document:{getElementById:()=>({}),querySelector:()=>box,createElement:tag=>element(tag)},state,cfg,nativeWarState,Date,Map,Set,
     isNativeWarPage:()=>true,activeWarNow:()=>true,nativeWarStyle:()=>{},nativeWarToolbar:()=>{},
     renderNativeChainBubble:()=>{},inboundWarImpact:()=>null,liveEnemyWarImpact:()=>null,nativeWarLegend:()=>{},nativeWarRows:()=>[row],nativeWarPlayerId:x=>x.id,
-    nativeWarConflict:()=>false,clearWarStaxxStickyTitles:()=>{},nativeWarDetailHTML:()=>'<div></div>',enemyRoleBands:()=>({heavy:new Set([123]),regular:new Set(),manual:new Set()}),
+    nativeWarConflict:()=>false,nativeWarActiveSortConflict:()=>false,nativeWarPaintHospital:()=>{},clearWarStaxxStickyTitles:()=>{},nativeWarDetailHTML:()=>'<div></div>',enemyRoleBands:()=>({heavy:new Set([123]),regular:new Set(),manual:new Set()}),
     rosterFresh:()=>true,warScore:()=>null,chainStatus:()=>({fresh:false}),
     positive:x=>Number(x)>0?Number(x):0,memberState:p=>p.status.toLowerCase(),
     nativeWarFilters:()=>true,nativeWarTransition:()=>null,MIN:60000,

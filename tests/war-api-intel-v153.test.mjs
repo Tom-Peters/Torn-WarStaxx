@@ -22,9 +22,9 @@ function fixture(){
 }
 test('userscript v1.5.28 is ASCII and the PDA probe matches the release',()=>{
   assert.ok(source.startsWith('// ==UserScript==\n'));
-  assert.match(source,/^\/\/ @version\s+1\.5\.27$/m);
-  assert.match(source,/const id='war', version='1\.5\.27'/);
-  assert.match(source,/const ID='war', VER='1\.5\.27'/);
+  assert.match(source,/^\/\/ @version\s+1\.5\.28$/m);
+  assert.match(source,/const id='war', version='1\.5\.28'/);
+  assert.match(source,/const ID='war', VER='1\.5\.28'/);
   assert.doesNotMatch(source,/[^\x00-\x7F]/);
   assert.doesNotThrow(()=>new Script(source));
 });

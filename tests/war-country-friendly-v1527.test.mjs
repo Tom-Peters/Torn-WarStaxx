@@ -39,7 +39,7 @@ function fixture(){
   const context={
     state,cfg,Date,Map,WeakMap,Array,Number,Infinity,
     nativeWarState:{ourOriginal:new WeakMap()},
-    nativeWarConflict:()=>false,nativeWarRows:()=>list.children.filter(x=>x.type==='row'),
+    nativeWarConflict:()=>false,nativeWarActiveSortConflict:()=>false,nativeWarRows:()=>list.children.filter(x=>x.type==='row'),
     nativeWarPlayerId:r=>r.id,
     nativeWarLocation:p=>({country:p.country,phase:p.phase||'present'}),
     nativeWarOwnLocation:()=>({country:'Canada',known:true,phase:'abroad'}),

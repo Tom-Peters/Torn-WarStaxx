@@ -74,7 +74,7 @@ test('native country grouping inserts stable country headings and Okay before ho
   const env={
     document:{createDocumentFragment:()=>({nodes:[],appendChild(x){this.nodes.push(x)}})},
     cfg:{nativeWarCountryGroups:true},nativeWarState:{original:new WeakMap()},
-    nativeWarConflict:()=>false,nativeWarRows:l=>l.children.filter(x=>x.type==='row'),
+    nativeWarConflict:()=>false,nativeWarActiveSortConflict:()=>false,nativeWarRows:l=>l.children.filter(x=>x.type==='row'),
     nativeWarPlayerId:r=>r.id,nativeWarLocation:p=>({country:p.country,phase:p.flight?'inbound':'present'}),
     nativeWarOwnLocation:()=>({country:'Canada',known:true,phase:'abroad'}),
     nativeWarCountryCompare:(a,b)=>{

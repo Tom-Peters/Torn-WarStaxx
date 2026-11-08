@@ -49,9 +49,9 @@ test('attack refresh does not use a stale cached war ID',()=>{
  assert.match(code,/!activeWarNow\(\)/);
 });
 test('userscript metadata and probes agree at v1.5.28',()=>{
- assert.match(source,/^\/\/ @version\s+1\.5\.27$/m);
- assert.match(source,/const id='war', version='1\.5\.27'/);
- assert.match(source,/const ID='war', VER='1\.5\.27'/);
+ assert.match(source,/^\/\/ @version\s+1\.5\.28$/m);
+ assert.match(source,/const id='war', version='1\.5\.28'/);
+ assert.match(source,/const ID='war', VER='1\.5\.28'/);
  assert.doesNotMatch(source,/[^\x00-\x7f]/);
  assert.doesNotThrow(()=>new Script(source));
 });
