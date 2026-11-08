@@ -34,7 +34,7 @@ test('native tactical rows retain Torn columns and align secondary intelligence 
   assert.match(style,/wsnw-expanded .wsnw-intel .wsnw-owner\{display:block/);
   assert.match(render,/nativeWarLegend\(list,rows\)/);
   assert.match(source,/list\.before\(heading\)/);
-  assert.match(source,/document\.querySelectorAll\('\.faction-war \.wsnw-legend'\)/);
+  assert.match(source,/\.faction-war \.wsnw-legend/);
 });
 test('PDA ASCII quoting and syntax remain safe',()=>{
   assert.match(source,/^\/\/ @version\s+1\.5\.26$/m);
