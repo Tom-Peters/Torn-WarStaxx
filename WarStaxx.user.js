@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.5.19
+// @version      1.5.20
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.5.19', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.5.20', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -199,7 +199,7 @@
   const link=id=>'https://www.torn.com/profiles.php?XID='+positive(id);
   const attackLink=id=>'https://www.torn.com/loader.php?sid=attack&user2ID='+positive(id);
   const apiKeyPda=typeof window.PDA_APIKEY==='string'?window.PDA_APIKEY:'###PDA-APIKEY###';
-  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,autoConceded:true,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},controlAssignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,warStripCompact:true,warStripScope:'contextual',nativeWarEnabled:true,nativeWarCountryGroups:true,nativeWarSort:'availability',nativeFriendlySort:'given',nativeWarFilter:'all',nativeChainBubble:false,priorityNotifications:true,hitterRisk:{},heavyPolicy:{mode:'percent',percent:40,minBss:0},shared:{enabled:false,endpoint:'',token:'',canWrite:false},hidden:false};
+  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,autoConceded:true,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},controlAssignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,warStripCompact:true,warStripScope:'contextual',nativeWarEnabled:true,nativeWarCountryGroups:true,nativeWarSort:'availability',nativeFriendlySort:'given',nativeFriendlyDesc:true,nativeWarFilter:'all',nativeChainBubble:false,priorityNotifications:true,hitterRisk:{},heavyPolicy:{mode:'percent',percent:40,minBss:0},shared:{enabled:false,endpoint:'',token:'',canWrite:false},hidden:false};
   const cfg=Object.assign({},defaults,safeRead(CONFIG,{}));
   cfg.assignments=cfg.assignments&&typeof cfg.assignments==='object'?cfg.assignments:{};
   cfg.ordersByEnemy=cfg.ordersByEnemy&&typeof cfg.ordersByEnemy==='object'?cfg.ordersByEnemy:{};
@@ -6380,17 +6380,16 @@
     if(!rows.length||rows.length!==all.length||rows.some(r=>!r.classList.contains('your')))return false;
     if(!nativeWarState.ourOriginal.has(list))
       nativeWarState.ourOriginal.set(list,new Map(rows.map((r,i)=>[nativeWarPlayerId(r),i])));
-    const original=nativeWarState.ourOriginal.get(list);
+    const original=nativeWarState.ourOriginal.get(list),desc=cfg.nativeFriendlyDesc!==false;
     const measure=impact=>{
       if(mode==='earned')return impact.earned;
       if(mode==='net')return impact.net;
       if(mode==='share')return impact.share;
-      if(mode==='hits')return impact.attacks;
+      if(mode==='hits')return impact.hits;
       return impact.given;
     };
     const keys=new Map(rows.map(row=>{
-      const id=nativeWarPlayerId(row);
-      return [id,liveWarMemberImpact(id)];
+      const id=nativeWarPlayerId(row);return [id,liveWarMemberImpact(id)];
     }));
     const sorted=rows.slice().sort((a,b)=>{
       const idA=nativeWarPlayerId(a),idB=nativeWarPlayerId(b);
@@ -6398,12 +6397,12 @@
       const x=measure(keys.get(idA)),y=measure(keys.get(idB));
       if(x===null&&y!==null)return 1;
       if(y===null&&x!==null)return -1;
-      return (y??0)-(x??0)||(original.get(idA)??Infinity)-(original.get(idB)??Infinity);
+      const diff=desc?(y??0)-(x??0):(x??0)-(y??0);
+      return diff||(original.get(idA)??Infinity)-(original.get(idB)??Infinity);
     });
     if(sorted.some((row,i)=>row!==rows[i])){
       const frag=document.createDocumentFragment();
-      sorted.forEach(row=>frag.appendChild(row));
-      list.appendChild(frag);
+      sorted.forEach(row=>frag.appendChild(row));list.appendChild(frag);
     }
     return true;
   }
@@ -6597,7 +6596,7 @@
     for(const h of document.querySelectorAll('.faction-war ul.members-list li.wsnw-country-heading'))h.remove();
     for(const row of document.querySelectorAll('.faction-war ul.members-list li.wsnw-enhanced')){
       row.classList.remove('wsnw-enhanced','wsnw-recent','wsnw-hospital-soon','wsnw-hospital-warning','wsnw-filtered');
-      row.classList.remove('wsnw-heavy-target','wsnw-newly-okay','wsnw-expanded','wsnw-under-fire');
+      row.classList.remove('wsnw-heavy-target','wsnw-newly-okay','wsnw-expanded','wsnw-under-fire','wsnw-has-skull');
       row.querySelectorAll('.wsnw-intel,.wsnw-detail,.wsnw-badge,.wsnw-copy').forEach(el=>el.remove());
     }
   }
@@ -6612,9 +6611,29 @@
       list.before(heading);
     }
     heading.classList.toggle('wsnw-our-legend',ours);
-    const columns=ours?'<span>Skull</span><span>Timer</span><span>Earn / Given</span><span>Net</span><span>Them % / hits</span>':
+    const chosen=['given','net','earned','share','hits','torn'].includes(cfg.nativeFriendlySort)?
+      cfg.nativeFriendlySort:'given',desc=cfg.nativeFriendlyDesc!==false;
+    const sortable=(key,label,help)=>{
+      const active=chosen===key;
+      return '<button type="button" data-wsnw-sort-field="'+key+'" '+
+        'class="wsnw-sort-heading'+(active?' wsnw-sort-active':'')+'" '+
+        'title="'+esc(help)+' | Tap again to reverse" '+
+        'aria-label="Sort our members by '+esc(help)+
+        (active?'; currently '+(desc?'highest first':'lowest first'):'')+'" '+
+        'aria-pressed="'+(active?'true':'false')+'">'+label+
+        (active?(desc?' ↓':' ↑'):' ↕')+'</button>';
+    };
+    const columns=ours?
+      '<span title="Skull marker, timer or last seen">STATUS</span>'+
+      sortable('earned','EARNED','points our member earned attacking the other faction')+
+      sortable('given','GIVEN','points the opponent earned attacking this member')+
+      sortable('net','NET','observed earned minus given (net proxy)')+
+      sortable('share','THEM %','observed proportion of the enemy faction score')+
+      sortable('hits','HITS','enemy scoring hits received'):
       '<span>Skull</span><span>Timer / travel</span><span>Seen</span><span>Stats</span><span>FF</span>';
     if(heading.innerHTML!==columns)heading.innerHTML=columns;
+    heading.title=ours?'Tap a column to sort; tap again to reverse. ≥ partial minimum, ~ net proxy.':
+      'Opponent travel, activity and strength estimates';
   }
   function nativeWarToolbar(box,conflict,score,chain){
     let toolbar=document.getElementById('wsnw-toolbar');
@@ -6626,7 +6645,8 @@
     const filter=['all','okay','hospital','returning','heavy','assigned','watched','active5','active60','offline'].includes(cfg.nativeWarFilter)?
       cfg.nativeWarFilter:'all';
     const friendlySort=['given','net','earned','share','hits','torn'].includes(cfg.nativeFriendlySort)?cfg.nativeFriendlySort:'given';
-    const signature=[mode,filter,friendlySort,conflict,nativeWarState.toolbarExpanded,cfg.nativeWarCountryGroups].join(':');
+    const friendlyDesc=cfg.nativeFriendlyDesc!==false;
+    const signature=[mode,filter,friendlySort,friendlyDesc,conflict,nativeWarState.toolbarExpanded,cfg.nativeWarCountryGroups].join(':');
     const scoreText=score?'Us '+fmt(score.our)+' / Them '+fmt(score.enemy):'LIVE WAR';
     const chainText=chain.fresh?'Chain '+fmt(chain.count)+' ('+chain.remaining+'s)':'Chain unknown';
     if(toolbar.dataset.signature===signature){
@@ -6638,24 +6658,34 @@
     toolbar.dataset.signature=signature;
     toolbar.innerHTML='<strong data-wsnw-score>WARSTAXX | '+scoreText+'</strong>'+
       '<span data-wsnw-chain>'+chainText+'</span>'+
-      '<label>Sort <select data-wsnw-sort>'+
-      [['availability','Availability'],['hospital','Hospital expiry'],['bss','BSS highest'],['ff','FF highest'],['activity','Recent activity'],['torn','Torn order']].map(x=>
+      '<label>Our <select data-wsnw-friendly-sort title="Sort our faction by">'+
+      [['given','Given'],['net','Net'],['earned','Earned'],['share','Enemy %'],
+        ['hits','Scoring hits'],['torn','Torn order']].map(x=>
+        '<option value="'+x[0]+'" '+(friendlySort===x[0]?'selected':'')+'>'+x[1]+'</option>').join('')+
+      '</select></label>'+
+      '<button type="button" data-wsnw-action="friendly-direction" title="Reverse our faction sort" '+
+        'aria-label="Sort our faction '+(friendlyDesc?'highest first':'lowest first')+
+        '; tap to reverse">'+(friendlyDesc?'↓':'↑')+'</button>'+
+      '<label>Enemy <select data-wsnw-sort title="Sort opponents by">'+
+      [['availability','Availability'],['hospital','Hospital expiry'],['bss','BSS highest'],
+        ['ff','FF highest'],['activity','Recent activity'],['torn','Torn order']].map(x=>
         '<option value="'+x[0]+'" '+(mode===x[0]?'selected':'')+'>'+x[1]+'</option>').join('')+
-      '</select></label><label>Show <select data-wsnw-filter>'+
-      [['all','All'],['okay','Okay'],['hospital','Hospital'],['returning','Returning'],['active5','Active 5m'],['active60','Active 1h'],['offline','Offline'],['heavy','Black Skull targets'],['assigned','Assigned'],['watched','Watched']].map(x=>
+      '</select></label>'+
+      '<label>Show <select data-wsnw-filter>'+
+      [['all','All'],['okay','Okay'],['hospital','Hospital'],['returning','Returning'],
+        ['active5','Active 5m'],['active60','Active 1h'],['offline','Offline'],
+        ['heavy','Black Skull targets'],['assigned','Assigned'],['watched','Watched']].map(x=>
         '<option value="'+x[0]+'" '+(filter===x[0]?'selected':'')+'>'+x[1]+'</option>').join('')+
       '</select></label>'+
       '<button type="button" data-wsnw-action="war">War Room</button>'+
-      '<button type="button" data-wsnw-action="more" aria-expanded="'+(nativeWarState.toolbarExpanded?'true':'false')+'">'+(nativeWarState.toolbarExpanded?'Less':'More')+'</button>'+
-      (nativeWarState.toolbarExpanded?'<label>Our sort <select data-wsnw-friendly-sort>'+ 
-        [['given','Most given'],['net','Best net'],['earned','Most earned'],['share','Enemy %'],['hits','Most hit'],['torn','Torn order']].map(x=>
-          '<option value="'+x[0]+'" '+(friendlySort===x[0]?'selected':'')+'>'+x[1]+'</option>').join('')+
-        '</select></label><button type="button" data-wsnw-action="skulls">Skulls</button>'+
+      '<button type="button" data-wsnw-action="more" aria-expanded="'+
+        (nativeWarState.toolbarExpanded?'true':'false')+'">'+(nativeWarState.toolbarExpanded?'Less':'More')+'</button>'+
+      (nativeWarState.toolbarExpanded?'<button type="button" data-wsnw-action="skulls">Skulls</button>'+
         '<button type="button" data-wsnw-action="turtle">Turtle</button>'+
         '<button type="button" data-wsnw-action="hit">HIT</button>':'')+
-      (conflict?'<span class="wsnw-note">External script controls row order</span>':'');
+      (conflict?'<span class="wsnw-note">Another script controls row order</span>':'');
   }
-  function syncNativeWar(){
+    function syncNativeWar(){
     if(!isNativeWarPage()||cfg.nativeWarEnabled===false||!activeWarNow()){
       if(document.getElementById('wsnw-toolbar'))clearNativeWar();return;
     }
@@ -6693,6 +6723,7 @@
         const expanded=nativeWarState.expandedId===id;
         row.classList.toggle('wsnw-expanded',expanded);
         row.classList.toggle('wsnw-heavy-target',enemy&&band.heavy.has(id));
+        row.classList.toggle('wsnw-has-skull',!enemy&&Boolean(cfg.blackSkulls[id]));
         const kind=memberState(p);
         const hospitalTier=kind==='hospital'&&(!enemy||fresh)?nativeWarHospitalTier(p.until,now):'';
         row.classList.toggle('wsnw-hospital-soon',hospitalTier==='wsnw-soon');
@@ -6735,7 +6766,7 @@
           if(place.phase==='inbound')message='TO '+place.country+(place.eta?' '+flightCountdown(place.eta,now):'');
           else if(place.phase==='abroad')message='In '+place.country;
           else message=place.phase==='unknown-travel'?'FLIGHT | DEST HIDDEN':'LOCATION UNKNOWN';
-        }else if(kind==='okay')message=''; // Torn already shows Okay in the main Status column.
+        }else if(kind==='okay')message=enemy?'':nativeWarLastSeen(p,now); // Own last action when no timer.
         if(recent)message=recent.kind+' | '+(message||'OKAY');
         const place=nativeWarLocation(p);
         const timer=chip('status',message,(kind==='hospital'&&(!enemy||fresh)?'wsnw-hospital ':'')+hospitalTier,'Torn roster observed '+age(state.data.updated[enemy?'enemies':'ours'])+
@@ -6780,39 +6811,39 @@
             orders.has(id)?'ORDER':cfg.watchlist[id]?'WATCH':'',
             '',orders.has(id)?'Local assigned hitter':'Watchlisted target');
         }else{
-          for(const key of ['bss','ff','order','conceded','received'])chip(key,'');
+          for(const key of ['bss','ff','order','conceded','received','impact'])chip(key,'');
           const impact=cfg.autoConceded===false?null:liveWarMemberImpact(id),
-            captured=Boolean(impact?.known),
-            complete=Boolean(impact?.complete),
+            captured=Boolean(impact?.known),complete=Boolean(impact?.complete),
             observed=value=>value===null||value===undefined?'—':
               (complete?'':'≥')+(nativeCompactTotal(value)||'0'),
             earned=observed(impact?.earned??null),given=observed(impact?.given??null),
             net=impact?.net===null||impact?.net===undefined?'—':
-              (complete?'':'~')+(impact.net>=0?'+':'')+fmt(impact.net),
+              (complete?'~':'')+(impact.net>=0?'+':'−')+
+                (nativeCompactTotal(Math.abs(impact.net))||'0'),
             share=impact?.share===null||impact?.share===undefined?'—':
               (complete?'':'≥')+fmt(impact.share)+'%',
-            hits=observed(impact?.hits??null),
-            hot=Boolean(impact?.underFire),
+            hits=observed(impact?.hits??null),hot=Boolean(impact?.underFire),
             source=cfg.autoConceded===false?'Live impact scanning disabled in Settings':
               !captured?'Awaiting current-war attack-history scan':
               complete?'Scanned through '+stamp(impact.lastFetch):
-                'Incomplete war-start scan; E/G are known minimums and net is an uncertain proxy',
-            detail='E = our points earned attacking the opponent; G = enemy points earned hitting this member. '+
-              'Both are observed ranked-war attack respect, not verified official personal war points. '+source+
+                'Incomplete attack-history scan; earned/given are minimums and net is uncertain',
+            detail='Earned: points we gained against the opponent. Given: points the enemy gained hitting this member. '+
+              'These are observed ranked-war attack respect gains, not a verified official per-member score. '+source+
               (impact?.error?' | '+impact.error:'');
           row.classList.toggle('wsnw-under-fire',hot);
-          chip('impact',expanded?'EARN '+earned+' | GIVEN '+given:'E'+earned+' G'+given,
-            impact?.given>0?'wsnw-conceded':'',detail);
+          chip('earned',expanded?'EARNED '+earned:earned,'wsnw-earned',detail);
+          chip('given',expanded?'GIVEN '+given:given,'wsnw-conceded',detail);
           chip('net',expanded?'NET '+net:net,
             impact?.net===null?'wsnw-unknown':impact.net<0?'wsnw-net-negative':'wsnw-net-positive',
-            'Observed earned minus conceded (proxy). '+source);
-          const shareText=expanded?'ENEMY SHARE '+share+' | RECEIVED '+hits+
-              ' scoring hits | '+(impact?.in30??0)+' attacks in 30m':
-              share+' · '+(impact?.hits??'—')+'H'+(hot?' !':'');
-          chip('share',shareText,hot?'wsnw-under-fire-chip':'',
-            'Share of current official enemy score attributable to captured attacks on this member (approximate). '+source);
-          chip('underfire',expanded&&hot?'REPEATED ATTACKS: '+impact.in30+' in 30m / '+impact.in60+' in 60m':'',
-            'wsnw-under-fire-chip','Recent incoming attack pressure; inspect hospital and protection strategy');
+            'Net = earned minus given, a proxy, not an official personal war score. '+source);
+          chip('share',expanded?'ENEMY SCORE SHARE '+share:share,'',
+            'Observed share of the official live enemy faction score from attacks on this member. '+source);
+          chip('hits',expanded?'ENEMY SCORING HITS '+hits:hits+(hot?'!':''),
+            hot?'wsnw-under-fire-chip':'',
+            'Scoring enemy attacks received; ! = repeated attacks recently. '+source);
+          chip('underfire',expanded&&hot?'REPEATED HITS: '+impact.in30+
+            ' in 30m / '+impact.in60+' in 60m':'','wsnw-under-fire-chip',
+            'Repeated incoming attack pressure; review turtling or protection');
           chip('skullperf',expanded&&cfg.blackSkulls[id]?
             'BLACK SKULL | OUR HITS '+observed(impact?.ownHits??null)+
             ' | EARN / HIT '+(impact?.ownHits&&impact.earned!==null?fmt(impact.earned/impact.ownHits):'—'):'',
@@ -6941,6 +6972,15 @@
         document.body.appendChild(t);t.select();try{if(document.execCommand('copy'))done();}catch(_){}t.remove();}
       return;
     }
+    const sortHeading=e.target?.closest?.('.faction-war .wsnw-our-legend [data-wsnw-sort-field]');
+    if(sortHeading&&isNativeWarPage()){
+      e.preventDefault();e.stopPropagation();
+      const next=String(sortHeading.dataset.wsnwSortField);
+      if(!['earned','given','net','share','hits'].includes(next))return;
+      if(cfg.nativeFriendlySort===next)cfg.nativeFriendlyDesc=cfg.nativeFriendlyDesc===false;
+      else {cfg.nativeFriendlySort=next;cfg.nativeFriendlyDesc=true;}
+      saveCfg();syncNativeWar();return;
+    }
     const toggle=e.target?.closest?.('.faction-war .wsnw-intel[data-wsnw-toggle]');
     if(toggle&&isNativeWarPage()){
       e.preventDefault();e.stopPropagation();
@@ -6951,6 +6991,10 @@
     const button=e.target?.closest?.('#wsnw-toolbar [data-wsnw-action]');
     if(button&&isNativeWarPage()){
       e.preventDefault();e.stopPropagation();
+      if(button.dataset.wsnwAction==='friendly-direction'){
+        cfg.nativeFriendlyDesc=cfg.nativeFriendlyDesc===false;
+        saveCfg();syncNativeWar();return;
+      }
       if(button.dataset.wsnwAction==='more'){
         nativeWarState.toolbarExpanded=!nativeWarState.toolbarExpanded;
         syncNativeWar();return;
@@ -6973,11 +7017,13 @@
     const header=e.target?.closest?.(
       '.faction-war .white-grad .member,.faction-war .white-grad .level,'+
       '.faction-war .white-grad .points,.faction-war .white-grad .status');
-    if(!header||cfg.nativeWarSort==='torn')return;
-    cfg.nativeWarSort='torn';saveCfg();
+    if(!header||(cfg.nativeWarSort==='torn'&&cfg.nativeFriendlySort==='torn'))return;
+    cfg.nativeWarSort='torn';cfg.nativeFriendlySort='torn';saveCfg();
     setTimeout(()=>{
       const box=document.querySelector('.faction-war');
-      for(const list of box?.querySelectorAll('ul.members-list')||[])nativeWarState.original.delete(list);
+      for(const list of box?.querySelectorAll('ul.members-list')||[]){
+        nativeWarState.original.delete(list);nativeWarState.ourOriginal.delete(list);
+      }
       syncNativeWar();
     },350);
   },true);
@@ -6986,7 +7032,7 @@
       friendlySort=e.target?.closest?.('#wsnw-toolbar [data-wsnw-friendly-sort]'),
       filter=e.target?.closest?.('#wsnw-toolbar [data-wsnw-filter]');
     if(sort){cfg.nativeWarSort=String(sort.value);saveCfg();syncNativeWar();}
-    if(friendlySort){cfg.nativeFriendlySort=String(friendlySort.value);saveCfg();syncNativeWar();}
+    if(friendlySort){cfg.nativeFriendlySort=String(friendlySort.value);cfg.nativeFriendlyDesc=true;saveCfg();syncNativeWar();}
     if(filter){cfg.nativeWarFilter=String(filter.value);saveCfg();syncNativeWar();}
   });
   function mountFactionShortcut(){
