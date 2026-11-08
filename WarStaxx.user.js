@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.5.29
+// @version      1.5.30
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.5.29', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.5.30', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -585,6 +585,29 @@
     }
     return '';
   }
+  // Torn describes foreign hospitals with demonyms, not country names:
+  // e.g. "In a Canadian hospital" or "In an Emirati hospital".
+  function nativeHospitalCountry(value){
+    const text=String(value||'');
+    const phrase=text.match(/\b(?:in|at)\s+(?:(?:a|an|the)\s+)?(Argentinian|Argentine|Canadian|Cayman(?:ian| Islands)?|Chinese|Emirati|Hawaiian|Japanese|Mexican|South African|Swiss|British|UK|United Kingdom|UAE|United Arab Emirates|Torn(?: City)?)\s+(?:hospital|clinic|medical\s+cent(?:er|re))\b/i);
+    if(!phrase)return '';
+    const descriptor=phrase[1];
+    const aliases=[
+      ['Argentina',/^(?:Argentinian|Argentine)$/i],
+      ['Canada',/^Canadian$/i],
+      ['Cayman Islands',/^Cayman(?:ian| Islands)?$/i],
+      ['China',/^Chinese$/i],
+      ['UAE',/^(?:Emirati|UAE|United Arab Emirates)$/i],
+      ['Hawaii',/^Hawaiian$/i],
+      ['Japan',/^Japanese$/i],
+      ['Mexico',/^Mexican$/i],
+      ['South Africa',/^South African$/i],
+      ['Switzerland',/^Swiss$/i],
+      ['United Kingdom',/^(?:British|UK|United Kingdom)$/i],
+      ['Torn',/^Torn(?: City)?$/i]
+    ];
+    return aliases.find(([,rule])=>rule.test(descriptor))?.[0]||'';
+  }
   function nativeWarLocation(p){
     if(!p)return {country:'Unknown',phase:'unknown',source:'Missing player'};
     const kind=memberState(p);
@@ -603,11 +626,19 @@
       return {country:'Unknown',phase:'unknown-travel',eta:positive(p.until),source:'Destination not provided'};
     }
     if(kind==='hospital'){
-      const described=nativeCountryInStatus(desc);
-      const where=current||described||nativeCountryName(p.hospitalCountry);
+      // The status description is stronger evidence than generic roster location.
+      // Demonyms must be resolved before interpreting "In hospital" as Torn.
+      const hospital=nativeHospitalCountry(desc);
+      const described=hospital||nativeCountryInStatus(desc);
+      const cached=nativeCountryName(p.hospitalCountry);
+      const where=described||current||cached;
       if(where)return {country:where,phase:'present',
-        source:current?'Torn location field':described?'Torn hospital status':'Prior observed location/destination'};
-      // Hospital can be in any country: lack of a travel status does NOT mean Torn.
+        source:hospital?'Torn hospital country':
+          described?'Torn hospital status':current?'Torn location field':'Prior observed location/destination'};
+      // A generic "In hospital" describes Torn City, unless stronger overseas
+      // evidence was already preserved above. Do not guess from patient names.
+      if(/\b(?:in|at)\s+(?:the\s+)?hospital\b/i.test(desc))
+        return {country:'Torn',phase:'present',source:'Torn local hospital status'};
       return {country:'Unknown',phase:'unknown-hospital',source:'Hospital location not provided by Torn'};
     }
     if(['okay','jail','fallen'].includes(kind)){

@@ -58,11 +58,11 @@ test('flight transition uses destination, but a flight returning home records To
   const home=roster({members:[fixture(4,'Hospital','In hospital')]},inbound);
   assert.equal(place(home[0]).country,'Torn');
 });
-test('unknown hospital country never silently becomes Torn',()=>{
+test('local hospital is recognised, and ambiguous hospital country stays unknown',()=>{
   const {roster,nativeWarLocation:place}=harness();
   const unknown=roster({members:[fixture(6,'Hospital','In hospital for 3h')]});
-  assert.equal(place(unknown[0]).country,'Unknown');
-  assert.equal(place(unknown[0]).phase,'unknown-hospital');
+  assert.equal(place(unknown[0]).country,'Torn');
+  assert.equal(place(unknown[0]).phase,'present');
   assert.equal(place({status:'Hospital',statusText:'Hospitalized by Canada'}).country,'Unknown');
   assert.equal(place({status:'Hospital',statusText:'In hospital in Mexico'}).country,'Mexico');
   const explicit=roster({members:[fixture(7,'Hospital','In hospital','South Africa')]});
