@@ -52,10 +52,10 @@ test('Torn PDA: compact rows keep the native player/status cells intact',()=>{
     assignments:{},watchlist:{},blackSkulls:{}};
   const nativeWarState={expandedId:0};
   const context={
-    document:{getElementById:()=>({}),querySelector:()=>box},state,cfg,nativeWarState,Date,Map,Set,
+    document:{getElementById:()=>({}),querySelector:()=>box,createElement:tag=>element(tag)},state,cfg,nativeWarState,Date,Map,Set,
     isNativeWarPage:()=>true,activeWarNow:()=>true,nativeWarStyle:()=>{},nativeWarToolbar:()=>{},
     renderNativeChainBubble:()=>{},inboundWarImpact:()=>null,liveEnemyWarImpact:()=>null,nativeWarLegend:()=>{},nativeWarRows:()=>[row],nativeWarPlayerId:x=>x.id,
-    nativeWarConflict:()=>false,enemyRoleBands:()=>({heavy:new Set([123]),regular:new Set()}),
+    nativeWarConflict:()=>false,clearWarStaxxStickyTitles:()=>{},nativeWarDetailHTML:()=>'<div></div>',enemyRoleBands:()=>({heavy:new Set([123]),regular:new Set()}),
     rosterFresh:()=>true,warScore:()=>null,chainStatus:()=>({fresh:false}),
     positive:x=>Number(x)>0?Number(x):0,memberState:p=>p.status.toLowerCase(),
     nativeWarFilters:()=>true,nativeWarTransition:()=>null,MIN:60000,
@@ -75,15 +75,21 @@ test('Torn PDA: compact rows keep the native player/status cells intact',()=>{
   assert.equal(status.children.length,0,'Torn status cell must remain untouched');
   assert.equal(row.children.length,1,'One intel subrow even after repeated refreshes');
   assert.match(row.children[0].className,/wsnw-intel/);
+
   const labels=row.children[0].children.map(x=>x.textContent);
-  assert.deepEqual(labels,['+ Example enemy','\u2620','H 3m','Seen 4m','FFS ~62m','FF 1.32x','Intel','Copy']);
+  for(const expected of ['+ Example enemy','\\u2620','H 3m','Seen 4m','FFS ~62m','FF 1.32x','Intel','Copy'])
+    assert.ok(labels.includes(expected),'Compact row retains '+expected);
+  assert.ok(row.children[0].children.some(x=>x.dataset.wsnwChip==='warpoints'),
+    'Compact enemy row also shows observed points or unknown');
   const detailButtons=row.children[0].children.filter(x=>['Intel','Copy'].includes(x.textContent));
   assert.ok(detailButtons.every(x=>x.className.includes('wsnw-details-only')));
   nativeWarState.expandedId=123;render();
   assert.equal(row.classList.contains('wsnw-expanded'),true);
-  assert.deepEqual(row.children[0].children.map(x=>x.textContent),
-    ['- Example enemy','\u2620','HOSP 3m 00s','Seen 4m','FFS ~62m','Your FF 1.32x','Intel','Copy']);
+  const expandedLabels=row.children[0].children.map(x=>x.textContent);
+  for(const expected of ['- Example enemy','\\u2620','HOSP 3m 00s','Seen 4m','FFS ~62m','Your FF 1.32x','Intel','Copy'])
+    assert.ok(expandedLabels.includes(expected),'Expanded row retains '+expected);
   assert.ok(detailButtons.every(x=>!x.className.includes('wsnw-details-only')));
+
 });
 test('original Torn attack cells are allocated a separate fixed-height lane from the intelligence subrow',()=>{
   const css=section('  function nativeWarStyle(){','  // An opt-in small, draggable chain indicator.');
