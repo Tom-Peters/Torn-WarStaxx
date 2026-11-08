@@ -38,7 +38,7 @@ test('Torn v2 from-to flight description is recognized without a separate travel
     assert.equal(place.phase,'inbound');
   }
   assert.equal(x.nativeWarLocation({status:'Traveling',statusText:'Traveling'}).country,'Unknown');
-  assert.equal(x.nativeWarLocation({status:'Hospital',statusText:'Hospitalized by Canada'}).country,'Torn');
+  assert.equal(x.nativeWarLocation({status:'Hospital',statusText:'Hospitalized by Canada'}).country,'Unknown');
   assert.deepEqual({...x.nativeWarOwnLocation()},{country:'Canada',known:true,phase:'abroad'});
 });
 test('hospital warning threshold is orange at 15m and green at 5m',()=>{

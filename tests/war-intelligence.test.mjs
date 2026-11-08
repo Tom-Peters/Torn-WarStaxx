@@ -20,7 +20,10 @@ function extract(start,end) {
 }
 const report = runInNewContext(helpers+'const officialNumber=value=>value!==null&&value!==undefined&&value!==\'\'&&Number.isFinite(Number(value))?Number(value):null;\n'+extract('report','attacks')+'; report');
 const warHistory = runInNewContext(helpers+extract('roster','detectWar')+'; warHistory');
-const roster = runInNewContext(helpers+extract('roster','warHistory')+'; roster');
+const roster = runInNewContext(helpers+
+  "const memberState=p=>String(p?.status||'').toLowerCase()==='hospital'?'hospital':'okay';"+
+  "const nativeWarLocation=()=>({country:'Unknown'});"+
+  extract('roster','warHistory')+'; roster');
 
 const basicStart=source.indexOf('  function normaliseFactionBasic(');
 const basicEnd=source.indexOf('  async function refreshFactionBasics(',basicStart);
