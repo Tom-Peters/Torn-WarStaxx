@@ -45,7 +45,7 @@ test('Torn PDA: compact rows keep the native player/status cells intact',()=>{
   row.querySelector=sel=>sel==='div.member'?member:sel==='div.status'?status:
     sel===':scope > .wsnw-intel'?row.children.find(x=>x.className.includes('wsnw-intel'))||null:null;
   const list={children:[row]},box={parentNode:{},querySelectorAll:()=>[list]};
-  const state={data:{enemies:[{id:123,name:'Example enemy',status:'Hospital',
+  const state={data:{war:{id:200},enemies:[{id:123,name:'Example enemy',status:'Hospital',
     until:Date.now()+180000,lastAction:'Offline'}],ours:[],updated:{enemies:Date.now(),ours:Date.now()}}};
   const cfg={nativeWarEnabled:true,nativeWarFilter:'all',nativeWarSort:'availability',
     assignments:{},watchlist:{},blackSkulls:{}};
