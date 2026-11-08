@@ -6527,6 +6527,85 @@
       '.faction-war ul.members-list li .wsnw-intel .wsnw-net-positive{color:#a4f1cf!important;background:#184b42!important;border-color:#37937a!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-under-fire-chip{color:#ffe9a2!important;background:#674021!important;border-color:#e4a64d!important;font-weight:900!important}'+
       '.faction-war ul.members-list li.your.wsnw-under-fire{border-left:4px solid #f9ae51!important}';
+    // Six aligned mobile-friendly columns: status, earned, given, net,
+    // enemy share, incoming scoring hits. Keep Torn's native name/actions.
+    style.textContent +=
+      '.faction-war .wsnw-legend.wsnw-our-legend,'+
+      '.faction-war ul.members-list li.your.wsnw-enhanced:not(.wsnw-expanded)>.wsnw-intel{'+
+        'grid-template-columns:minmax(0,1.4fr) repeat(4,minmax(0,1fr)) minmax(0,.72fr)!important}'+
+      '.faction-war .wsnw-legend.wsnw-our-legend{gap:2px!important;padding:3px 4px!important;'+
+        'background:#132e43!important;border-top:2px solid #3caccb!important}'+
+      '.faction-war .wsnw-legend.wsnw-our-legend>span,'+
+      '.faction-war .wsnw-legend.wsnw-our-legend>button{'+
+        'min-width:0!important;box-sizing:border-box!important;text-align:center!important;'+
+        'font:800 10px/1.1 system-ui,sans-serif!important;letter-spacing:0!important}'+
+      '.faction-war .wsnw-legend.wsnw-our-legend>span{display:flex;align-items:center;'+
+        'justify-content:flex-start;color:#a9cddd;padding-left:2px}'+
+      '.faction-war .wsnw-legend.wsnw-our-legend .wsnw-sort-heading{display:flex;'+
+        'align-items:center;justify-content:center;min-height:32px;padding:3px 1px;'+
+        'border:1px solid transparent;border-radius:4px;background:#193a51;'+
+        'color:#c2deed;touch-action:manipulation;cursor:pointer;white-space:nowrap;overflow:hidden}'+
+      '.faction-war .wsnw-legend.wsnw-our-legend .wsnw-sort-heading.wsnw-sort-active{'+
+        'background:#155277;border-color:#61caff;color:#fff;box-shadow:inset 0 -2px #61caff}'+
+      '.faction-war .wsnw-legend.wsnw-our-legend .wsnw-sort-heading:focus-visible{'+
+        'outline:2px solid #9df1ff;outline-offset:1px}'+
+      '.faction-war ul.members-list li.your.wsnw-enhanced:not(.wsnw-expanded){'+
+        'height:65px!important;min-height:65px!important}'+
+      '.faction-war ul.members-list li.your.wsnw-enhanced:not(.wsnw-expanded)>.wsnw-intel{'+
+        'height:29px!important;min-height:29px!important;top:36px!important;'+
+        'padding:2px 4px!important;gap:2px!important;background:#102d42!important}'+
+      '.faction-war ul.members-list li.your.wsnw-enhanced:nth-child(even):not(.wsnw-expanded)>.wsnw-intel{'+
+        'background:#17364b!important}'+
+      '.faction-war ul.members-list li.your.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel .wsnw-chip{'+
+        'box-sizing:border-box!important;min-width:0!important;max-width:100%!important;'+
+        'font:800 12px/1.1 system-ui,sans-serif!important;'+
+        'font-variant-numeric:tabular-nums!important;text-align:right!important;'+
+        'justify-content:flex-end!important;padding:4px 2px!important;'+
+        'height:24px!important;border-radius:3px!important;overflow:hidden!important}'+
+      '.faction-war ul.members-list li.your.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip="role"]{'+
+        'grid-column:1!important;grid-row:1!important;justify-self:start!important;'+
+        'width:23px!important;min-width:23px!important;max-width:23px!important;'+
+        'justify-content:center!important;font-size:16px!important;padding:1px!important;z-index:1}'+
+      '.faction-war ul.members-list li.your.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip="status"]{'+
+        'grid-column:1!important;grid-row:1!important;justify-self:end!important;'+
+        'width:100%!important;max-width:100%!important;justify-content:flex-start!important;'+
+        'font-size:10px!important;color:#d5ebf6!important;background:transparent!important;border:0!important}'+
+      '.faction-war ul.members-list li.your.wsnw-has-skull:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip="status"]{'+
+        'max-width:calc(100% - 23px)!important;padding-left:2px!important}'+
+      '.faction-war ul.members-list li.your.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip="status"].wsnw-warning{'+
+        'color:#ffca79!important}'+
+      '.faction-war ul.members-list li.your.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip="status"].wsnw-soon{'+
+        'color:#9bf1bd!important}'+
+      '.faction-war ul.members-list li.your.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip="presence"],'+
+      '.faction-war ul.members-list li.your.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip="country"],'+
+      '.faction-war ul.members-list li.your.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip="underfire"],'+
+      '.faction-war ul.members-list li.your.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip="skullperf"]{'+
+        'display:none!important}'+
+      '.faction-war ul.members-list li.your.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip="earned"]{'+
+        'grid-column:2!important;grid-row:1!important;color:#b5efff!important;background:#17475d!important;border-color:#32687e!important}'+
+      '.faction-war ul.members-list li.your.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip="given"]{'+
+        'grid-column:3!important;grid-row:1!important;color:#ffd3d0!important;background:#54323a!important;border-color:#7d4b56!important}'+
+      '.faction-war ul.members-list li.your.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip="net"]{'+
+        'grid-column:4!important;grid-row:1!important}'+
+      '.faction-war ul.members-list li.your.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip="share"]{'+
+        'grid-column:5!important;grid-row:1!important;color:#d5d5ff!important;background:#333a5a!important;border-color:#4a5478!important}'+
+      '.faction-war ul.members-list li.your.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip="hits"]{'+
+        'grid-column:6!important;grid-row:1!important;justify-content:center!important;'+
+        'text-align:center!important;color:#d9e8f3!important;background:#234254!important;border-color:#36576c!important}'+
+      '.faction-war ul.members-list li.your.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip="hits"].wsnw-under-fire-chip{'+
+        'color:#ffe9a2!important;background:#674021!important;border-color:#e4a64d!important}'+
+      '#wsnw-toolbar [data-wsnw-friendly-sort]{max-width:105px}'+
+      '#wsnw-toolbar [data-wsnw-action="friendly-direction"]{'+
+        'min-width:28px!important;padding:3px 6px!important;color:#a8ecff!important;font-weight:900!important}'+
+      '@media(max-width:430px){'+
+        '.faction-war .wsnw-legend.wsnw-our-legend{gap:1px!important;padding:2px 3px!important}'+
+        '.faction-war .wsnw-legend.wsnw-our-legend>span,.faction-war .wsnw-legend.wsnw-our-legend>button{'+
+          'font-size:9px!important}'+
+        '.faction-war ul.members-list li.your.wsnw-enhanced:not(.wsnw-expanded)>.wsnw-intel{'+
+          'gap:1px!important;padding:2px 3px!important}'+
+        '.faction-war ul.members-list li.your.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel .wsnw-chip{'+
+          'font-size:11px!important;padding:4px 1px!important}'+
+      '}';
     document.head.appendChild(style);
   }
   // An opt-in small, draggable chain indicator. Never mounted over an attack page.
