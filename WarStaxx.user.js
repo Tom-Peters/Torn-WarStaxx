@@ -1775,6 +1775,22 @@
           '. Partial attack feed; check hospital control and status.',
         status:'review',priority:83,tab:'threats'});
     }
+    // Alert only for freshly captured repeat attacks. One grouped alert prevents
+    // alert-spam when several members are under pressure.
+    if(w&&activeWarNow()&&cfg.autoConceded!==false){
+      const captured=concessionSnapshot(w.id),at=Date.now();
+      if(captured?.lastFetch&&at-captured.lastFetch<=5*MIN){
+        const pressured=state.data.ours.map(p=>({p,x:liveWarMemberImpact(p.id,w.id,at)}))
+          .filter(z=>z.x.underFire).sort((a,b)=>b.x.in30-a.x.in30);
+        if(pressured.length)out.push({
+          id:'friendly-repeat-hits',
+          title:pressured.length+' member'+(pressured.length===1?'':'s')+' under repeated attack',
+          detail:pressured.slice(0,3).map(z=>z.p.name+' ('+z.x.in30+' incoming / 30m)').join(', ')+
+            '. Based on captured ranked-war attacks; review exposure and turtling.',
+          status:'review',priority:88,tab:pressured.some(z=>cfg.blackSkulls[z.p.id])?'skulls':'overview'
+        });
+      }
+    }
     if(w&&activeWarNow()){
       const chain=chainStatus();
       if(chain.fresh&&chain.count>=10&&chain.remaining!==null&&chain.remaining<=80)
