@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.5.22
+// @version      1.5.23
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.5.22', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.5.23', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -4001,11 +4001,11 @@
     const w=warAttackWindow(warId),key=String(positive(warId));
     if(!w||!positive(w.ourId)||!positive(w.enemyId)||!positive(Math.floor(w.start/1000)))return null;
     let rec=state.data.concededWars[key];
-    if(rec&&(rec.version!==2||positive(rec.ourId)!==w.ourId||positive(rec.enemyId)!==w.enemyId||
+    if(rec&&(rec.version!==3||positive(rec.ourId)!==w.ourId||positive(rec.enemyId)!==w.enemyId||
         n(rec.start)!==w.start))rec=null;
     if(!rec&&create){
-      rec={version:2,warId:positive(warId),ourId:w.ourId,enemyId:w.enemyId,start:w.start,
-        cursor:Math.max(0,Math.floor(w.start/1000)-1),seen:{},byMember:{},byAttacker:{},
+      rec={version:3,warId:positive(warId),ourId:w.ourId,enemyId:w.enemyId,start:w.start,
+        cursor:Math.max(0,Math.floor(w.start/1000)-1),seen:{},byMember:{},byAttacker:{},enemyAttackers:{},
         total:0,rows:0,ourTotal:0,ourRows:0,fetches:0,lastFetch:0,caughtUpAt:0,complete:false,error:''};
       state.data.concededWars[key]=rec;
     }
@@ -4036,6 +4036,15 @@
         hitter.lastAt=Math.max(n(hitter.lastAt),a.at);
       }else{
         rec.rows++;
+        // Enemy offense can be ranked independently of the friendly defender.
+        if(positive(a.attacker)){
+          const attacker=rec.enemyAttackers[a.attacker]||
+            (rec.enemyAttackers[a.attacker]={id:a.attacker,attacks:0,scoringAttacks:0,
+              enemyScore:0,lastAt:0});
+          attacker.attacks++;
+          if(points!==null&&points>0){attacker.scoringAttacks++;attacker.enemyScore+=points;}
+          attacker.lastAt=Math.max(n(attacker.lastAt),a.at);
+        }
         const defender=rec.byMember[a.defender]||
           (rec.byMember[a.defender]={id:a.defender,attacks:0,scoringAttacks:0,enemyScore:0,
             lastAt:0,hitTimes:[]});
@@ -4058,6 +4067,7 @@
     const complete=Boolean(rec.complete&&rec.caughtUpAt&&
       (!active||at-n(rec.caughtUpAt)<2*MIN));
     return {known:true,partial:!complete,complete,byMember:rec.byMember,byAttacker:rec.byAttacker,
+      enemyAttackers:rec.enemyAttackers||{},
       rows:rec.rows,total:rec.total,ourRows:rec.ourRows,ourTotal:rec.ourTotal,
       lastFetch:rec.lastFetch,caughtUpAt:rec.caughtUpAt,
       error:String(rec.error||''),warId:rec.warId};
@@ -4102,6 +4112,21 @@
       rec.error=String(e.message||e).slice(0,150);
       save();
     }finally{state.concededBusy=false;}
+  }
+
+  function liveEnemyWarImpact(memberId,warId=positive(state.data.war?.id),at=Date.now()){
+    const id=positive(memberId),snapshot=concessionSnapshot(warId,at),
+      rec=snapshot?.enemyAttackers?.[id]||null,
+      complete=Boolean(snapshot?.complete),known=Boolean(snapshot?.known);
+    return {id,complete,known,
+      scored:known&&(complete||rec)?n(rec?.enemyScore):null,
+      hits:known&&(complete||rec)?n(rec?.scoringAttacks):null,
+      attacks:known&&(complete||rec)?n(rec?.attacks):null,
+      lastAt:n(rec?.lastAt),lastFetch:n(snapshot?.lastFetch),
+      source:!known?'Awaiting current-war attack history':
+        complete?'Scanned from war start through last refresh':
+        'Partial captured ranked-war attack history',
+      error:String(snapshot?.error||'')};
   }
 
   function liveWarMemberImpact(memberId,warId=positive(state.data.war?.id),at=Date.now()){
