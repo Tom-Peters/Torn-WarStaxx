@@ -5034,6 +5034,27 @@
         b('Leadership','tab:command')+
       b('War room','tab:overview')+b('All targets','tab:targets')+'</div>';
   }
+  function liveWarImpactSummaryCard(){
+    if(!activeWarNow())return '';
+    const captured=concessionSnapshot(),score=warScore(),
+      known=Boolean(captured?.known),prefix=captured?.complete?'':'≥',
+      earned=known?prefix+fmt(captured.ourTotal):'Unknown',
+      given=known?prefix+fmt(captured.total):'Unknown',
+      difference=known?captured.ourTotal-captured.total:null,
+      net=difference===null?'Unknown':'~'+(difference>=0?'+':'')+fmt(difference);
+    return card('Our faction war impact | earned vs conceded',
+      '<div class="ws-inline-metrics">'+
+      '<span><b>Earned:</b> '+earned+'</span>'+
+      '<span><b>Conceded:</b> '+given+'</span>'+
+      '<span><b>Observed net:</b> '+net+'</span>'+
+      '<span><b>Official score:</b> '+(score?
+        fmt(score.our)+' / '+fmt(score.enemy):'Unknown')+'</span></div>'+
+      '<p class="ws-small">Earned/conceded are captured attack-respect points, not official complete scorecards. '+
+      '≥ = incomplete attack-history scan. Net is an approximate swing, not an official personal metric. '+
+      (captured?.lastFetch?'Last checked '+esc(age(captured.lastFetch))+'.':
+        'Awaiting current-war attack history.')+'</p>');
+  }
+
   function liveWarRoom(){
     const w=state.data.war,score=warScore(),own=ourWarReadiness(),
       enemies=sideActivity('enemies'),pace=warPace(),alerts=currentAlerts().slice(0,3),
