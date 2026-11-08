@@ -33,7 +33,7 @@ test('hospital tiers change to orange at 15m and green at 5m, including friendly
   assert.equal(applied.size,0,'normal/expired status drops the prior colours');
   assert.ok(removed.includes('box-shadow'));
   assert.doesNotThrow(()=>new Script(source));
-  assert.doesNotMatch(source,/[^\\x00-\\x7f]/);
+  assert.doesNotMatch(source,/[^\x00-\x7f]/);
 });
 test('passive TWSE copies and timers do not block geography grouping',()=>{
   const code=section('  function nativeWarConflict(', '  function observeNativeWarTransitions(');
@@ -53,15 +53,15 @@ test('passive TWSE copies and timers do not block geography grouping',()=>{
 test('both faction rosters use country grouping, plus visible control and live colours',()=>{
   const sorter=section('  function nativeWarSort(list,playerMap,mode){',
     '    function nativeWarFilters(');
-  assert.match(sorter,/nativeWarActiveSortConflict\\(list\\)/);
-  assert.match(sorter,/nativeWarCountryCompare\\(nativeWarLocation\\(pa\\)\\.country/);
-  assert.match(sorter,/nativeWarAvailabilityRank\\(pa\\)-nativeWarAvailabilityRank\\(pb\\)/);
+  assert.match(sorter,/nativeWarActiveSortConflict\(list\)/);
+  assert.match(sorter,/nativeWarCountryCompare\(nativeWarLocation\(pa\)\.country/);
+  assert.match(sorter,/nativeWarAvailabilityRank\(pa\)-nativeWarAvailabilityRank\(pb\)/);
   const sync=section('  function syncNativeWar(){','  async function pollNativeWar(){');
-  assert.match(sync,/else if\\(kind==='hospital'\\)message=/);
-  assert.match(sync,/nativeWarPaintHospital\\(timer,hospitalTier\\)/);
-  assert.match(sync,/nativeWarSortFriendly\\(list,cfg\\.nativeFriendlySort/);
+  assert.match(sync,/else if\(kind==='hospital'\)message=/);
+  assert.match(sync,/nativeWarPaintHospital\(timer,hospitalTier\)/);
+  assert.match(sync,/nativeWarSortFriendly\(list,cfg\.nativeFriendlySort/);
   const ticking=section('  function tickNativeWar(){','  \/\/ Remove any newly injected WarStaxx titles');
-  assert.match(ticking,/nativeWarPaintHospital\\(span,tier\\)/);
+  assert.match(ticking,/nativeWarPaintHospital\(span,tier\)/);
   assert.match(source,/data-wsnw-action="countries"/);
-  assert.match(source,/if\\(button\\.dataset\\.wsnwAction==='countries'\\)/);
+  assert.match(source,/if\(button\.dataset\.wsnwAction==='countries'\)/);
 });
