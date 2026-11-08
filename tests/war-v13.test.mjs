@@ -132,6 +132,7 @@ test('Squad reports preserve in-war Black Skulls identity and use official earne
   "{id:20,name:'Regular',score:90,attacks:6}]}]}}}};",
   "const warAttackRows=()=>[{side:'enemies',attacker:100,defender:10,respect:45,at:1},"+
    "{side:'enemies',attacker:100,defender:20,respect:15,at:2}];",
+  'const concessionSnapshot=()=>null;',
   'const concessionSnapshot=()=>null;'
  ].join('\n');
  const f=fixture(setup,'  function inboundWarImpact(','  function ownHistoricalEfficiency(',
