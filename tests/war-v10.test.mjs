@@ -87,7 +87,7 @@ test('high-priority transition alerts require observed state change and stay war
   assert.equal(x.priorityOpportunities().length,0,'No alerts from previous wars');
 });
 test('live strip supports automatic compact mode, alert links, skull orders and manual actions',()=>{
-  for(const term of ['function handleWarScroll(e)','position:sticky;top:3px',
+  for(const term of ['function handleWarScroll(e)','position:static;top:auto',
     "btn('TURTLE','turtle')",'function bestEfficiencyHit()',
     'function blackSkullsRoom()',"skulls:blackSkullsRoom",
     'function focusOpportunity(id)','availabilityEvents',
