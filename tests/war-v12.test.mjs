@@ -147,7 +147,7 @@ test('four-layer navigation and existing advanced pages remain functional',()=>{
    "const pages={overview,enemy:enemyScreen,reports:reportsScreen,leader:leaderScreen",
    "function warQuick(action)"
  ])assert.ok(source.includes(token),'Missing '+token);
- assert.match(source,/\/\/ @version\s+1\.5\.27/);
+ assert.match(source,/\/\/ @version\s+1\.5\.28/);
  assert.doesNotMatch(source,/[^\x00-\x7f]/);
  assert.doesNotThrow(()=>new Script(source));
 });
