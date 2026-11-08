@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.5.21
+// @version      1.5.22
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.5.21', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.5.22', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -5611,7 +5611,7 @@
     if(!root.isConnected)return;
     root.style.display=state.open?'block':'none';
     renderWarStrip();
-    if(!state.open)return;
+    if(!state.open){clearWarStaxxStickyTitles();return;}
     const simple=(()=>{try{return JSON.parse(localStorage.getItem('staxx-hub-mode-v1'))!=='advanced';}catch(_){return true;}})();
     // The permanent Torn strip is layer 0; the modal has exactly three primary screens.
     // All legacy deep links remain valid and are reachable from Reports / Opponent.
@@ -5677,6 +5677,7 @@
     drawFinder();
     $('.ws-sync',root).textContent=state.loading?'Checking Torn\u2026':Math.max(n(state.data.updated.enemies),n(state.data.updated.ours))?'Last observation '+age(Math.max(n(state.data.updated.enemies),n(state.data.updated.ours))):'Not connected yet';
     $('.ws-head [data-action="refresh"]',root).disabled=state.loading;
+    clearWarStaxxStickyTitles();
   }
   function navigate(tab,focus){
     if(!sections.includes(tab))tab='overview';
@@ -6625,6 +6626,26 @@
         '.faction-war ul.members-list li.your.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel .wsnw-chip{'+
           'font-size:11px!important;padding:4px 1px!important}'+
       '}';
+    style.textContent+=
+      '#wsnw-toolbar{display:flex!important;flex-direction:column!important;gap:5px!important;'+
+        'padding:7px 9px!important;margin:5px 0!important}'+
+      '#wsnw-toolbar .wsnw-topline{width:100%;display:flex;align-items:center;gap:7px;flex-wrap:wrap}'+
+      '#wsnw-toolbar .wsnw-topline strong{font-size:12px;flex:0 1 auto}'+
+      '#wsnw-toolbar .wsnw-topline [data-wsnw-chain]{font-size:10px;color:#a9d4e5;flex:1 1 auto}'+
+      '#wsnw-toolbar .wsnw-topline button{min-height:29px!important;padding:4px 7px!important}'+
+      '#wsnw-toolbar .wsnw-controls{display:grid;grid-template-columns:minmax(0,1fr) 28px '+
+        'minmax(0,1.3fr) minmax(0,1fr);gap:5px;align-items:center;width:100%}'+
+      '#wsnw-toolbar .wsnw-controls label{display:flex;align-items:center;gap:4px;min-width:0;'+
+        'color:#a8d8ed;font-weight:900;font-size:10px}'+
+      '#wsnw-toolbar .wsnw-controls select{width:100%;min-width:0;max-width:100%!important;'+
+        'font-size:11px!important;height:32px!important}'+
+      '#wsnw-toolbar .wsnw-controls button{height:32px!important;min-height:32px!important}'+
+      '#wsnw-toolbar .wsnw-extra{display:flex;align-items:center;gap:5px;flex-wrap:wrap}'+
+      '#wsnw-toolbar .wsnw-extra span{font-size:10px;color:#a8cadd;flex:1 1 100%}'+
+      '@media(max-width:440px){#wsnw-toolbar .wsnw-controls{'+
+        'grid-template-columns:minmax(0,1fr) 28px minmax(0,1fr);gap:4px}'+
+        '#wsnw-toolbar .wsnw-controls label:last-child{grid-column:1/-1}'+
+        '#wsnw-toolbar .wsnw-controls label:last-child select{max-width:220px!important}}';
     document.head.appendChild(style);
   }
   // An opt-in small, draggable chain indicator. Never mounted over an attack page.
@@ -6715,14 +6736,13 @@
       const active=chosen===key;
       return '<button type="button" data-wsnw-sort-field="'+key+'" '+
         'class="wsnw-sort-heading'+(active?' wsnw-sort-active':'')+'" '+
-        'title="'+esc(help)+' | Tap again to reverse" '+
         'aria-label="Sort our members by '+esc(help)+
         (active?'; currently '+(desc?'highest first':'lowest first'):'')+'" '+
         'aria-pressed="'+(active?'true':'false')+'">'+label+
         (active?(desc?' ↓':' ↑'):' ↕')+'</button>';
     };
     const columns=ours?
-      '<span title="Skull marker, timer or last seen">STATUS</span>'+
+      '<span aria-label="Skull marker, status timer and last seen">STATUS</span>'+
       sortable('earned','EARN','points our member earned attacking the other faction')+
       sortable('given','GIVEN','points the opponent earned attacking this member')+
       sortable('net','NET','observed earned minus given (net proxy)')+
@@ -6730,8 +6750,25 @@
       sortable('hits','HITS','enemy scoring hits received'):
       '<span>Skull</span><span>Timer / travel</span><span>Seen</span><span>Stats</span><span>FF</span>';
     if(heading.innerHTML!==columns)heading.innerHTML=columns;
-    heading.title=ours?'Tap a column to sort; tap again to reverse. ≥ partial minimum, ~ net proxy.':
-      'Opponent travel, activity and strength estimates';
+    heading.removeAttribute('title');
+  }
+  // Android/Torn PDA can leave WebView title tooltips stuck on screen.
+  // Keep extended explanations in expanded rows and screen-reader aria labels,
+  // never in native long-press title bubbles.
+  function suppressWarStaxxTitles(scope){
+    if(!scope||typeof scope.querySelectorAll!=='function')return;
+    const nodes=[scope,...scope.querySelectorAll('[title]')];
+    for(const node of nodes){
+      if(!node.hasAttribute?.('title'))continue;
+      const info=node.getAttribute('title');
+      if(info&&!node.hasAttribute('aria-label'))node.setAttribute('aria-label',info);
+      node.removeAttribute('title');
+    }
+  }
+  function clearWarStaxxStickyTitles(){
+    document.querySelectorAll('#warstaxx-root,#warstaxx-live-strip,#wsnw-toolbar,'+
+      '.faction-war .wsnw-legend,.faction-war .wsnw-intel,#wsnw-chain-bubble')
+      .forEach(suppressWarStaxxTitles);
   }
   function nativeWarToolbar(box,conflict,score,chain){
     let toolbar=document.getElementById('wsnw-toolbar');
@@ -6742,54 +6779,59 @@
       cfg.nativeWarSort:'availability';
     const filter=['all','okay','hospital','returning','heavy','assigned','watched','active5','active60','offline'].includes(cfg.nativeWarFilter)?
       cfg.nativeWarFilter:'all';
-    const friendlySort=['given','net','earned','share','hits','torn'].includes(cfg.nativeFriendlySort)?cfg.nativeFriendlySort:'given';
-    const friendlyDesc=cfg.nativeFriendlyDesc!==false;
-    const signature=[mode,filter,friendlySort,friendlyDesc,conflict,nativeWarState.toolbarExpanded,cfg.nativeWarCountryGroups].join(':');
-    const scoreText=score?'Us '+fmt(score.our)+' / Them '+fmt(score.enemy):'LIVE WAR';
-    const chainText=chain.fresh?'Chain '+fmt(chain.count)+' ('+chain.remaining+'s)':'Chain unknown';
+    const friendlySort=['given','net','earned','share','hits','torn'].includes(cfg.nativeFriendlySort)?
+      cfg.nativeFriendlySort:'given',friendlyDesc=cfg.nativeFriendlyDesc!==false;
+    const signature=[mode,filter,friendlySort,friendlyDesc,conflict,nativeWarState.toolbarExpanded,
+      cfg.nativeWarCountryGroups].join(':');
+    const scoreText=score?'Us '+fmt(score.our)+' / Them '+fmt(score.enemy):'LIVE WAR',
+      chainText=chain.fresh?'Chain '+fmt(chain.count)+' ('+chain.remaining+'s)':'Chain unknown';
     if(toolbar.dataset.signature===signature){
-      const headline=toolbar.querySelector('[data-wsnw-score]'),clock=toolbar.querySelector('[data-wsnw-chain]');
-      if(headline&&headline.textContent!=='WARSTAXX | '+scoreText)headline.textContent='WARSTAXX | '+scoreText;
+      const headline=toolbar.querySelector('[data-wsnw-score]'),
+        clock=toolbar.querySelector('[data-wsnw-chain]');
+      if(headline&&headline.textContent!=='WARSTAXX | '+scoreText)
+        headline.textContent='WARSTAXX | '+scoreText;
       if(clock&&clock.textContent!==chainText)clock.textContent=chainText;
       return;
     }
     toolbar.dataset.signature=signature;
-    toolbar.innerHTML='<strong data-wsnw-score>WARSTAXX | '+scoreText+'</strong>'+
-      '<span data-wsnw-chain>'+chainText+'</span>'+ 
-      '<span class="wsnw-quick-sort" aria-label="Quick friendly faction sorting">'+
-        [['net','NET'],['given','GIVEN'],['earned','EARN']].map(x=>
-          '<button type="button" data-wsnw-quick-sort="'+x[0]+'" '+
-          'aria-pressed="'+(friendlySort===x[0]?'true':'false')+'" '+
-          'title="Sort our faction by '+x[1]+'">'+x[1]+
-          (friendlySort===x[0]?(friendlyDesc?' ↓':' ↑'):'')+'</button>').join('')+
-      '</span>'+
-      '<label>Our <select data-wsnw-friendly-sort title="Sort our faction by">'+
+    // Two compact lines; sorting by a native friendly heading is also a direct tap.
+    toolbar.innerHTML=
+      '<div class="wsnw-topline"><strong data-wsnw-score>WARSTAXX | '+scoreText+'</strong>'+
+      '<span data-wsnw-chain>'+chainText+'</span>'+
+      '<button type="button" data-wsnw-action="war">War Room</button>'+
+      '<button type="button" data-wsnw-action="more" aria-expanded="'+
+        (nativeWarState.toolbarExpanded?'true':'false')+'">'+
+        (nativeWarState.toolbarExpanded?'Less':'More')+'</button></div>'+
+      '<div class="wsnw-controls">'+
+      '<label>OUR <select data-wsnw-friendly-sort aria-label="Sort our faction">'+
       [['given','Given'],['net','Net'],['earned','Earned'],['share','Enemy %'],
-        ['hits','Scoring hits'],['torn','Torn order']].map(x=>
+        ['hits','Received hits'],['torn','Torn order']].map(x=>
         '<option value="'+x[0]+'" '+(friendlySort===x[0]?'selected':'')+'>'+x[1]+'</option>').join('')+
       '</select></label>'+
-      '<button type="button" data-wsnw-action="friendly-direction" title="Reverse our faction sort" '+
-        'aria-label="Sort our faction '+(friendlyDesc?'highest first':'lowest first')+
-        '; tap to reverse">'+(friendlyDesc?'↓':'↑')+'</button>'+
-      '<label>Enemy <select data-wsnw-sort title="Sort opponents by">'+
+      '<button type="button" data-wsnw-action="friendly-direction" '+
+        'aria-label="Reverse our faction sorting: currently '+(friendlyDesc?'highest':'lowest')+
+        ' first">'+(friendlyDesc?'↓':'↑')+'</button>'+
+      '<label>ENEMY <select data-wsnw-sort aria-label="Sort opposing faction">'+
       [['availability','Availability'],['hospital','Hospital expiry'],['bss','BSS highest'],
         ['ff','FF highest'],['activity','Recent activity'],['torn','Torn order']].map(x=>
         '<option value="'+x[0]+'" '+(mode===x[0]?'selected':'')+'>'+x[1]+'</option>').join('')+
       '</select></label>'+
-      '<label>Show <select data-wsnw-filter>'+
-      [['all','All'],['okay','Okay'],['hospital','Hospital'],['returning','Returning'],
-        ['active5','Active 5m'],['active60','Active 1h'],['offline','Offline'],
-        ['heavy','Black Skull targets'],['assigned','Assigned'],['watched','Watched']].map(x=>
+      '<label>SHOW <select data-wsnw-filter aria-label="Filter opponents">'+
+      [['all','All'],['okay','Okay'],['hospital','Hospital'],
+        ['returning','Returning'],['active5','Active 5m'],['active60','Active 1h'],
+        ['offline','Offline'],['heavy','Heavy targets'],['assigned','Assigned'],
+        ['watched','Watched']].map(x=>
         '<option value="'+x[0]+'" '+(filter===x[0]?'selected':'')+'>'+x[1]+'</option>').join('')+
-      '</select></label>'+
-      '<button type="button" data-wsnw-action="war">War Room</button>'+
-      '<button type="button" data-wsnw-action="more" aria-expanded="'+
-        (nativeWarState.toolbarExpanded?'true':'false')+'">'+(nativeWarState.toolbarExpanded?'Less':'More')+'</button>'+
-      (nativeWarState.toolbarExpanded?'<button type="button" data-wsnw-action="skulls">Skulls</button>'+
+      '</select></label></div>'+
+      (nativeWarState.toolbarExpanded?'<div class="wsnw-extra">'+
+        '<button type="button" data-wsnw-action="skulls">Black Skulls</button>'+
         '<button type="button" data-wsnw-action="turtle">Turtle</button>'+
-        '<button type="button" data-wsnw-action="hit">HIT</button>':'')+
-      (conflict?'<span class="wsnw-note">Another script controls row order</span>':'');
+        '<button type="button" data-wsnw-action="hit">HIT</button>'+
+        '<span>Tap a stat heading to sort. Tap a player info row for details.</span></div>':'')+
+      (conflict?'<div class="wsnw-note">Another script controls player order.</div>':'');
+    suppressWarStaxxTitles(toolbar);
   }
+
     function syncNativeWar(){
     if(!isNativeWarPage()||cfg.nativeWarEnabled===false||!activeWarNow()){
       if(document.getElementById('wsnw-toolbar'))clearNativeWar();return;
@@ -6851,7 +6893,8 @@
         if(!name){name=el('strong','wsnw-owner');infoBar.insertBefore(name,infoBar.firstChild);}
         const nameLabel=(expanded?'- ':'+ ')+p.name;
         if(name.textContent!==nameLabel)name.textContent=nameLabel;
-        name.title=p.name+' ['+id+']';
+        name.setAttribute('aria-label',p.name+' ['+id+']');
+        name.removeAttribute('title');
         const chip=(key,value,variant='',title='')=>{
           let x=infoBar.querySelector('[data-wsnw-chip="'+key+'"]');
           if(value===null||value===undefined||value===''){x?.remove();return;}
@@ -6859,7 +6902,8 @@
           const cls='wsnw-chip '+(key==='status'?'wsnw-status':key==='role'?'wsnw-role':'')+' '+variant;
           if(x.className!==cls)x.className=cls;
           if(x.textContent!==value)x.textContent=value;
-          if(title&&x.title!==title)x.title=title;
+          if(title&&x.getAttribute('aria-label')!==title)x.setAttribute('aria-label',title);
+          x.removeAttribute('title');
           return x;
         };
         let message='';
@@ -6983,6 +7027,7 @@
         }
       }
     }
+    clearWarStaxxStickyTitles();
   }
   if(typeof window!=='undefined'&&typeof window.addEventListener==='function')
     window.addEventListener('resize',()=>{
@@ -7057,6 +7102,13 @@
       if(span.textContent!==next)span.textContent=next;
     }
   }
+  // Remove any newly injected WarStaxx titles before a touch can show a sticky
+  // native WebView tooltip. Never touch Torn-owned elements.
+  document.addEventListener('pointerdown',e=>{
+    const scope=e.target?.closest?.('#warstaxx-root,#warstaxx-live-strip,'+
+      '#wsnw-toolbar,.faction-war .wsnw-legend,.faction-war .wsnw-intel,#wsnw-chain-bubble');
+    if(scope)suppressWarStaxxTitles(scope);
+  },{capture:true,passive:true});
   document.addEventListener('click',e=>{
     const intel=e.target?.closest?.('[data-wsnw-intel]');
     if(intel&&isNativeWarPage()){
