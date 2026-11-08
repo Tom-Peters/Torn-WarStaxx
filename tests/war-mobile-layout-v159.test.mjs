@@ -25,6 +25,7 @@ function element(tag='div',name=''){
   };
   node.querySelectorAll=()=>[];
   node.setAttribute=(k,v)=>{node.attrs[k]=v;};
+  node.getAttribute=k=>node.attrs[k]??null;
   node.removeAttribute=k=>{delete node.attrs[k];if(k==='data-wsnw-expiry')delete node.dataset.wsnwExpiry;};
   node.hasAttribute=k=>k in node.attrs;
   node.appendChild=child=>{if(child.parentNode)child.parentNode.children=child.parentNode.children.filter(x=>x!==child);child.parentNode=node;child.isConnected=true;node.children.push(child);return child;};
