@@ -67,7 +67,7 @@ test('unavailable data is not rendered as zero and incoming API permission is ex
   assert.ok(source.includes('Incomplete attack-history scan'));
   assert.ok(source.includes('data-wsnw-chip="conceded"'));
   assert.ok(source.includes('data-wsnw-chip="received"'));
-  assert.ok(source.includes('Given pts'));
+  assert.ok(source.includes('data-wsnw-chip="given"'));
   assert.doesNotThrow(()=>new Script(source));
 });
 
