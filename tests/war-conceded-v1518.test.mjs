@@ -64,7 +64,7 @@ test('points conceded count only ranked hits from enemy faction on our own membe
 test('unavailable data is not rendered as zero and incoming API permission is explained',()=>{
   assert.match(source,/const earned=known&&\(complete\|\|outgoing\)\?/);
   assert.match(source,/given=known&&\(complete\|\|incoming\)\?/);
-  assert.ok(source.includes('Limited faction attacks API data'));
+  assert.ok(source.includes('Incomplete attack-history scan'));
   assert.ok(source.includes('data-wsnw-chip="conceded"'));
   assert.ok(source.includes('data-wsnw-chip="received"'));
   assert.ok(source.includes('Given pts'));
