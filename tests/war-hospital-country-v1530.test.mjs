@@ -74,5 +74,5 @@ test('maliciously similar status names are not interpreted as place evidence',()
   assert.equal(location({status:'Hospital',statusText:'Hospitalized in Canada'}).country,'Canada');
   assert.equal(location({status:'Hospital',statusText:'In hospital in Mexico'}).country,'Mexico');
   assert.doesNotThrow(()=>new Script(source));
-  assert.doesNotMatch(source,/[^\\x00-\\x7f]/);
+  assert.doesNotMatch(source,/[^\x00-\x7f]/);
 });
