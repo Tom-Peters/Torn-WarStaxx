@@ -16,7 +16,7 @@ function matchingFixture(){
     'const positive=v=>Number.isSafeInteger(Number(v))&&Number(v)>0?Number(v):0;',
     'const fmt=v=>String(v);',
     'const now=Date.now();',
-    'const cfg={ourId:10,enemyId:20,assignments:{},watchlist:{},hitterRisk:{},blackSkulls:{1:true,2:true},heavyPolicy:{mode:'min-bss',minBss:0,percent:100},'+
+    "const cfg={ourId:10,enemyId:20,assignments:{},watchlist:{},hitterRisk:{},blackSkulls:{1:true,2:true},heavyPolicy:{mode:'min-bss',minBss:0,percent:100},"+
       'spies:{1:{observedAt:now,bss:1000},2:{observedAt:now,bss:900},101:{observedAt:now,bss:300},102:{observedAt:now,bss:200}},'+
       'manualReadiness:{},planStatus:{}};',
     "const state={data:{war:{id:500},ours:[{id:1,name:'Alpha',status:'okay'},"+
