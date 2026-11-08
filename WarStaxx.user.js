@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.5.24
+// @version      1.5.25
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.5.24', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.5.25', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -1446,10 +1446,25 @@
       else regular.add(id);
       if(notes.length)reasons.set(id,notes);
     }
-    // Manual extras remain usable even when the target's BSS is unknown.
-    for(const enemy of state.data.enemies)if(manual[enemy.id]===true){
-      heavy.add(enemy.id);regular.delete(enemy.id);
-      if(!reasons.has(enemy.id))reasons.set(enemy.id,['Manual Black Skull target; BSS unknown']);
+    // Also classify an unknown-BSS opponent after a CONFIRMED scoring win
+    // against the top regular. Evidence takes precedence over missing models.
+    for(const enemy of state.data.enemies){
+      const id=positive(enemy.id);
+      if(!ranked.some(x=>x.enemy.id===id)&&rule.mode==='relative'&&strongest){
+        const wins=n(captured?.winsByDefender?.[strongest.p.id]?.[id]?.wins),
+          prior=attackHistoryFor(id,strongest.p.id).wins;
+        if(wins>0||prior>0){
+          automatic.add(id);heavy.add(id);
+          reasons.set(id,['Observed winning hit against '+strongest.p.name+
+            ' despite unknown opponent BSS ('+Math.max(wins,prior)+' recorded)']);
+        }
+      }
+      if(manual[id]===true){
+        heavy.add(id);regular.delete(id);
+        const existing=reasons.get(id)||[];
+        existing.push('Manual Black Skull extra');
+        reasons.set(id,existing);
+      }
     }
     const unknown=state.data.enemies.filter(e=>!ranked.some(x=>x.enemy.id===e.id)&&
       !heavy.has(e.id)).length;
