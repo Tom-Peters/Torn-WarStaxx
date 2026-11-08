@@ -4984,9 +4984,9 @@
         b('Leadership','tab:command'))+
       bonusTargetCard()+blackSkullsCoverageCard(20)+
       card('Black Skulls priority targets | toughest known BSS',
-        '<p>Only the top relative BSS bracket is available for Black Skulls automatic target suggestions. '+
-        'Opponent strength combines verified manual spies and fresh FFScouter estimates; '+
-        'the latter are NOT guaranteed outcomes. Members must still have favourable comparable spy evidence.</p>'+
+        '<p>Auto-classification compares enemy BSS against the strongest known regular teammate, '+
+        'then includes enemies who have recorded a win against that member. '+ 
+        'Manual additions are extra targets. A high-BSS tag does not confirm a winning matchup.</p>'+
         (bands.ranked.filter(x=>bands.heavy.has(x.enemy.id)).length?
           '<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr>'+
           '<th>Opponent</th><th>Public/manual BSS</th><th>Current status</th>'+
@@ -7037,7 +7037,8 @@
           (incoming.complete?'':'≥')+fmt(incoming.scored),
         hits=incoming?.hits===null||incoming?.hits===undefined?'Unknown':
           (incoming.complete?'':'≥')+fmt(incoming.hits),
-        targetGroup=band.heavy.has(p.id)?'Black Skull target (stronger bracket)':
+        targetGroup=band.heavy.has(p.id)?'BLACK SKULL · '+
+          (band.reasons.get(p.id)?.join('; ')||'Manual target'):
           band.regular.has(p.id)?'Regular target bracket':'Needs strength classification',
         previous=lastKnownMemberScore('enemies',p.id);
       html+=field('Battle intelligence',power.detail)+
@@ -7054,7 +7055,11 @@
         field('War capture',incoming?.source||'Not enabled')+
         field('Assigned / watched',orders.has(p.id)?'Assigned to '+orders.get(p.id):
           cfg.watchlist[p.id]?'Watchlisted':'No current local assignment')+
-        field('Target role',targetGroup)+
+        field('Target role and evidence',targetGroup)+
+        field('Strongest known regular',band.strongestRegular?
+          band.strongestRegular.p.name+' · '+fmt(band.strongestRegular.value)+
+          ' BSS'+(band.missingRegular?' · '+band.missingRegular+' regular stats unknown':''):
+          'No available regular-member BSS benchmark')+
         field('Past recorded member score',previous===null||previous===undefined?'No completed scorecard':fmt(previous));
     }else{
       const impact=cfg.autoConceded===false?null:liveWarMemberImpact(p.id),
@@ -7443,6 +7448,16 @@
           if(generated&&expandedInfo.innerHTML!==generated.innerHTML)
             expandedInfo.innerHTML=generated.innerHTML;
         }else expandedInfo?.remove();
+        let pinTarget=infoBar.querySelector('.wsnw-pin-heavy');
+        if(enemy&&expanded){
+          if(!pinTarget){pinTarget=el('button','wsnw-pin-heavy');pinTarget.type='button';
+            infoBar.appendChild(pinTarget);}
+          pinTarget.dataset.wsnwHeavy=String(id);
+          const pinned=band.manual.has(id);
+          const nextLabel=pinned?'Unpin manual Black Skull target':'Pin extra Black Skull target';
+          if(pinTarget.textContent!==nextLabel)pinTarget.textContent=nextLabel;
+          pinTarget.setAttribute('aria-label',nextLabel+' for '+p.name);
+        }else pinTarget?.remove();
         let manualAttack=infoBar.querySelector('.wsnw-open-attack');
         if(enemy&&expanded&&fresh&&kind==='okay'){
           if(!manualAttack){manualAttack=el('a','wsnw-open-attack','Attack manually');
@@ -7548,6 +7563,13 @@
     if(scope)suppressWarStaxxTitles(scope);
   },{capture:true,passive:true});
   document.addEventListener('click',e=>{
+    const manualPin=e.target?.closest?.('.faction-war [data-wsnw-heavy]');
+    if(manualPin&&isNativeWarPage()){
+      e.preventDefault();e.stopPropagation();
+      const changed=toggleManualHeavyTarget(manualPin.dataset.wsnwHeavy);
+      if(changed){syncNativeWar();if(state.open)render();}
+      return;
+    }
     const manual=e.target?.closest?.('.faction-war .wsnw-open-attack');
     if(manual&&isNativeWarPage()){e.stopPropagation();return;}
     const intel=e.target?.closest?.('[data-wsnw-intel]');
