@@ -6671,6 +6671,73 @@
         'grid-template-columns:minmax(0,1fr) 28px minmax(0,1fr);gap:4px}'+
         '#wsnw-toolbar .wsnw-controls label:last-child{grid-column:1/-1}'+
         '#wsnw-toolbar .wsnw-controls label:last-child select{max-width:220px!important}}';
+    // Both sides use equal-width data columns and a collapsible evidence panel.
+    style.textContent+=
+      '.faction-war .wsnw-legend:not(.wsnw-our-legend),'+
+      '.faction-war ul.members-list li.enemy.wsnw-enhanced:not(.wsnw-expanded)>.wsnw-intel{'+
+        'grid-template-columns:26px minmax(0,1.33fr) minmax(0,.8fr) minmax(0,1.14fr) '+
+          'minmax(0,.73fr) minmax(0,.74fr)!important;gap:3px!important}'+
+      '.faction-war .wsnw-legend:not(.wsnw-our-legend){background:#122e43!important;'+
+        'border-top:2px solid #48b6e3!important;padding:5px 5px!important;font-size:10px!important}'+
+      '.faction-war ul.members-list li.enemy.wsnw-enhanced:not(.wsnw-expanded){'+
+        'height:64px!important;min-height:64px!important}'+
+      '.faction-war ul.members-list li.enemy.wsnw-enhanced:not(.wsnw-expanded)>.wsnw-intel{'+
+        'top:36px!important;height:28px!important;min-height:28px!important;'+
+        'padding:2px 4px!important;align-items:center!important}'+
+      '.faction-war ul.members-list li.enemy.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel .wsnw-chip{'+
+        'height:23px!important;box-sizing:border-box!important;font-size:11px!important;'+
+        'font-weight:800!important;padding:3px 2px!important;justify-content:center!important;'+
+        'min-width:0!important;max-width:100%!important;overflow:hidden!important}'+
+      '.faction-war ul.members-list li.enemy.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip="status"]{'+
+        'grid-column:2!important;grid-row:1!important;justify-content:flex-start!important}'+
+      '.faction-war ul.members-list li.enemy.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip="presence"]{'+
+        'grid-column:3!important;grid-row:1!important}'+
+      '.faction-war ul.members-list li.enemy.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip="bss"]{'+
+        'grid-column:4!important;grid-row:1!important}'+
+      '.faction-war ul.members-list li.enemy.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip="ff"]{'+
+        'grid-column:5!important;grid-row:1!important}'+
+      '.faction-war ul.members-list li.enemy.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip="warpoints"]{'+
+        'display:inline-flex!important;grid-column:6!important;grid-row:1!important;color:#ffdfbf!important;'+
+        'background:#49372d!important;border-color:#856449!important;text-align:center!important}'+
+      '.faction-war ul.members-list li.enemy.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip="warpoints"].wsnw-unknown{'+
+        'color:#a5c0d1!important;background:#223b4e!important;border-color:#38556a!important}'+
+      '.faction-war ul.members-list li.enemy.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip="status"].wsnw-ready{'+
+        'color:#baffdf!important;background:#174c3d!important;border-color:#318467!important}'+
+      '.faction-war ul.members-list li.enemy.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip="status"].wsnw-hospital{'+
+        'color:#ffe0e0!important;background:#552b37!important;border-color:#925060!important}'+
+      '.faction-war ul.members-list li.enemy.wsnw-enhanced:nth-child(even):not(.wsnw-expanded)>.wsnw-intel{'+
+        'background:#17384e!important}'+
+      '.faction-war ul.members-list li.wsnw-expanded .wsnw-expanded-detail{'+
+        'display:block!important;flex:0 0 100%!important;width:100%!important;'+
+        'margin-top:5px!important;padding:7px!important;box-sizing:border-box!important;'+
+        'background:#0a2437!important;border:1px solid #325f7c!important;border-radius:7px!important;'+
+        'white-space:normal!important;overflow:visible!important}'+
+      '.faction-war ul.members-list li.wsnw-expanded .wsnw-detail-grid{'+
+        'display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;'+
+        'gap:5px!important;width:100%!important}'+
+      '.faction-war ul.members-list li.wsnw-expanded .wsnw-detail-field{'+
+        'display:flex!important;flex-direction:column!important;gap:3px!important;'+
+        'padding:6px!important;background:#16394f!important;border:1px solid #31546d!important;'+
+        'border-radius:5px!important;min-width:0!important;overflow-wrap:anywhere!important}'+
+      '.faction-war ul.members-list li.wsnw-expanded .wsnw-detail-field small{'+
+        'font:800 10px/1.2 system-ui,sans-serif!important;color:#aacedd!important;text-transform:uppercase!important}'+
+      '.faction-war ul.members-list li.wsnw-expanded .wsnw-detail-field strong{'+
+        'font:750 12px/1.4 system-ui,sans-serif!important;color:#f0faff!important;white-space:normal!important}'+
+      '.faction-war ul.members-list li.wsnw-expanded .wsnw-detail-field.wsnw-detail-alert{'+
+        'background:#56382e!important;border-color:#a47e4c!important}'+
+      '.faction-war ul.members-list li.wsnw-expanded .wsnw-expanded-detail p{'+
+        'font-size:10px!important;line-height:1.5!important;color:#a5c8d8!important;margin:7px 0 0!important}'+
+      '.faction-war ul.members-list li.wsnw-expanded .wsnw-open-attack{'+
+        'display:inline-flex!important;align-items:center!important;min-height:30px!important;'+
+        'padding:6px 11px!important;background:#235a46!important;border:1px solid #63bb8a!important;'+
+        'border-radius:5px!important;color:#e5fff0!important;font:850 11px system-ui,sans-serif!important;'+
+        'text-decoration:none!important}'+
+      '@media(max-width:430px){.faction-war .wsnw-legend:not(.wsnw-our-legend){'+
+        'font-size:9px!important;gap:2px!important;padding:3px 3px!important}'+
+        '.faction-war ul.members-list li.enemy.wsnw-enhanced:not(.wsnw-expanded)>.wsnw-intel{'+
+          'gap:2px!important;padding:2px 3px!important}'+
+        '.faction-war ul.members-list li.enemy.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel .wsnw-chip{'+
+          'font-size:10px!important;padding:3px 1px!important}}';
     document.head.appendChild(style);
   }
   // An opt-in small, draggable chain indicator. Never mounted over an attack page.
@@ -6744,6 +6811,68 @@
       row.querySelectorAll('.wsnw-intel,.wsnw-detail,.wsnw-badge,.wsnw-copy').forEach(el=>el.remove());
     }
   }
+  function nativeWarDetailHTML(p,enemy,kind,place,band,orders){
+    const field=(label,value,accent='')=>
+      '<span class="wsnw-detail-field '+esc(accent)+'"><small>'+esc(label)+
+      '</small><strong>'+esc(value===null||value===undefined?'—':value)+'</strong></span>';
+    const last=nativeWarLastSeen(p),status=kind==='hospital'?
+      'Hospital · '+nativeWarHospitalShort(p.until):
+      kind==='away'?(place.phase==='inbound'?'Flying to ':'In ')+place.country+
+        (positive(place.eta)?' · '+flightCountdown(place.eta):''):
+      kind==='okay'?'Ready (last Torn roster)':String(p.status||'Unknown'),
+      rosterAge=age(state.data.updated[enemy?'enemies':'ours']);
+    let html=field('Torn status',status,kind==='hospital'?'wsnw-detail-alert':'')+
+      field('Location',place.country+' · '+place.source)+
+      field('Last action',last+' · '+String(p.lastAction||'Unknown'))+
+      field('Roster observation',rosterAge);
+    if(enemy){
+      const power=nativeWarStrength(p),ff=ffLabel(p.id),
+        incoming=cfg.autoConceded===false?null:liveEnemyWarImpact(p.id),
+        points=incoming?.scored===null||incoming?.scored===undefined?'Unknown':
+          (incoming.complete?'':'≥')+fmt(incoming.scored),
+        hits=incoming?.hits===null||incoming?.hits===undefined?'Unknown':
+          (incoming.complete?'':'≥')+fmt(incoming.hits),
+        targetGroup=band.heavy.has(p.id)?'Black Skull target (stronger bracket)':
+          band.regular.has(p.id)?'Regular target bracket':'Needs strength classification',
+        previous=lastKnownMemberScore('enemies',p.id);
+      html+=field('Battle intelligence',power.detail)+
+        field('FF / difficulty',ff.source==='estimate'?
+          'Model '+ff.value+' · strength estimate, not a win prediction':
+          ff.source==='observed'?'Recorded team FF '+ff.value:
+          'Not currently available')+
+        field('Captured current-war points',points)+
+        field('Captured scored war hits',hits)+
+        field('Last captured attack',incoming?.lastAt?age(incoming.lastAt)+' ago':'Not captured')+
+        field('War capture',incoming?.source||'Not enabled')+
+        field('Assigned / watched',orders.has(p.id)?'Assigned to '+orders.get(p.id):
+          cfg.watchlist[p.id]?'Watchlisted':'No current local assignment')+
+        field('Target role',targetGroup)+
+        field('Past recorded member score',previous===null||previous===undefined?'No completed scorecard':fmt(previous));
+    }else{
+      const impact=cfg.autoConceded===false?null:liveWarMemberImpact(p.id),
+        shown=(v)=>v===null||v===undefined?'Unknown':(impact?.complete?'':'≥')+fmt(v),
+        recent=impact?.known?impact.in30+' in 30m · '+impact.in60+' in 60m':'Unknown',
+        perHit=impact?.ownHits&&impact.earned!==null?
+          fmt(impact.earned/impact.ownHits)+' / attack':'Not enough evidence';
+      html+=field('Our attacking attempts',shown(impact?.ownHits))+
+        field('Earned per observed attack',perHit)+
+        field('Enemy attacks received',shown(impact?.attacks))+
+        field('Enemy scoring hits received',shown(impact?.hits))+
+        field('Recent incoming attacks',recent,impact?.underFire?'wsnw-detail-alert':'')+
+        field('Enemy score share',impact?.share===null||impact?.share===undefined?
+          'Unknown':shown(impact.share)+'%')+
+        field('Role',cfg.blackSkulls[p.id]?'Black Skull · heavy hitter':'Faction member')+
+        field('Attack-history coverage',cfg.autoConceded===false?'Disabled in Settings':
+          !impact?.known?'Awaiting API capture':impact.complete?'Current scan caught up':
+          'Partial data · counts are minimums'+(impact.error?' · '+impact.error:''));
+    }
+    return '<div class="wsnw-expanded-detail" aria-label="Detailed player intelligence">'+
+      '<div class="wsnw-detail-grid">'+html+'</div>'+
+      '<p>WarStaxx uses cached Torn observations. Unknown is not zero; ≥ is a captured minimum.'+
+      (enemy?' Estimated stats and FF do not prove a win.':
+        ' Net is an earned-minus-conceded estimate, not official personal war score.')+
+      '</p></div>';
+  }
   function nativeWarLegend(list,rows){
     const enemy=rows.some(row=>row.classList.contains('enemy')),
       ours=!enemy&&rows.some(row=>row.classList.contains('your'));
@@ -6773,7 +6902,7 @@
       sortable('net','NET','observed earned minus given (net proxy)')+
       sortable('share','ENEMY %','observed proportion of the enemy faction score')+
       sortable('hits','HITS','enemy scoring hits received'):
-      '<span>Skull</span><span>Timer / travel</span><span>Seen</span><span>Stats</span><span>FF</span>';
+      '<span>Role</span><span>Timer / place</span><span>Seen</span><span>Stats</span><span>FF</span><span>War pts</span>';
     if(heading.innerHTML!==columns)heading.innerHTML=columns;
     heading.removeAttribute('title');
   }
@@ -6940,10 +7069,11 @@
           if(place.phase==='inbound')message='TO '+place.country+(place.eta?' '+flightCountdown(place.eta,now):'');
           else if(place.phase==='abroad')message='In '+place.country;
           else message=place.phase==='unknown-travel'?'FLIGHT | DEST HIDDEN':'LOCATION UNKNOWN';
-        }else if(kind==='okay')message=enemy?'':nativeWarLastSeen(p,now); // Own last action when no timer.
+        }else if(kind==='okay')message=enemy?'READY':nativeWarLastSeen(p,now); // Readable readiness without a tooltip.
         if(recent)message=recent.kind+' | '+(message||'OKAY');
         const place=nativeWarLocation(p);
-        const timer=chip('status',message,(kind==='hospital'&&(!enemy||fresh)?'wsnw-hospital ':'')+hospitalTier,'Torn roster observed '+age(state.data.updated[enemy?'enemies':'ours'])+
+        const timer=chip('status',message,(kind==='hospital'&&(!enemy||fresh)?'wsnw-hospital ':'')+
+          (enemy&&kind==='okay'&&fresh?'wsnw-ready ':'')+hospitalTier,'Torn roster observed '+age(state.data.updated[enemy?'enemies':'ours'])+
           ' | '+place.country+' ('+place.source+')');
         if(timer){
           if(kind==='hospital'&&!other&&(!enemy||fresh))timer.dataset.wsnwExpiry=String(positive(p.until));
@@ -6981,11 +7111,18 @@
               ff.source==='estimate'&&ff.ff>3?'wsnw-ff-risk':'',
             ff.source==='estimate'?'Uncapped FFScouter strength/difficulty estimate for the API-key owner. Torn awarded FF max 3.00; an FF above 4.5 can indicate a much stronger target.':
               'Historical team FF from attacks, never a predicted win');
+          const warImpact=cfg.autoConceded===false?null:liveEnemyWarImpact(id);
+          const enemyPoints=warImpact?.scored===null||warImpact?.scored===undefined?'—':
+            (warImpact.complete?'':'≥')+(nativeCompactTotal(warImpact.scored)||'0');
+          chip('warpoints',expanded?'WAR POINTS '+enemyPoints:enemyPoints,
+            warImpact?.scored>0?'wsnw-war-points':'wsnw-unknown',
+            'Observed enemy ranked-war points earned by this attacker, not official personal score. '+
+              (warImpact?.source||'War attack capture disabled'));
           chip('order',expanded?(orders.has(id)?'TO '+orders.get(id):cfg.watchlist[id]?'WATCH':''):
             orders.has(id)?'ORDER':cfg.watchlist[id]?'WATCH':'',
             '',orders.has(id)?'Local assigned hitter':'Watchlisted target');
         }else{
-          for(const key of ['bss','ff','order','conceded','received','impact'])chip(key,'');
+          for(const key of ['bss','ff','warpoints','order','conceded','received','impact'])chip(key,'');
           const impact=cfg.autoConceded===false?null:liveWarMemberImpact(id),
             captured=Boolean(impact?.known),complete=Boolean(impact?.complete),
             observed=value=>value===null||value===undefined?'—':
@@ -7037,8 +7174,26 @@
           copy.classList.toggle('wsnw-details-only',!expanded);
           copy.setAttribute('aria-label','Copy '+p.name+' ['+id+']');
         }else copy?.remove();
-        // The intelligence bar is absolutely positioned above the Torn row; its
-        // wrapped height must be reflected on the parent or the next row overlaps it.
+        // Expand once for the secondary facts; keep compact rows free of prose.
+        let expandedInfo=infoBar.querySelector('.wsnw-expanded-detail');
+        if(expanded){
+          if(!expandedInfo){expandedInfo=el('div','wsnw-expanded-detail');infoBar.appendChild(expandedInfo);}
+          const detailHtml=nativeWarDetailHTML(p,enemy,kind,place,band,orders);
+          // Preserve this container and the row's scroll position during 40s refreshes.
+          const wrapper=document.createElement('div');wrapper.innerHTML=detailHtml;
+          const generated=wrapper.firstElementChild;
+          if(generated&&expandedInfo.innerHTML!==generated.innerHTML)
+            expandedInfo.innerHTML=generated.innerHTML;
+        }else expandedInfo?.remove();
+        let manualAttack=infoBar.querySelector('.wsnw-open-attack');
+        if(enemy&&expanded&&fresh&&kind==='okay'){
+          if(!manualAttack){manualAttack=el('a','wsnw-open-attack','Attack manually');
+            infoBar.appendChild(manualAttack);}
+          manualAttack.href=attackLink(id);manualAttack.setAttribute('aria-label',
+            'Open manual attack page for '+p.name);
+        }else manualAttack?.remove();
+        // The intelligence bar is absolutely positioned above the Torn row;
+        // its wrapped height must be reflected on the parent or the next row overlaps it.
         if(expanded){
           const rowHeight=Math.max(90,36+Math.ceil(Number(infoBar.scrollHeight)||0)+5);
           row.style?.setProperty?.('--wsnw-expanded-height',rowHeight+'px');
@@ -7135,6 +7290,8 @@
     if(scope)suppressWarStaxxTitles(scope);
   },{capture:true,passive:true});
   document.addEventListener('click',e=>{
+    const manual=e.target?.closest?.('.faction-war .wsnw-open-attack');
+    if(manual&&isNativeWarPage()){e.stopPropagation();return;}
     const intel=e.target?.closest?.('[data-wsnw-intel]');
     if(intel&&isNativeWarPage()){
       e.preventDefault();e.stopPropagation();
