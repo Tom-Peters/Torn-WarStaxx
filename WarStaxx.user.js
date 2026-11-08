@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.5.23
+// @version      1.5.24
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.5.23', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.5.24', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -199,7 +199,7 @@
   const link=id=>'https://www.torn.com/profiles.php?XID='+positive(id);
   const attackLink=id=>'https://www.torn.com/loader.php?sid=attack&user2ID='+positive(id);
   const apiKeyPda=typeof window.PDA_APIKEY==='string'?window.PDA_APIKEY:'###PDA-APIKEY###';
-  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,autoConceded:true,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},controlAssignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,warStripCompact:true,warStripScope:'contextual',nativeWarEnabled:true,nativeWarCountryGroups:true,nativeWarSort:'availability',nativeFriendlySort:'given',nativeFriendlyDesc:true,nativeWarFilter:'all',nativeChainBubble:false,priorityNotifications:true,hitterRisk:{},heavyPolicy:{mode:'percent',percent:40,minBss:0},shared:{enabled:false,endpoint:'',token:'',canWrite:false},hidden:false};
+  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,autoConceded:true,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},controlAssignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,warStripCompact:true,warStripScope:'contextual',nativeWarEnabled:true,nativeWarCountryGroups:true,nativeWarSort:'availability',nativeFriendlySort:'given',nativeFriendlyDesc:true,nativeWarFilter:'all',nativeFriendlyFilter:'all',nativeChainBubble:false,priorityNotifications:true,hitterRisk:{},heavyPolicy:{version:2,mode:'relative',percent:40,minBss:0},manualHeavyTargetsByEnemy:{},shared:{enabled:false,endpoint:'',token:'',canWrite:false},hidden:false};
   const cfg=Object.assign({},defaults,safeRead(CONFIG,{}));
   cfg.assignments=cfg.assignments&&typeof cfg.assignments==='object'?cfg.assignments:{};
   cfg.ordersByEnemy=cfg.ordersByEnemy&&typeof cfg.ordersByEnemy==='object'?cfg.ordersByEnemy:{};
@@ -209,6 +209,13 @@
   cfg.turtlePlans=cfg.turtlePlans&&typeof cfg.turtlePlans==='object'?cfg.turtlePlans:{};
   cfg.controlAssignments=cfg.controlAssignments&&typeof cfg.controlAssignments==='object'?cfg.controlAssignments:{};
   cfg.blackSkulls=cfg.blackSkulls&&typeof cfg.blackSkulls==='object'?cfg.blackSkulls:{};
+  cfg.manualHeavyTargetsByEnemy=cfg.manualHeavyTargetsByEnemy&&
+    typeof cfg.manualHeavyTargetsByEnemy==='object'&&!Array.isArray(cfg.manualHeavyTargetsByEnemy)?
+    cfg.manualHeavyTargetsByEnemy:{};
+  // Migrate earlier percentage-based installations to the newly requested
+  // default once; retain their old percentage and BSS values as alternatives.
+  const heavyRuleMigrated=cfg.heavyPolicy?.version!==2;
+  if(heavyRuleMigrated)cfg.heavyPolicy={...cfg.heavyPolicy,version:2,mode:'relative'};
   cfg.spies=cfg.spies&&typeof cfg.spies==='object'?cfg.spies:{};
   cfg.notes=cfg.notes&&typeof cfg.notes==='object'?cfg.notes:{};
   cfg.watchlist=cfg.watchlist&&typeof cfg.watchlist==='object'?cfg.watchlist:{};
@@ -258,6 +265,7 @@
     state.data.attacks=(state.data.attacks||[]).slice(-200);
     try{localStorage.setItem(DATA,JSON.stringify(state.data));return true;}catch(e){state.error='Local storage is full; observations cannot be saved.';return false;}
   }};
+  if(heavyRuleMigrated)saveCfg();
   const parseArray=(value)=>Array.isArray(value)?value.filter(v=>v&&typeof v==='object'):Object.entries(value&&typeof value==='object'?value:{}).filter(([key])=>/^\d+$/.test(key)).map(([key,v])=>({...(v&&typeof v==='object'&&!Array.isArray(v)?v:{}),id:positive(v?.id)||positive(v?.faction_id)||positive(key)}));
   const unpack=(j,k)=>j?.[k]??j;
   function roster(j){
@@ -1358,13 +1366,28 @@
       return {value:third.bss,source:'Fresh FFScouter public BSS estimate',verified:false};
     return {value:null,source:'Unknown - no readable Torn report or enabled FFScouter estimate',verified:false};
   }
-  // Skull Capo can choose percent-of-known-opponents or an absolute BSS threshold.
-  // Never label a missing estimate as a weak opponent or shuffle by hospital state.
+  // Black Skull targets are based on the strongest known REGULAR member.
+  // Positive enemy ranked-war scoring attacks against that member prove a
+  // previous successful hit, including opponents with a lower BSS estimate.
+  // Unknown teammate stats are explicitly reported, not assumed to be zero.
+  function friendlyBattleEstimate(friend){
+    if(!friend)return {value:null,source:'Unknown',verified:false};
+    const record=spy(friend.id),known=bsScore(record);
+    if(known!==null&&n(record?.observedAt)>0&&Date.now()-n(record.observedAt)<=30*24*HOUR)
+      return {value:known,verified:true,source:String(record.source||'Torn spy')};
+    const ff=ffscouter(friend.id);
+    if(ff&&!ffIsStale(ff)&&Number.isFinite(Number(ff.bss))&&Number(ff.bss)>0)
+      return {value:Number(ff.bss),verified:false,source:'FFScouter BSS estimate'};
+    return {value:null,verified:false,source:'Teammate stats unknown'};
+  }
+  function manualHeavyTargets(){
+    const per=cfg.manualHeavyTargetsByEnemy?.[String(positive(cfg.enemyId))];
+    return per&&typeof per==='object'&&!Array.isArray(per)?per:{};
+  }
   function heavyRule(input=cfg.heavyPolicy){
-    const mode=input?.mode==='min-bss'?'min-bss':'percent',
-      percentage=Number(input?.percent),
-      threshold=Number(input?.minBss);
-    return {mode,percent:Number.isFinite(percentage)?
+    const mode=['relative','percent','min-bss'].includes(input?.mode)?input.mode:'relative',
+      percentage=Number(input?.percent),threshold=Number(input?.minBss);
+    return {version:2,mode,percent:Number.isFinite(percentage)?
         Math.max(5,Math.min(100,Math.round(percentage))):40,
       minBss:Number.isFinite(threshold)&&threshold>=0?
         Math.min(1e15,threshold):0};
@@ -1373,15 +1396,58 @@
     const rule=heavyRule(),ranked=state.data.enemies.map(enemy=>({
       enemy,...enemyBattleEstimate(enemy)
     })).filter(x=>x.value!==null).sort((a,b)=>b.value-a.value||
-      n(b.enemy.level)-n(a.enemy.level)||a.enemy.id-b.enemy.id);
-    const heavyCount=rule.mode==='percent'?
-      (ranked.length?Math.max(1,Math.ceil(ranked.length*rule.percent/100)):0):
-      ranked.filter(x=>x.value>=rule.minBss).length,
-      heavy=new Set(ranked.slice(0,heavyCount).map(x=>x.enemy.id)),
-      regular=new Set(ranked.slice(heavyCount).map(x=>x.enemy.id));
-    return {heavy,regular,heavyCount,regularCount:regular.size,
-      known:ranked.length,unknown:state.data.enemies.length-ranked.length,
-      threshold:ranked[heavyCount-1]?.value??null,ranked,rule};
+      n(b.enemy.level)-n(a.enemy.level)||a.enemy.id-b.enemy.id),
+      regulars=state.data.ours.filter(p=>!cfg.blackSkulls[positive(p.id)]),
+      knownRegular=regulars.map(p=>({p,...friendlyBattleEstimate(p)}))
+        .filter(x=>x.value!==null).sort((a,b)=>b.value-a.value),
+      strongest=knownRegular[0]||null,missingRegular=regulars.length-knownRegular.length,
+      manual=manualHeavyTargets(),reasons=new Map(),automatic=new Set(),
+      heavy=new Set(),regular=new Set(),
+      legacyHeavy=rule.mode==='percent'?
+        new Set(ranked.slice(0,ranked.length?
+          Math.max(1,Math.ceil(ranked.length*rule.percent/100)):0).map(x=>x.enemy.id)):
+        new Set(ranked.filter(x=>x.value>=rule.minBss).map(x=>x.enemy.id)),
+      captured=concessionSnapshot();
+    for(const x of ranked){
+      const id=positive(x.enemy.id),notes=[];
+      if(rule.mode==='relative'&&strongest){
+        if(x.value>strongest.value){
+          automatic.add(id);
+          notes.push('Above strongest known regular '+strongest.p.name+
+            ' ('+fmt(strongest.value)+' BSS)'+(missingRegular?' · '+missingRegular+
+              ' regular member(s) unknown':''));
+        }else{
+          const capturedWins=n(captured?.winsByDefender?.[strongest.p.id]?.[id]?.wins),
+            history=attackHistoryFor(id,strongest.p.id);
+          if(capturedWins>0||history.wins>0){
+            automatic.add(id);
+            notes.push('Observed win against strongest known regular '+
+              strongest.p.name+' ('+Math.max(capturedWins,history.wins)+' recorded)');
+          }
+        }
+      }else if(rule.mode!=='relative'&&legacyHeavy.has(id)){
+        automatic.add(id);notes.push(rule.mode==='percent'?
+          'Legacy top '+rule.percent+'% BSS selection':
+          'Legacy minimum '+fmt(rule.minBss)+' BSS selection');
+      }
+      if(manual[id]===true)notes.push('Manually added by Skull Capo');
+      if(automatic.has(id)||manual[id]===true)heavy.add(id);
+      else regular.add(id);
+      if(notes.length)reasons.set(id,notes);
+    }
+    // Manual extras remain usable even when the target's BSS is unknown.
+    for(const enemy of state.data.enemies)if(manual[enemy.id]===true){
+      heavy.add(enemy.id);regular.delete(enemy.id);
+      if(!reasons.has(enemy.id))reasons.set(enemy.id,['Manual Black Skull target; BSS unknown']);
+    }
+    const unknown=state.data.enemies.filter(e=>!ranked.some(x=>x.enemy.id===e.id)&&
+      !heavy.has(e.id)).length;
+    return {heavy,regular,automatic,
+      manual:new Set(state.data.enemies.filter(p=>manual[p.id]===true).map(p=>p.id)),
+      reasons,heavyCount:heavy.size,regularCount:regular.size,
+      known:ranked.length,unknown,missingRegular,strongestRegular:strongest,
+      regularCountOurs:regulars.length,knownRegular:knownRegular.length,
+      threshold:strongest?.value??null,ranked,rule};
   }
   function enemyRole(enemy,band=enemyRoleBands()){
     if(!enemy)return 'unknown';
@@ -4001,11 +4067,11 @@
     const w=warAttackWindow(warId),key=String(positive(warId));
     if(!w||!positive(w.ourId)||!positive(w.enemyId)||!positive(Math.floor(w.start/1000)))return null;
     let rec=state.data.concededWars[key];
-    if(rec&&(rec.version!==3||positive(rec.ourId)!==w.ourId||positive(rec.enemyId)!==w.enemyId||
+    if(rec&&(rec.version!==4||positive(rec.ourId)!==w.ourId||positive(rec.enemyId)!==w.enemyId||
         n(rec.start)!==w.start))rec=null;
     if(!rec&&create){
-      rec={version:3,warId:positive(warId),ourId:w.ourId,enemyId:w.enemyId,start:w.start,
-        cursor:Math.max(0,Math.floor(w.start/1000)-1),seen:{},byMember:{},byAttacker:{},enemyAttackers:{},
+      rec={version:4,warId:positive(warId),ourId:w.ourId,enemyId:w.enemyId,start:w.start,
+        cursor:Math.max(0,Math.floor(w.start/1000)-1),seen:{},byMember:{},byAttacker:{},enemyAttackers:{},winsByDefender:{},
         total:0,rows:0,ourTotal:0,ourRows:0,fetches:0,lastFetch:0,caughtUpAt:0,complete:false,error:''};
       state.data.concededWars[key]=rec;
     }
@@ -4034,6 +4100,10 @@
         hitter.attacks++;
         if(points!==null&&points>0){hitter.scoringAttacks++;hitter.ourScore+=points;rec.ourTotal+=points;}
         hitter.lastAt=Math.max(n(hitter.lastAt),a.at);
+        if(points!==null&&points>0){
+          hitter.pointEvents=(Array.isArray(hitter.pointEvents)?hitter.pointEvents:[])
+            .concat({at:a.at,points}).filter(x=>x.at>=Date.now()-2*HOUR).slice(-300);
+        }
       }else{
         rec.rows++;
         // Enemy offense can be ranked independently of the friendly defender.
@@ -4044,6 +4114,15 @@
           attacker.attacks++;
           if(points!==null&&points>0){attacker.scoringAttacks++;attacker.enemyScore+=points;}
           attacker.lastAt=Math.max(n(attacker.lastAt),a.at);
+          if(points!==null&&points>0){
+            attacker.pointEvents=(Array.isArray(attacker.pointEvents)?attacker.pointEvents:[])
+              .concat({at:a.at,points}).filter(x=>x.at>=Date.now()-2*HOUR).slice(-300);
+            const perDefender=rec.winsByDefender[a.defender]||
+              (rec.winsByDefender[a.defender]={});
+            const witness=perDefender[a.attacker]||
+              (perDefender[a.attacker]={wins:0,lastAt:0});
+            witness.wins++;witness.lastAt=Math.max(n(witness.lastAt),a.at);
+          }
         }
         const defender=rec.byMember[a.defender]||
           (rec.byMember[a.defender]={id:a.defender,attacks:0,scoringAttacks:0,enemyScore:0,
@@ -4067,7 +4146,7 @@
     const complete=Boolean(rec.complete&&rec.caughtUpAt&&
       (!active||at-n(rec.caughtUpAt)<2*MIN));
     return {known:true,partial:!complete,complete,byMember:rec.byMember,byAttacker:rec.byAttacker,
-      enemyAttackers:rec.enemyAttackers||{},
+      enemyAttackers:rec.enemyAttackers||{},winsByDefender:rec.winsByDefender||{},
       rows:rec.rows,total:rec.total,ourRows:rec.ourRows,ourTotal:rec.ourTotal,
       lastFetch:rec.lastFetch,caughtUpAt:rec.caughtUpAt,
       error:String(rec.error||''),warId:rec.warId};
