@@ -4955,7 +4955,10 @@
       duty=turtlePlan().members[myId]||'not assigned',
       control=cfg.controlAssignments[currentPlanKey()]||{},
       watched=Object.entries(control).filter(([,owner])=>positive(owner)===myId)
-        .map(([id])=>state.data.enemies.find(p=>p.id===positive(id))).filter(Boolean);
+        .map(([id])=>state.data.enemies.find(p=>p.id===positive(id))).filter(Boolean),
+      priorityTargets=state.data.enemies.filter(p=>bands.heavy.has(p.id))
+        .map(enemy=>({enemy,...enemyBattleEstimate(enemy)}))
+        .sort((a,b)=>(b.value??-1)-(a.value??-1)||a.enemy.id-b.enemy.id);
     return statusNote()+'<div class="ws-lead"><span class="ws-data-label">BLACK SKULLS | HEAVY HITTER CONTROL</span>'+
       '<h2>Strike, hold and hospital control</h2>'+
       '<p>Personal efficient target, saved orders, hospital watches and team readiness. All actions are manual.</p></div>'+
@@ -4983,27 +4986,31 @@
         '<p>You are not marked as a Black Skull on this device. Use Leadership to set membership.</p>'+
         b('Leadership','tab:command'))+
       bonusTargetCard()+blackSkullsCoverageCard(20)+
-      card('Black Skulls priority targets | toughest known BSS',
+      card('Black Skulls priority targets | automatic and manual',
         '<p>Auto-classification compares enemy BSS against the strongest known regular teammate, '+
         'then includes enemies who have recorded a win against that member. '+ 
         'Manual additions are extra targets. A high-BSS tag does not confirm a winning matchup.</p>'+
-        (bands.ranked.filter(x=>bands.heavy.has(x.enemy.id)).length?
+        (priorityTargets.length?
           '<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr>'+
           '<th>Opponent</th><th>Public/manual BSS</th><th>Current status</th>'+
           '<th>Verified Black Skull matchup</th><th>Action</th></tr></thead><tbody>'+
-          bands.ranked.filter(x=>bands.heavy.has(x.enemy.id)).slice(0,15).map(x=>{
+          priorityTargets.slice(0,30).map(x=>{
             const matches=skulls.map(hitter=>({hitter,evidence:roleMatch(hitter,x.enemy,bands)}))
               .filter(entry=>entry.evidence).sort((a,b)=>a.evidence.match.ratio-b.evidence.match.ratio);
             return '<tr><td>'+infoButton(x.enemy.name,x.enemy.id)+' '+ffBadge(x.enemy.id)+
-              '<br><small>Lv '+fmt(x.enemy.level)+'</small></td>'+
+              '<br><small>Lv '+fmt(x.enemy.level)+
+                ' | '+esc(bands.reasons.get(x.enemy.id)?.join('; ')||'No role explanation')+
+                '</small></td>'+
               '<td>'+fmt(x.value)+'<br><small>'+esc(x.source)+'</small></td>'+
               '<td>'+esc(x.enemy.status)+'</td>'+
               '<td>'+(matches.length?matches.slice(0,2).map(k=>
                 infoButton(k.hitter.name,k.hitter.id)+' (ratio '+fmt(k.evidence.match.ratio)+')').join(', '):
                 'No verified favourable hitter; scout')+'</td>'+
-              '<td>'+infoButton('Inspect',x.enemy.id)+'</td></tr>';
+              '<td>'+infoButton('Inspect',x.enemy.id)+' '+
+                b(bands.manual.has(x.enemy.id)?'Unpin':'Pin extra',
+                  'toggle-heavy-target:'+x.enemy.id)+'</td></tr>';
           }).join('')+'</tbody></table></div>':
-          empty('No comparable enemy BSS estimates; fetch FFScouter or enter manual spies.')))+
+          empty('No Black Skull targets yet. Load member BSS or pin an extra target.')))+
       blackSkullsPerformanceCard()+comparableStrengthCard()+
       card('My hospital-control assignments',watched.length?watched.map(p=>{
         const expiry=memberState(p)==='hospital'&&p.until>Date.now()?
@@ -7214,7 +7221,7 @@
       cfg.nativeWarSort:'availability';
     const filter=['all','okay','hospital','returning','heavy','assigned','watched','active5','active60','offline'].includes(cfg.nativeWarFilter)?
       cfg.nativeWarFilter:'all';
-    const friendlySort=['given','net','earned','share','hits','torn'].includes(cfg.nativeFriendlySort)?
+    const friendlySort=['given','net','earned','share','hits','pace','torn'].includes(cfg.nativeFriendlySort)?
       cfg.nativeFriendlySort:'given',friendlyDesc=cfg.nativeFriendlyDesc!==false;
     const signature=[mode,filter,friendlySort,friendlyDesc,conflict,nativeWarState.toolbarExpanded,
       cfg.nativeWarCountryGroups].join(':');
@@ -7226,6 +7233,10 @@
       if(headline&&headline.textContent!=='WARSTAXX | '+scoreText)
         headline.textContent='WARSTAXX | '+scoreText;
       if(clock&&clock.textContent!==chainText)clock.textContent=chainText;
+      const ready=toolbar.querySelector('[data-wsnw-action="quick-ready"]'),
+        readyLabel='✓ Ready '+(rosterFresh('enemies')?
+          state.data.enemies.filter(p=>memberState(p)==='okay').length:'?');
+      if(ready&&ready.textContent!==readyLabel)ready.textContent=readyLabel;
       return;
     }
     toolbar.dataset.signature=signature;
