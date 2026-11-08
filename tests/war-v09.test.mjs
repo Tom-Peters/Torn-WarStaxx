@@ -114,8 +114,8 @@ test('pressing HIT after manual heal rechecks Torn before attacking',async()=>{
 });
 test('command strip and item shortcuts are manual, PDA parser safe',()=>{
   for(const token of ['function renderWarStrip(','function liveWarRoom(',
-    "btn('TURTLE','turtle')","btn('HEAL','heal')",
-    "btn('MORE STATS','stats')",'function locateItem(',
+    "btn('TURTLE','turtle')","btn('Room','war')",
+    "btn(compact?'More':'Less','compact')",'function locateItem(',
     "if(activeWarNow())return liveWarRoom();",
     "if(action==='war-more')","function strongestVerifiedHit("]){
     assert.ok(source.includes(token),'Missing '+token);
