@@ -40,7 +40,8 @@ test('unavailable Black Skull receives an evidence-gated FREE replacement sugges
   "const enemyRoleBands=()=>({heavy:new Set([101]),ranked:[{enemy:{id:101,name:'High',status:'okay'},value:800,source:'manual'}],known:1,unknown:0,rule:{mode:'percent',percent:100,minBss:0}});",
   'const heavyTargetPriorities=()=>new Map([[101,{score:75,historyPoints:200}]]);',
   "const roleMatch=(p,e)=>p.status==='okay'?{match:{ratio:.4},score:80}:null;",
-  'const hitterReadiness=()=>({energyEnough:true});'
+  'const hitterReadiness=()=>({energyEnough:true});',
+  'const enemyBattleEstimate=p=>({value:800,source:"manual"});'
  ].join('\n');
  const f=fixture(setup,'  function blackSkullsCoverage(','  function blackSkullsCoverageCard(',
    '({blackSkullsCoverage,cfg,state})');
