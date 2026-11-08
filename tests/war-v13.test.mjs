@@ -52,7 +52,7 @@ test('Torn API v2 ranked attack format and older logs are both recognised',()=>{
 });
 test('Skull Capo can choose top percentage or minimum BSS without misclassifying unknown players',()=>{
  const setup=[
-  'const n=Number,positive=Number;',
+  'const n=Number,positive=Number,fmt=String;',
   "const cfg={heavyPolicy:{mode:'percent',percent:50,minBss:0}};",
   "const state={data:{enemies:[{id:1,bss:1000,level:10},{id:2,bss:800,level:99},"+
   "{id:3,bss:500,level:20},{id:4,bss:200,level:10},{id:5,bss:null,level:100}],ours:[]}};",
