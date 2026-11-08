@@ -1506,7 +1506,8 @@
     const bands=enemyRoleBands(),skulls=state.data.ours.filter(p=>cfg.blackSkulls[p.id]),
       teamReady=rosterFresh('ours',at),enemiesReady=rosterFresh('enemies',at),
       rankedPriorities=heavyTargetPriorities(bands);
-    const targets=bands.ranked.filter(x=>bands.heavy.has(x.enemy.id)).map(x=>{
+    const targets=state.data.enemies.filter(p=>bands.heavy.has(p.id)).map(enemy=>{
+      const estimate=enemyBattleEstimate(enemy),x={enemy,value:estimate.value,source:estimate.source};
       const assigned=skulls.filter(p=>positive(cfg.assignments[p.id])===positive(x.enemy.id));
       const viable=teamReady&&enemiesReady&&memberState(x.enemy)==='okay'?
         skulls.map(player=>({player,evidence:roleMatch(player,x.enemy,bands)}))
@@ -1535,7 +1536,7 @@
         covered,verified,blocked,replacement,priority,reason,needsAssignment:!covered};
     }).sort((a,b)=>Number(b.needsAssignment||b.blocked)-
       Number(a.needsAssignment||a.blocked)||
-      n(b.priority?.score)-n(a.priority?.score)||b.bss-a.bss||a.enemy.id-b.enemy.id);
+      n(b.priority?.score)-n(a.priority?.score)||(b.bss??-1)-(a.bss??-1)||a.enemy.id-b.enemy.id);
     return {bands,skulls,targets,unassigned:targets.filter(x=>x.needsAssignment).length,
       assigned:targets.filter(x=>x.covered).length,
       verifiedAssigned:targets.filter(x=>x.verified).length,
@@ -1552,18 +1553,27 @@
       'Unavailable/unsafe assigned hitters: '+fmt(data.blocked)+
       ' | verified free replacement suggestions: '+fmt(data.replacements)+
       '. An order does not prove a target is hittable.</p>'+
-      '<p>Heavy policy: '+(cutoff.mode==='min-bss'?
+      '<p>Heavy policy: '+(cutoff.mode==='relative'?
+        (data.bands.strongestRegular?'Above strongest known regular ('+
+        fmt(data.bands.strongestRegular.value)+' BSS, '+
+        esc(data.bands.strongestRegular.p.name)+') plus recorded wins and manual extras':
+        'No known regular BSS yet; manual extras still work'):
+        cutoff.mode==='min-bss'?
         'minimum BSS '+fmt(cutoff.minBss):
         'top '+fmt(cutoff.percent)+'% of '+fmt(data.bands.known)+' known BSS opponents')+
-        '. '+fmt(data.bands.unknown)+' opponents have unknown BSS and need scouting.</p>'+
+        '. '+fmt(data.bands.unknown)+' enemy BSS unknown; '+
+        fmt(data.bands.missingRegular)+' / '+fmt(data.bands.regularCountOurs)+
+        ' regular members missing BSS (boundary provisional).</p>'+
       (data.targets.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr>'+
-        '<th>High-strength opponent</th><th>BSS</th><th>Last war points</th><th>Priority</th>'+
+        '<th>Black Skull target / reason</th><th>BSS</th><th>Last war points</th><th>Priority</th>'+
         '<th>Current status</th>'+
         '<th>Assigned Black Skull</th><th>Coverage / next move</th></tr></thead><tbody>'+
         data.targets.slice(0,maxItems).map(x=>'<tr><td>'+infoButton(x.enemy.name,x.enemy.id)+
-          ' '+ffBadge(x.enemy.id)+'<br><small>Lv '+fmt(x.enemy.level)+'</small></td>'+
+          ' '+ffBadge(x.enemy.id)+'<br><small>Lv '+fmt(x.enemy.level)+
+          ' · '+esc(data.bands.reasons.get(x.enemy.id)?.join('; ')||'No classification reason')+
+          '</small></td>'+
           '<td>'+fmt(x.bss)+'<br><small>'+esc(x.source)+'</small></td>'+
-          '<td>'+(x.priority?.historyPoints===null?'Unknown':
+          '<td>'+(x.priority?.historyPoints==null?'Unknown':
             fmt(x.priority.historyPoints)+' in war #'+x.priority.historyWarId)+'</td>'+
           '<td>'+fmt(x.priority?.score)+' / 100<br><small>'+
             esc(x.priority?.confidence||'Unrated')+'</small></td>'+
@@ -1577,7 +1587,7 @@
               !x.covered&&x.free.length?
                 b('Assign '+x.free[0].player.name,'skull-assign:'+x.free[0].player.id+':'+x.enemy.id):
                 b('Inspect enemy','player:'+x.enemy.id))+'</td></tr>').join('')+
-        '</tbody></table></div>':empty('No known high-strength targets at this cutoff. Change policy or collect BSS evidence.'))+
+        '</tbody></table></div>':empty('No automatic targets yet. Load regular-member and enemy BSS, or pin manual extras.'))+
       '<div class="ws-toolbar">'+b('Manage cutoff','tab:leader')+
         b('Black Skulls', 'tab:skulls')+
         b('Copy Black Skulls briefing','copy-skull-chat')+
