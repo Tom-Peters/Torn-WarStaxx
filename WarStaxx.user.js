@@ -6679,6 +6679,8 @@
     if(filter==='assigned')return Object.values(cfg.assignments).some(id=>positive(id)===p.id);
     if(filter==='watched')return Boolean(cfg.watchlist[p.id]);
     if(filter==='scorers')return (liveEnemyWarImpact(p.id)?.scored||0)>0;
+    if(filter==='exit5')return memberState(p)==='hospital'&&
+      positive(p.until)>Date.now()&&positive(p.until)-Date.now()<=5*MIN;
     return true;
   }
   function nativeCompactTotal(value){
@@ -7281,9 +7283,9 @@
     return '<div class="wsnw-radar" aria-label="Live war tactical pulse">'+
       '<span class="wsnw-radar-label">PULSE</span>'+
       item('pulse-heavy','SKULL '+count(p.heavyReady),filter==='heavy')+
-      item('pulse-hospital','H\\u22645 '+count(p.closeExit),filter==='hospital')+
+      item('pulse-hospital','H\\u22645 '+count(p.closeExit),filter==='exit5')+
       item('pulse-scorers','SCORERS '+count(p.scorers,p.scanState==='PARTIAL'),filter==='scorers')+
-      item('pulse-turtle','UNDER FIRE '+count(p.underFire))+
+      item('pulse-turtle','UNDER FIRE '+count(p.underFire,p.scanState==='PARTIAL'))+
       '<span class="wsnw-radar-source">'+
       (p.fresh?'Roster fresh':'ROSTER STALE')+' | Feed '+p.scanState+
       '</span></div>';
@@ -7295,7 +7297,7 @@
     if(toolbar.nextElementSibling!==box)box.before(toolbar);
     const mode=['availability','tactical','hospital','bss','ff','activity','warpoints','warhits','warpace','torn'].includes(cfg.nativeWarSort)?
       cfg.nativeWarSort:'availability';
-    const filter=['all','okay','hospital','returning','heavy','assigned','watched','scorers','active5','active60','offline'].includes(cfg.nativeWarFilter)?
+    const filter=['all','okay','hospital','exit5','returning','heavy','assigned','watched','scorers','active5','active60','offline'].includes(cfg.nativeWarFilter)?
       cfg.nativeWarFilter:'all';
     const friendlySort=['given','net','earned','share','hits','pace','torn'].includes(cfg.nativeFriendlySort)?
       cfg.nativeFriendlySort:'given',friendlyDesc=cfg.nativeFriendlyDesc!==false;
@@ -7358,7 +7360,7 @@
         '<option value="'+x[0]+'" '+(metric===x[0]?'selected':'')+'>'+x[1]+'</option>').join('')+
       '</select></label>'+
       '<label>SHOW <select data-wsnw-filter aria-label="Filter opponents">'+
-      [['all','All'],['okay','Okay'],['hospital','Hospital'],
+      [['all','All'],['okay','Okay'],['hospital','Hospital'],['exit5','Hospital <=5m'],
         ['returning','Returning'],['active5','Active 5m'],['active60','Active 1h'],
         ['offline','Offline'],['heavy','Heavy targets'],['scorers','War scorers'],['assigned','Assigned'],
         ['watched','Watched']].map(x=>
@@ -7781,7 +7783,7 @@
       if(button.dataset.wsnwAction.startsWith('pulse-')){
         const name=button.dataset.wsnwAction.slice(6);
         if(name==='turtle'){warQuick('turtle');return;}
-        const next={heavy:'heavy',hospital:'hospital',scorers:'scorers'}[name];
+        const next={heavy:'heavy',hospital:'exit5',scorers:'scorers'}[name];
         if(next){
           cfg.nativeWarFilter=cfg.nativeWarFilter===next?'all':next;
           saveCfg();syncNativeWar();
