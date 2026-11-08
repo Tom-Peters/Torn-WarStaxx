@@ -7274,7 +7274,7 @@
   }
   function nativeWarPulseMarkup(p,filter){
     const count=(value,partial=false)=>value===null?'?':
-      (partial?'\\u2265':'')+String(value);
+      (partial?'\u2265':'')+String(value);
     const item=(action,label,active=false)=>
       '<button type="button" data-wsnw-action="'+action+'" aria-pressed="'+
       (active?'true':'false')+'">'+label+'</button>';
@@ -7516,9 +7516,9 @@
           const metric=expanded?'points':(['points','pace','hits'].includes(cfg.nativeEnemyMetric)?
             cfg.nativeEnemyMetric:'points'),
             pace=metric==='pace'?liveScoringPace('enemy',id):null,
-            metricHits=warImpact?.hits===null||warImpact?.hits===undefined?'\\u2014':
-              (warImpact.complete?'':'\\u2265')+fmt(warImpact.hits),
-            metricPace=pace?(pace.complete?'':'\\u2265')+fmt(pace.rate):'\\u2014',
+            metricHits=warImpact?.hits===null||warImpact?.hits===undefined?'\u2014':
+              (warImpact.complete?'':'\u2265')+fmt(warImpact.hits),
+            metricPace=pace?(pace.complete?'':'\u2265')+fmt(pace.rate):'\u2014',
             metricText=metric==='pace'?'PH '+metricPace:
               metric==='hits'?'H '+metricHits:enemyPoints,
             metricLong=metric==='pace'?'Captured scoring pace in points per hour':
