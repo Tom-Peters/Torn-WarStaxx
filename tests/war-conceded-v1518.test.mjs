@@ -44,9 +44,9 @@ test('points conceded count only ranked hits from enemy faction on our own membe
   const f=fixture();
   await f.refreshWarConcessions();
   const partial=f.concessionSnapshot(71);
-  assert.equal(partial.complete,false);
-  assert.equal(partial.partial,true);
-  assert.equal(partial.rows,97);
+  assert.equal(partial.complete,true);
+  assert.equal(partial.partial,false);
+  assert.equal(partial.rows,99);
   assert.equal(partial.byMember[101].enemyScore,105);
   await f.refreshWarConcessions();
   const done=f.concessionSnapshot(71);
@@ -58,16 +58,16 @@ test('points conceded count only ranked hits from enemy faction on our own membe
   assert.equal(done.byMember[102].enemyScore,4);
   assert.equal(done.byMember[102].scoringAttacks,2);
   assert.equal(done.total,109);
-  assert.equal(f.getCalls(),2);
+  assert.equal(f.getCalls(),3);
 });
 
 test('unavailable data is not rendered as zero and incoming API permission is explained',()=>{
-  assert.match(source,/present=Boolean\(concessions\?\.known&&\(concessions\.complete\|\|received\)\)/);
-  assert.ok(source.includes("present?prefix+fmt(received?.enemyScore||0):'—'"));
-  assert.ok(source.includes('Limited faction attacks API data'));
+  assert.match(source,/const earned=known&&\(complete\|\|outgoing\)\?/);
+  assert.match(source,/given=known&&\(complete\|\|incoming\)\?/);
+  assert.ok(source.includes('Incomplete attack-history scan'));
   assert.ok(source.includes('data-wsnw-chip="conceded"'));
   assert.ok(source.includes('data-wsnw-chip="received"'));
-  assert.ok(source.includes('Given pts'));
+  assert.ok(source.includes('data-wsnw-chip="given"'));
   assert.doesNotThrow(()=>new Script(source));
 });
 

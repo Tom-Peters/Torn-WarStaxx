@@ -52,11 +52,14 @@ test('Torn API v2 ranked attack format and older logs are both recognised',()=>{
 });
 test('Skull Capo can choose top percentage or minimum BSS without misclassifying unknown players',()=>{
  const setup=[
-  'const n=Number,positive=Number;',
+  'const n=Number,positive=Number,fmt=String;',
   "const cfg={heavyPolicy:{mode:'percent',percent:50,minBss:0}};",
   "const state={data:{enemies:[{id:1,bss:1000,level:10},{id:2,bss:800,level:99},"+
-  "{id:3,bss:500,level:20},{id:4,bss:200,level:10},{id:5,bss:null,level:100}]}};",
-  'const enemyBattleEstimate=p=>({value:p.bss,source:"spy"});'
+  "{id:3,bss:500,level:20},{id:4,bss:200,level:10},{id:5,bss:null,level:100}],ours:[]}};",
+  'const enemyBattleEstimate=p=>({value:p.bss,source:"spy"});',
+  'const concessionSnapshot=()=>null;',
+  'const manualHeavyTargets=()=>({});',
+  'const attackHistoryFor=()=>({wins:0});'
  ].join('\n');
  const f=fixture(setup,'  function heavyRule(','  function enemyRole(',
    '({cfg,heavyRule,enemyRoleBands})');
@@ -84,7 +87,8 @@ test('Black Skulls coverage reports uncovered enemy targets separately from veri
     "known:2,unknown:0,rule:{mode:'percent',percent:100,minBss:0}});",
   'const roleMatch=(friend,enemy)=>({match:{ratio:friend.id===10?.2:.3},score:99});',
   'const heavyTargetPriorities=()=>new Map([[101,{score:60}],[102,{score:50}]]);',
-  'const hitterReadiness=()=>({energyEnough:true});'
+  'const hitterReadiness=()=>({energyEnough:true});',
+  'const enemyBattleEstimate=p=>({value:800,source:"BSS"});'
  ].join('\n');
  const x=fixture(setup,'  function blackSkullsCoverage(','  function personalShortlist(',
     '({blackSkullsCoverage,cfg})');
@@ -105,7 +109,8 @@ test('Enemy scoring hits are tracked as conceded points, not a deduction from ou
     "{side:'enemies',attacker:100,defender:10,respect:8,at:2},"+
     "{side:'enemies',attacker:101,defender:10,respect:0,at:3},"+
     "{side:'enemies',attacker:100,defender:20,respect:12,at:4}];",
-  'const warAttackRows=()=>attacks;'
+  'const warAttackRows=()=>attacks;',
+  'const concessionSnapshot=()=>null;'
  ].join('\n');
  const f=fixture(setup,'  function inboundWarImpact(','  function ownHistoricalEfficiency(',
    '({inboundWarImpact,setAttacks:x=>attacks=x})');
@@ -126,7 +131,8 @@ test('Squad reports preserve in-war Black Skulls identity and use official earne
   "reports:{44:{factions:[{id:1,members:[{id:10,name:'Skull',score:200,attacks:10},"+
   "{id:20,name:'Regular',score:90,attacks:6}]}]}}}};",
   "const warAttackRows=()=>[{side:'enemies',attacker:100,defender:10,respect:45,at:1},"+
-   "{side:'enemies',attacker:100,defender:20,respect:15,at:2}];"
+   "{side:'enemies',attacker:100,defender:20,respect:15,at:2}];",
+  'const concessionSnapshot=()=>null;'
  ].join('\n');
  const f=fixture(setup,'  function inboundWarImpact(','  function ownHistoricalEfficiency(',
    '({cfg,warSquadSnapshot,snapshotWarSquads,squadWarSummary})');
@@ -185,7 +191,7 @@ test('Black Skulls and regular-member reports have separate copyable, source-lab
 });
 test('Skull Capo screen, custom controls and dual after-action reports are wired',()=>{
  for(const token of [
-  "const ID='war', VER='1.5.6'",
+  "const ID='war', VER='1.5.26'",
   "leader:'Skull Capo command'",
   "SKULL CAPO | BLACK SKULLS COMMAND",
   "id=\"ws-heavy-mode\"","id=\"ws-heavy-percent\"","id=\"ws-heavy-bss\"",

@@ -51,7 +51,7 @@ test('FF values outside range and null remain unknown; never fabricated 1.00x',(
     {player_id:102,fair_fight:0},
     {player_id:103,fair_fight:4.2}
   ],[101,102,103]);
-  assert.deepEqual([rows[101].ff,rows[102].ff,rows[103].ff],[null,null,null]);
+  assert.deepEqual([rows[101].ff,rows[102].ff,rows[103].ff],[null,null,4.2]);
   assert.equal(v.validFF(undefined),null);
   assert.equal(v.validFF(''),null);
 });
@@ -102,7 +102,7 @@ test('FF is next to player names and remains distinct from team-specific matchup
 });
 test('distributed PDA source and smart-quote normalisation are parser-safe',()=>{
   assert.ok(source.startsWith('// ==UserScript==\n'));
-  assert.match(source,/\/\/ @version\s+1\.5\.6/);
+  assert.match(source,/\/\/ @version\s+1\.5\.26/);
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
   const normalised=source.replace(/[\u2018\u2019]/gu,"'").replace(/[\u201c\u201d]/gu,'"');

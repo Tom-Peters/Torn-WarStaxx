@@ -18,12 +18,13 @@ test('FFScouter and manual BSS partition toughest 40% for Black Skulls',()=>{
    'const bsScore=s=>s?.bss??null;',
    'const ffscouter=id=>({bss:({2:250,3:150,4:100,5:75})[id]||null});',
    'const ffIsStale=()=>false;',
-   "const cfg={blackSkulls:{20:true}};",
-   'const state={data:{enemies:['+
+   "const cfg={blackSkulls:{20:true},heavyPolicy:{mode:'percent',percent:40,minBss:0}};",
+   'const state={data:{ours:[],enemies:['+
      '{id:1,level:10,status:"Okay"},{id:2,level:99,status:"Okay"},'+
      '{id:3,level:30,status:"Okay"},{id:4,level:40,status:"Hospital"},'+
      '{id:5,level:15,status:"Okay"},{id:6,level:100,status:"Okay"}]}};',
    'const hitterRisk=()=>({mode:"balanced",maxRatio:.70,minWins:0});',
+   'const concessionSnapshot=()=>null;',
    'const matchEvidence=()=>null;'
  ].join('\n');
  const f=fixture(setup,'  function enemyBattleEstimate(','  function personalShortlist(',
@@ -114,7 +115,8 @@ test('past-war hitter comparison needs two comparable reports and five attacks',
        '9:{factions:[{id:1,members:[{id:10,score:35,attacks:10}]}]}'+
      '},ours:[{id:10,name:"Skull"}]}};',
    'const warHitLedger=()=>({ours:{players:{}}});',
-   'const inboundWarImpact=()=>({known:false,byMember:{}});'
+   'const inboundWarImpact=()=>({known:false,byMember:{}});',
+   'const liveWarMemberImpact=()=>({known:false,earned:null,given:null,net:null});'
  ].join('\n');
  const f=fixture(setup,'  function ownHistoricalEfficiency(','  function bonusHitRecommendation(',
    '({ownHistoricalEfficiency,memberPerformance})');
@@ -145,7 +147,7 @@ test('four-layer navigation and existing advanced pages remain functional',()=>{
    "const pages={overview,enemy:enemyScreen,reports:reportsScreen,leader:leaderScreen",
    "function warQuick(action)"
  ])assert.ok(source.includes(token),'Missing '+token);
- assert.match(source,/\/\/ @version\s+1\.5\.6/);
+ assert.match(source,/\/\/ @version\s+1\.5\.26/);
  assert.doesNotMatch(source,/[^\x00-\x7f]/);
  assert.doesNotThrow(()=>new Script(source));
 });

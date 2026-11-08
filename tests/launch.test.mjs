@@ -6,7 +6,7 @@ const code=readFileSync(new URL('../WarStaxx.user.js',import.meta.url),'utf8');
 const marker="(function () {\n  'use strict';\n  if (typeof document === 'undefined'";
 const appStart=code.lastIndexOf(marker);
 class FakeElement {
-  constructor(tag){this.tagName=tag;this.style={};this.listeners={};this.attributes={};this.nodes={};this.isConnected=false;this.innerHTML='';this.textContent='';this.scrollTop=0;this.classList={add:()=>{},remove:()=>{}};this.firstChild=null;this.dataset={};}
+  constructor(tag){this.tagName=tag;this.style={};this.listeners={};this.attributes={};this.nodes={};this.isConnected=false;this.innerHTML='';this.textContent='';this.scrollTop=0;this.classList={add:()=>{},remove:()=>{},toggle:()=>{}};this.firstChild=null;this.dataset={};}
   appendChild(node){node.isConnected=true;this.child=node;return node;}
   append(node){return this.appendChild(node);}
   insertBefore(node){node.isConnected=true;this.child=node;return node;}
@@ -63,7 +63,7 @@ test('WarStaxx boots on a faction page without API key, registers with StaxxHub 
 });
 test('No extra floating button on normal Torn page; StaxxHub registration still works',()=>{
  const {body,host,events}=start('/index.php');
- assert.equal(host.child?.id,'warstaxx-live-strip','strip available on ordinary Torn pages');
+ assert.equal(host.child?.id,undefined,'ordinary non-war pages must not show the war-only command strip');
  assert.ok(body.child && body.child.id==='warstaxx-root');
  assert.ok(events.some(e=>e.type==='staxx:register'&&e.detail.id==='war'));
 });

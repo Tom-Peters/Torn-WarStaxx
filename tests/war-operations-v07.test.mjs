@@ -16,7 +16,7 @@ function matchingFixture(){
     'const positive=v=>Number.isSafeInteger(Number(v))&&Number(v)>0?Number(v):0;',
     'const fmt=v=>String(v);',
     'const now=Date.now();',
-    'const cfg={ourId:10,enemyId:20,assignments:{},watchlist:{},hitterRisk:{},blackSkulls:{1:true,2:true},'+
+    "const cfg={ourId:10,enemyId:20,assignments:{},watchlist:{},hitterRisk:{},blackSkulls:{1:true,2:true},heavyPolicy:{mode:'min-bss',minBss:0,percent:100},"+
       'spies:{1:{observedAt:now,bss:1000},2:{observedAt:now,bss:900},101:{observedAt:now,bss:300},102:{observedAt:now,bss:200}},'+
       'manualReadiness:{},planStatus:{}};',
     "const state={data:{war:{id:500},ours:[{id:1,name:'Alpha',status:'okay'},"+
@@ -32,6 +32,7 @@ function matchingFixture(){
     'const hitterRisk=()=>({mode:"balanced",maxRatio:.70,minWins:0});',
     'const ffscouter=id=>({bss:({103:80,104:60})[id]||null});',
     'const ffIsStale=()=>false;',
+    'const concessionSnapshot=()=>null;',
     'const matchup=(friend,enemy)=>{const ratios={1:{101:0.35,102:0.45},2:{101:0.38,102:1.35}};'+
       "return {known:true,ratio:ratios[friend.id]?.[enemy.id],ff:2.5,exact:[101,102].includes(enemy.id),confidence:'Two recent spies'};};"
   ].join('\n');
@@ -90,7 +91,7 @@ test('Operations tab, manual controls and safe user-script installer remain wire
     "'operations','ledger'"]){
     assert.ok(source.includes(fragment),'Missing integration: '+fragment);
   }
-  assert.match(source,/\/\/ @version\s+1\.5\.6/);
+  assert.match(source,/\/\/ @version\s+1\.5\.26/);
   assert.ok(source.startsWith('// ==UserScript==\n'));
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
