@@ -6942,6 +6942,42 @@
           'gap:2px!important;padding:2px 3px!important}'+
         '.faction-war ul.members-list li.enemy.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel .wsnw-chip{'+
           'font-size:10px!important;padding:3px 1px!important}}';
+    style.textContent+=
+      '.faction-war .wsnw-faction-summary{display:flex!important;align-items:center!important;'+
+        'gap:6px!important;justify-content:space-between!important;flex-wrap:wrap!important;'+
+        'padding:5px 7px!important;margin:6px 0 2px!important;'+
+        'background:#132e42!important;color:#effaff!important;'+
+        'border:1px solid #365e79!important;border-radius:6px!important;'+
+        'font:850 11px/1.25 system-ui,sans-serif!important}'+
+      '.faction-war .wsnw-faction-summary .wsnw-summary-values{display:inline-flex!important;'+
+        'gap:9px!important;align-items:center!important;font-variant-numeric:tabular-nums!important}'+
+      '.faction-war .wsnw-faction-summary .wsnw-positive{color:#a1f4c9!important}'+
+      '.faction-war .wsnw-faction-summary .wsnw-negative{color:#ffb7bd!important}'+
+      '.faction-war .wsnw-faction-summary .wsnw-summary-filters{display:inline-flex!important;gap:4px!important}'+
+      '.faction-war .wsnw-faction-summary button{min-height:32px!important;padding:5px 8px!important;'+
+        'background:#244459!important;border:1px solid #49788f!important;'+
+        'border-radius:5px!important;color:#d5ebf7!important;'+
+        'font:900 11px/1.1 system-ui,sans-serif!important;touch-action:manipulation!important}'+
+      '.faction-war .wsnw-faction-summary button[aria-pressed="true"]{'+
+        'background:#165b82!important;border-color:#76d3f8!important;color:#fff!important}'+
+      '#wsnw-toolbar [data-wsnw-action="quick-ready"][aria-pressed="true"]{'+
+        'background:#206c50!important;border-color:#74d1a4!important;color:#fff!important}'+
+      '.faction-war ul.members-list li.your.wsnw-net-up:not(.wsnw-expanded){'+
+        'border-left:4px solid #46c992!important}'+
+      '.faction-war ul.members-list li.your.wsnw-net-down:not(.wsnw-expanded){'+
+        'border-left:4px solid #f07a84!important}'+
+      '.faction-war ul.members-list li.enemy.wsnw-enemy-scorer:not(.wsnw-heavy-target){'+
+        'border-left:4px solid #f1b15a!important}'+
+      '.faction-war ul.members-list li.enemy.wsnw-enemy-scorer .wsnw-intel [data-wsnw-chip="warpoints"]{'+
+        'background:#674222!important;border-color:#d9a155!important;color:#fff0c7!important}'+
+      '.faction-war ul.members-list li.wsnw-expanded .wsnw-pin-heavy{'+
+        'display:inline-flex!important;align-items:center!important;min-height:30px!important;'+
+        'padding:6px 10px!important;border:1px solid #bd91fa!important;'+
+        'background:#422a64!important;color:#f5eaff!important;border-radius:5px!important;'+
+        'font:850 11px system-ui,sans-serif!important;touch-action:manipulation!important}'+
+      '@media(max-width:470px){.faction-war .wsnw-faction-summary{gap:5px!important;padding:4px!important}'+
+        '.faction-war .wsnw-faction-summary .wsnw-summary-values{gap:6px!important}'+
+        '.faction-war .wsnw-faction-summary button{padding:4px 6px!important}}';
     document.head.appendChild(style);
   }
   // An opt-in small, draggable chain indicator. Never mounted over an attack page.
