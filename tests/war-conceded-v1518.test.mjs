@@ -58,7 +58,7 @@ test('points conceded count only ranked hits from enemy faction on our own membe
   assert.equal(done.byMember[102].enemyScore,4);
   assert.equal(done.byMember[102].scoringAttacks,2);
   assert.equal(done.total,109);
-  assert.equal(f.getCalls(),2);
+  assert.equal(f.getCalls(),3);
 });
 
 test('unavailable data is not rendered as zero and incoming API permission is explained',()=>{
