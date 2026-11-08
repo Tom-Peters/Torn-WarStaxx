@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.5.18
+// @version      1.5.19
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.5.18', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.5.19', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -199,7 +199,7 @@
   const link=id=>'https://www.torn.com/profiles.php?XID='+positive(id);
   const attackLink=id=>'https://www.torn.com/loader.php?sid=attack&user2ID='+positive(id);
   const apiKeyPda=typeof window.PDA_APIKEY==='string'?window.PDA_APIKEY:'###PDA-APIKEY###';
-  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,autoConceded:true,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},controlAssignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,warStripCompact:true,warStripScope:'contextual',nativeWarEnabled:true,nativeWarCountryGroups:true,nativeWarSort:'availability',nativeWarFilter:'all',nativeChainBubble:false,priorityNotifications:true,hitterRisk:{},heavyPolicy:{mode:'percent',percent:40,minBss:0},shared:{enabled:false,endpoint:'',token:'',canWrite:false},hidden:false};
+  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,autoConceded:true,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},controlAssignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,warStripCompact:true,warStripScope:'contextual',nativeWarEnabled:true,nativeWarCountryGroups:true,nativeWarSort:'availability',nativeFriendlySort:'given',nativeWarFilter:'all',nativeChainBubble:false,priorityNotifications:true,hitterRisk:{},heavyPolicy:{mode:'percent',percent:40,minBss:0},shared:{enabled:false,endpoint:'',token:'',canWrite:false},hidden:false};
   const cfg=Object.assign({},defaults,safeRead(CONFIG,{}));
   cfg.assignments=cfg.assignments&&typeof cfg.assignments==='object'?cfg.assignments:{};
   cfg.ordersByEnemy=cfg.ordersByEnemy&&typeof cfg.ordersByEnemy==='object'?cfg.ordersByEnemy:{};
@@ -3985,36 +3985,55 @@
     const w=warAttackWindow(warId),key=String(positive(warId));
     if(!w||!positive(w.ourId)||!positive(w.enemyId)||!positive(Math.floor(w.start/1000)))return null;
     let rec=state.data.concededWars[key];
-    if(rec&&(positive(rec.ourId)!==w.ourId||positive(rec.enemyId)!==w.enemyId||
+    if(rec&&(rec.version!==2||positive(rec.ourId)!==w.ourId||positive(rec.enemyId)!==w.enemyId||
         n(rec.start)!==w.start))rec=null;
     if(!rec&&create){
-      rec={warId:positive(warId),ourId:w.ourId,enemyId:w.enemyId,start:w.start,
-        cursor:Math.max(0,Math.floor(w.start/1000)-1),seen:{},byMember:{},
-        total:0,rows:0,fetches:0,lastFetch:0,caughtUpAt:0,complete:false,error:''};
+      rec={version:2,warId:positive(warId),ourId:w.ourId,enemyId:w.enemyId,start:w.start,
+        cursor:Math.max(0,Math.floor(w.start/1000)-1),seen:{},byMember:{},byAttacker:{},
+        total:0,rows:0,ourTotal:0,ourRows:0,fetches:0,lastFetch:0,caughtUpAt:0,complete:false,error:''};
       state.data.concededWars[key]=rec;
     }
     return rec||null;
   }
+  // One deduplicated, chronological feed covers BOTH sides of the current war.
+  // Torn attack respect is an observed score proxy; the final official scorecard
+  // is authoritative after the war. Uncaptured history must never become zero.
   function captureConcessionAttacks(rec,records){
     if(!rec)return 0;
-    let added=0;
     const w=warAttackWindow(rec.warId);
     if(!w||w.start!==n(rec.start))return 0;
+    let added=0;
     for(const a of records){
       if(!positive(a.id)||rec.seen[a.id]||a.ranked!==true||
-          a.attackerFaction!==w.enemyId||a.defenderFaction!==w.ourId||
-          !positive(a.defender)||!n(a.at)||a.at<w.start||a.at>w.end+60000)continue;
-      rec.seen[a.id]=1;added++;rec.rows++;
-      const target=rec.byMember[a.defender]||
-        (rec.byMember[a.defender]={id:a.defender,attacks:0,scoringAttacks:0,enemyScore:0,lastAt:0});
-      target.attacks++;
+        !n(a.at)||a.at<w.start||a.at>w.end+60000)continue;
+      const againstUs=a.attackerFaction===w.enemyId&&a.defenderFaction===w.ourId&&positive(a.defender);
+      const forUs=a.attackerFaction===w.ourId&&a.defenderFaction===w.enemyId&&positive(a.attacker);
+      if(!againstUs&&!forUs)continue;
+      rec.seen[a.id]=1;added++;
       const points=officialNumber(a.respect);
-      if(points!==null&&points>0){target.enemyScore+=points;target.scoringAttacks++;rec.total+=points;}
-      target.lastAt=Math.max(n(target.lastAt),a.at);
+      if(forUs){
+        rec.ourRows++;
+        const hitter=rec.byAttacker[a.attacker]||
+          (rec.byAttacker[a.attacker]={id:a.attacker,attacks:0,scoringAttacks:0,ourScore:0,lastAt:0});
+        hitter.attacks++;
+        if(points!==null&&points>0){hitter.scoringAttacks++;hitter.ourScore+=points;rec.ourTotal+=points;}
+        hitter.lastAt=Math.max(n(hitter.lastAt),a.at);
+      }else{
+        rec.rows++;
+        const defender=rec.byMember[a.defender]||
+          (rec.byMember[a.defender]={id:a.defender,attacks:0,scoringAttacks:0,enemyScore:0,
+            lastAt:0,hitTimes:[]});
+        defender.attacks++;
+        if(points!==null&&points>0){defender.enemyScore+=points;defender.scoringAttacks++;rec.total+=points;}
+        defender.lastAt=Math.max(n(defender.lastAt),a.at);
+        // Retain only a few recent attack timestamps for pressure alerts.
+        defender.hitTimes=(Array.isArray(defender.hitTimes)?defender.hitTimes:[])
+          .concat(a.at).sort((a,b)=>a-b).slice(-30);
+      }
     }
     return added;
   }
-  function concessionSnapshot(warId=positive(state.data.war?.id),at=Date.now()){
+    function concessionSnapshot(warId=positive(state.data.war?.id),at=Date.now()){
     const rec=concessionRecord(warId,false);
     if(!rec||!rec.fetches)return null;
     const active=positive(state.data.war?.id)===positive(warId);
@@ -4022,8 +4041,9 @@
     // It is not a claim that the live opponent score can no longer change.
     const complete=Boolean(rec.complete&&rec.caughtUpAt&&
       (!active||at-n(rec.caughtUpAt)<2*MIN));
-    return {known:true,partial:!complete,complete,byMember:rec.byMember,
-      rows:rec.rows,total:rec.total,lastFetch:rec.lastFetch,caughtUpAt:rec.caughtUpAt,
+    return {known:true,partial:!complete,complete,byMember:rec.byMember,byAttacker:rec.byAttacker,
+      rows:rec.rows,total:rec.total,ourRows:rec.ourRows,ourTotal:rec.ourTotal,
+      lastFetch:rec.lastFetch,caughtUpAt:rec.caughtUpAt,
       error:String(rec.error||''),warId:rec.warId};
   }
   async function refreshWarConcessions(force=false){
@@ -4034,29 +4054,29 @@
     if(!w||!rec)return;
     state.concededBusy=true;
     try{
-      if(!rec.fetches){
-        // Reuse previously captured partial evidence without pretending it is complete.
-        captureConcessionAttacks(rec,warAttackRows(w.id));
-      }
-      const from=Math.max(Math.floor(w.start/1000)-1,n(rec.cursor)),
-        to=Math.floor(Date.now()/1000),
-        response=await call('/faction/attacks?limit=100&sort=ASC&from='+from+'&to='+to,
-          'concessions',force?0:40*1000);
-      if(!response)return;
-      const source=parseArray(unpack(response,'attacks')),parsed=attacks(response);
-      captureConcessionAttacks(rec,parsed);
-      rec.fetches++;rec.lastFetch=Date.now();rec.error='';
-      if(source.length<100){
-        rec.cursor=to;rec.complete=true;rec.caughtUpAt=rec.lastFetch;
-      }else{
+      if(!rec.fetches)captureConcessionAttacks(rec,warAttackRows(w.id));
+      // A maximum of three API pages per refresh catches up active wars without
+      // flooding Torn. Each page advances an inclusive, deduplicated cursor.
+      for(let page=0;page<3;page++){
+        const from=Math.max(Math.floor(w.start/1000)-1,n(rec.cursor)),
+          to=Math.floor(Date.now()/1000);
+        const response=await call('/faction/attacks?limit=100&sort=ASC&from='+from+'&to='+to,
+          'concessions',0);
+        if(!response)break;
+        const source=parseArray(unpack(response,'attacks')),parsed=attacks(response);
+        captureConcessionAttacks(rec,parsed);
+        rec.fetches++;rec.lastFetch=Date.now();rec.error='';
+        if(source.length<100){
+          rec.cursor=to;rec.complete=true;rec.caughtUpAt=rec.lastFetch;
+          break;
+        }
         const highest=Math.max(0,...parsed.map(a=>Math.floor(a.at/1000)));
-        if(highest>from){
-          // Inclusive cursor retains attacks sharing the same Torn timestamp.
-          rec.cursor=highest;rec.complete=false;
-        }else{
+        if(highest<=from){
           rec.complete=false;
           rec.error='Attack pagination did not advance. Totals remain partial.';
+          break;
         }
+        rec.cursor=highest;rec.complete=false;
       }
       for(const key of Object.keys(state.data.concededWars)
         .sort((a,b)=>n(state.data.concededWars[b]?.lastFetch)-n(state.data.concededWars[a]?.lastFetch))
@@ -4068,7 +4088,31 @@
     }finally{state.concededBusy=false;}
   }
 
-  function inboundWarImpact(warId=positive(state.data.war?.id)){
+  function liveWarMemberImpact(memberId,warId=positive(state.data.war?.id),at=Date.now()){
+    const id=positive(memberId),data=concessionSnapshot(warId,at),
+      incoming=data?.byMember?.[id]||null,outgoing=data?.byAttacker?.[id]||null,
+      complete=data?.complete===true,known=Boolean(data?.known);
+    const earned=known&&(complete||outgoing)?n(outgoing?.ourScore):null,
+      given=known&&(complete||incoming)?n(incoming?.enemyScore):null,
+      hits=known&&(complete||incoming)?n(incoming?.scoringAttacks):null,
+      attacks=known&&(complete||incoming)?n(incoming?.attacks):null,
+      ownHits=known&&(complete||outgoing)?n(outgoing?.attacks):null,
+      net=earned!==null&&given!==null?earned-given:null;
+    const times=Array.isArray(incoming?.hitTimes)?incoming.hitTimes:[],
+      in30=times.filter(t=>t>=at-30*MIN&&t<=at+MIN).length,
+      in60=times.filter(t=>t>=at-60*MIN&&t<=at+MIN).length,
+      underFire=in30>=3||in60>=5;
+    const enemyScore=positive(state.data.war?.id)===positive(warId)?warScore()?.enemy:null;
+    // Score share is observed attack respect / official live enemy score, not
+    // an official member-specific war score. Reject inconsistent >100% shares.
+    const share=given!==null&&enemyScore!==null&&enemyScore!==undefined&&enemyScore>0&&
+      given<=enemyScore*1.0001?100*given/enemyScore:null;
+    return {id,known,complete,partial:!complete,earned,given,hits,attacks,ownHits,net,
+      share,in30,in60,underFire,lastAt:n(incoming?.lastAt),
+      lastFetch:n(data?.lastFetch),error:String(data?.error||'')};
+  }
+
+    function inboundWarImpact(warId=positive(state.data.war?.id)){
     const captured=concessionSnapshot(warId);
     if(captured)return captured;
     const rows=warAttackRows(warId).filter(a=>a.side==='enemies'),
@@ -4241,10 +4285,12 @@
     if(!player||!positive(warId))return null;
     const report=state.data.reports[String(warId)]?.factions
         ?.find(x=>x.id===positive(cfg.ourId))?.members?.find(p=>p.id===positive(player.id)),
+      impact=liveWarMemberImpact(player.id,warId),
       ledger=warHitLedger(warId).ours.players[positive(player.id)]||null,
-      source=report?'Official completed-war report':ledger?'Partial captured attack feed':'Unknown',
-      hits=report?officialNumber(report.attacks):ledger?.hits??null,
-      points=report?officialNumber(report.score):ledger?.respect??null,
+      source=report?'Official completed-war report':impact.earned!==null?'Captured ranked-war attacks':
+        ledger?'Partial captured attack feed':'Unknown',
+      hits=report?officialNumber(report.attacks):impact.ownHits??ledger?.hits??null,
+      points=report?officialNumber(report.score):impact.earned??ledger?.respect??null,
       incoming=inboundWarImpact(warId),
       received=incoming.known?incoming.byMember[positive(player.id)]||null:null,
       enemyPointsReceived=incoming.known&&(incoming.complete||received)?received?.enemyScore||0:null,
@@ -4259,6 +4305,7 @@
           'In line with own historical average';
     }
     return {player,hits,points,enemyPointsReceived,enemyScoringHits,
+      share:impact.share,underFire:impact.underFire,recentIncoming:impact.in30,
       netProxy:points!==null&&enemyPointsReceived!==null?points-enemyPointsReceived:null,
       inboundSource:incoming.known?'Partial captured enemy attack feed':'Inbound history unavailable',
       perHit,baseline:base.perHit,priorWars:base.samples,
