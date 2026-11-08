@@ -1384,6 +1384,17 @@
     const per=cfg.manualHeavyTargetsByEnemy?.[String(positive(cfg.enemyId))];
     return per&&typeof per==='object'&&!Array.isArray(per)?per:{};
   }
+  function toggleManualHeavyTarget(id){
+    const wanted=positive(id),enemy=state.data.enemies.find(p=>p.id===wanted),
+      factionId=positive(cfg.enemyId);
+    if(!enemy||!factionId)return null;
+    const key=String(factionId),extras={...manualHeavyTargets()};
+    if(extras[wanted]===true)delete extras[wanted];
+    else extras[wanted]=true;
+    cfg.manualHeavyTargetsByEnemy[key]=extras;
+    saveCfg();markSharedDirty();
+    return {enemy,added:extras[wanted]===true};
+  }
   function heavyRule(input=cfg.heavyPolicy){
     const mode=['relative','percent','min-bss'].includes(input?.mode)?input.mode:'relative',
       percentage=Number(input?.percent),threshold=Number(input?.minBss);
@@ -5962,6 +5973,14 @@
     if(action==='pace-live'){state.selectedPace=0;navigate('pace');return;}
     if(action==='timeline-latest'){state.selectedTimeline=0;navigate('timeline');return;}
     if(action.startsWith('timeline-war:')){state.selectedTimeline=positive(action.slice(13));navigate('timeline');return;}
+    if(action.startsWith('toggle-heavy-target:')){
+      const targetId=positive(action.slice('toggle-heavy-target:'.length)),
+        changed=toggleManualHeavyTarget(targetId);
+      if(!changed)state.error='Target not in the current opponent faction roster.';
+      else confirmed((changed.added?'Pinned ':'Unpinned ')+changed.enemy.name+
+        ' as a manual Black Skull target. Automatic classification still applies.');
+      render();syncNativeWar();return;
+    }
     if(action==='save-heavy-cutoff'){
       const mode=String($('#ws-heavy-mode',root)?.value||'percent'),
         percent=Number($('#ws-heavy-percent',root)?.value),
