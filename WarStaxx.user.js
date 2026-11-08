@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='1.5.29';
+  const id='war', version='1.5.30';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -289,7 +289,7 @@
       // evidence (or a prior hospital location), not a default Torn guess.
       if(memberState(member)==='hospital'){
         const reported=nativeWarLocation(member);
-        if(reported.country!=='Unknown')member.hospitalCountry=reported.country;
+        if(reported.country!=='Unknown'&&reported.source!=='Torn local hospital status')member.hospitalCountry=reported.country;
         else{
           const earlier=prior.get(member.id);
           if(earlier&&['away','hospital'].includes(memberState(earlier))){
