@@ -63,7 +63,7 @@ test('points conceded count only ranked hits from enemy faction on our own membe
 
 test('unavailable data is not rendered as zero and incoming API permission is explained',()=>{
   assert.match(source,/present=Boolean\(concessions\?\.known&&\(concessions\.complete\|\|received\)\)/);
-  assert.ok(source.includes("present?prefix+fmt(received?.enemyScore||0):'—'"));
+  assert.ok(source.includes(String.raw`present?prefix+fmt(received?.enemyScore||0):'\u2014'`));
   assert.ok(source.includes('Limited faction attacks API data'));
   assert.ok(source.includes('data-wsnw-chip="conceded"'));
   assert.ok(source.includes('data-wsnw-chip="received"'));
