@@ -12,9 +12,9 @@ function region(start,end){
 
 test('all three Torn PDA version surfaces match 1.5.27 and script remains parser safe',()=>{
   assert.ok(source.startsWith('// ==UserScript==\n'));
-  assert.match(source,/^\/\/ @version\s+1\.5\.26$/m);
-  assert.match(source,/const id='war', version='1\.5\.26'/);
-  assert.match(source,/const ID='war', VER='1\.5\.26'/);
+  assert.match(source,/^\/\/ @version\s+1\.5\.27$/m);
+  assert.match(source,/const id='war', version='1\.5\.27'/);
+  assert.match(source,/const ID='war', VER='1\.5\.27'/);
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
 });
