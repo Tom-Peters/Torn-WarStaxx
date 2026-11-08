@@ -6290,6 +6290,10 @@
     const t=nativeWarTransition(p.id,at),kind=memberState(p),group=nativeWarClass(p);
     const eta=kind==='hospital'?positive(p.until)||Infinity:
       kind==='away'&&flightEvidence(p).kind==='returning'?flightEvidence(p).eta||Infinity:Infinity;
+    if(mode==='warpoints'||mode==='warhits'){
+      const impact=liveEnemyWarImpact(p.id),value=mode==='warhits'?impact.hits:impact.scored;
+      return [value===null?1:0,value===null?0:-value,p.id];
+    }
     if(mode==='activity')return [p.lastAt?-p.lastAt:Infinity,p.id];
     if(mode==='bss'){
       const est=enemyBattleEstimate(p).value;
@@ -6331,7 +6335,7 @@
         if(country)return country;
       }
       // Okay targets always precede hospitalised/jailed/flying players in each country.
-      if(mode!=='torn'){
+      if(mode!=='torn'&&mode!=='warpoints'&&mode!=='warhits'){
         const availability=nativeWarAvailabilityRank(pa)-nativeWarAvailabilityRank(pb);
         if(availability)return availability;
       }
@@ -6929,7 +6933,7 @@
     if(!toolbar){toolbar=document.createElement('div');toolbar.id='wsnw-toolbar';
       toolbar.setAttribute('aria-label','WarStaxx native ranked war controls');}
     if(toolbar.nextElementSibling!==box)box.before(toolbar);
-    const mode=['availability','hospital','bss','ff','activity','torn'].includes(cfg.nativeWarSort)?
+    const mode=['availability','hospital','bss','ff','activity','warpoints','warhits','torn'].includes(cfg.nativeWarSort)?
       cfg.nativeWarSort:'availability';
     const filter=['all','okay','hospital','returning','heavy','assigned','watched','active5','active60','offline'].includes(cfg.nativeWarFilter)?
       cfg.nativeWarFilter:'all';
@@ -6967,7 +6971,8 @@
         ' first">'+(friendlyDesc?'↓':'↑')+'</button>'+
       '<label>ENEMY <select data-wsnw-sort aria-label="Sort opposing faction">'+
       [['availability','Availability'],['hospital','Hospital expiry'],['bss','BSS highest'],
-        ['ff','FF highest'],['activity','Recent activity'],['torn','Torn order']].map(x=>
+        ['ff','FF highest'],['activity','Recent activity'],['warpoints','War points'],
+        ['warhits','War hits'],['torn','Torn order']].map(x=>
         '<option value="'+x[0]+'" '+(mode===x[0]?'selected':'')+'>'+x[1]+'</option>').join('')+
       '</select></label>'+
       '<label>SHOW <select data-wsnw-filter aria-label="Filter opponents">'+
