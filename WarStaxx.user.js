@@ -4404,7 +4404,7 @@
       'A net-impact calculation is only a proxy, not an official personal Torn stat.</p>'+
       (rows.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr>'+
         '<th>Member</th><th>Points earned</th><th>Enemy points conceded</th><th>Net impact proxy</th>'+
-        '<th>Attacks made</th><th>Enemy scoring hits received</th>'+
+        '<th>Attacks made</th><th>Enemy scoring hits received</th><th>Enemy %</th><th>Pressure 30m</th>'+
         '<th>Earned / attack</th><th>Own baseline</th><th>Trend</th></tr></thead><tbody>'+
         rows.slice(0,limit).map(x=>'<tr><td>'+infoButton(x.player.name,x.player.id)+
           (cfg.blackSkulls[x.player.id]?' '+pill('BLACK SKULL','good'):'')+
@@ -4413,7 +4413,9 @@
           '<td>'+(x.enemyPointsReceived===null?'Unknown':fmt(x.enemyPointsReceived)+' (partial)')+'</td>'+
           '<td>'+(x.netProxy===null?'Unknown':fmt(x.netProxy)+' (proxy)')+'</td>'+
           '<td>'+(x.hits===null?'Unknown':fmt(x.hits))+'</td>'+
-          '<td>'+(x.enemyScoringHits===null?'Unknown':fmt(x.enemyScoringHits))+'</td>'+
+          '<td>'+(x.enemyScoringHits===null?'Unknown':fmt(x.enemyScoringHits))+'</td>'+ 
+          '<td>'+(x.share===null?'Unknown':fmt(x.share)+'% observed')+'</td>'+ 
+          '<td>'+(x.underFire?pill(fmt(x.recentIncoming)+' incoming','bad'):fmt(x.recentIncoming))+'</td>'+
           '<td>'+(x.perHit===null?'Unknown':fmt(x.perHit))+'</td>'+
           '<td>'+(x.baseline===null?'Unknown':fmt(x.baseline)+' ('+x.priorWars+' wars)')+'</td>'+
           '<td>'+pill(x.status,x.flag?'bad':x.ratio!==null&&x.ratio>=1.15?'good':'')+
@@ -4457,7 +4459,67 @@
       'Otherwise performance stays unclassified. Historical BSS is never '+
       'inferred from the present enemy roster.</p>');
   }
-  function blackSkullsPerformanceCard(warId=positive(state.data.war?.id)){
+  function liveBlackSkullsImpactCard(){
+    if(!activeWarNow())return '';
+    const rows=state.data.ours.filter(p=>cfg.blackSkulls[p.id])
+      .map(p=>({p,x:liveWarMemberImpact(p.id)}))
+      .sort((a,b)=>(b.x.given??-1)-(a.x.given??-1)),
+      known=rows.filter(z=>z.x.known),totalEarned=known.reduce((z,x)=>z+n(x.x.earned),0),
+      totalGiven=known.reduce((z,x)=>z+n(x.x.given),0),
+      hot=rows.filter(z=>z.x.underFire).length;
+    return card('Black Skulls | live earned, conceded and pressure',
+      '<p>Current war, captured ranked-war attacks only. E/G are observed respect contributions; '+
+      'net is an estimated swing rather than an official personal war score. '+
+      'An incomplete scan can change the rankings. Black Skull tags are your local selections.</p>'+
+      '<p><b>Captured squad E/G:</b> '+(known.length?fmt(totalEarned)+' / '+fmt(totalGiven):'Unknown')+
+      ' | <b>Net proxy:</b> '+(known.length?fmt(totalEarned-totalGiven):'Unknown')+
+      ' | <b>Under repeated attack:</b> '+hot+
+      ' | <b>Full scan:</b> '+(known.length&&known.every(z=>z.x.complete)?'Yes':'Not yet')+'</p>'+
+      (rows.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr>'+
+        '<th>Black Skull</th><th>Earned</th><th>Given</th><th>Net</th>'+
+        '<th>Enemy %</th><th>Own hits</th><th>Earn / hit</th><th>Enemy hits / 30m</th></tr></thead><tbody>'+
+        rows.map(({p,x})=>'<tr><td>'+infoButton(p.name,p.id)+
+          (x.underFire?' '+pill('UNDER FIRE','bad'):'')+'</td>'+
+          '<td>'+(x.earned===null?'—':(x.complete?'':'≥')+fmt(x.earned))+'</td>'+
+          '<td>'+(x.given===null?'—':(x.complete?'':'≥')+fmt(x.given))+'</td>'+
+          '<td>'+(x.net===null?'—':'~'+(x.net>=0?'+':'')+fmt(x.net))+'</td>'+
+          '<td>'+(x.share===null?'—':(x.complete?'':'≥')+fmt(x.share)+'%')+'</td>'+
+          '<td>'+(x.ownHits===null?'—':fmt(x.ownHits))+'</td>'+
+          '<td>'+(x.ownHits&&x.earned!==null?fmt(x.earned/x.ownHits):'—')+'</td>'+
+          '<td>'+fmt(x.in30)+'</td></tr>').join('')+
+        '</tbody></table></div>':empty('No Black Skulls tagged. Tag members under Skull Capo command.')));
+  }
+
+  function enemyScoreShareCard(limit=10){
+    if(!activeWarNow())return '';
+    const rows=state.data.ours.map(p=>({p,x:liveWarMemberImpact(p.id)}))
+      .filter(z=>z.x.given!==null)
+      .sort((a,b)=>b.x.given-a.x.given).slice(0,limit),
+      covered=concessionSnapshot();
+    return card('Where the enemy scored | our defensive exposure',
+      '<p>Ranked by captured enemy points gained against each member. Percentage compares '+
+      'their observed attack points to the current official enemy war score. '+
+      'Values marked ≥ are incomplete minima, not final allocations. '+
+      'Repeated attacks = 3+ in 30m or 5+ in 60m.</p>'+
+      (rows.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr>'+
+        '<th>Member</th><th>Given</th><th>Enemy score %</th><th>Scoring hits</th>'+
+        '<th>Incoming 30m</th><th>Net proxy</th></tr></thead><tbody>'+
+        rows.map(({p,x})=>'<tr><td>'+infoButton(p.name,p.id)+
+          (cfg.blackSkulls[p.id]?' '+pill('SKULL'):'')+
+          (x.underFire?' '+pill('REPEAT HITS','bad'):'')+'</td>'+
+          '<td>'+(x.complete?'':'≥')+fmt(x.given)+'</td>'+
+          '<td>'+(x.share===null?'—':(x.complete?'':'≥')+fmt(x.share)+'%')+'</td>'+
+          '<td>'+(x.hits===null?'—':fmt(x.hits))+'</td>'+
+          '<td>'+fmt(x.in30)+'</td>'+
+          '<td>'+(x.net===null?'—':'~'+(x.net>=0?'+':'')+fmt(x.net))+
+          '</td></tr>').join('')+'</tbody></table></div>':
+        empty(covered?.known?'Scan catching up: no member totals yet.':
+          'Waiting for the current-war faction attack-history scan.'))+
+      '<p class="ws-small">Scans run while Torn is open; a missing attack or bonus can change the attribution. '+
+      'Enemy score remains the authoritative faction-wide total.</p>');
+  }
+
+    function blackSkullsPerformanceCard(warId=positive(state.data.war?.id)){
     const players=state.data.ours.filter(p=>cfg.blackSkulls[p.id]),
       rows=players.map(p=>memberPerformance(p,warId)).filter(Boolean),
       flagged=rows.filter(x=>x.flag);
@@ -4670,7 +4732,7 @@
           'This controls targets only; it does not prove a win.</p>'+
         b('Save strength cutoff','save-heavy-cutoff'))+
       blackSkullsCoverageCard(40)+
-      blackSkullsPerformanceCard()+comparableStrengthCard()+bonusTargetCard()+leaderboardCard(12)+
+      liveBlackSkullsImpactCard()+blackSkullsPerformanceCard()+comparableStrengthCard()+bonusTargetCard()+leaderboardCard(12)+
       card('BLACK SKULLS | strongest enemy targets',teamRows(black,'Black Skulls'))+
       card('REGULAR ATTACKERS | lower BSS targets',teamRows(regular,'regular attackers'))+
       card('DEFENCE / RESERVE | coordinated cover',teamRows(defensive,'defence'))+
@@ -4793,7 +4855,7 @@
       statAction('Enemy active 24h',enemies.total?fmt(enemies.active24)+' / '+fmt(enemies.total):'Unknown','Last actions, not uptime','tab:activity')+
       statAction('Enemy points / hour',pace?.measurable?fmt(pace.rateEnemy):'Unknown','Sampled observations','tab:pace')+'</div>'+
       hospitalWatchCard()+bonusTargetCard()+
-      leaderboardCard(5)+
+      enemyScoreShareCard(10)+leaderboardCard(5)+
       card('Immediate priorities',alerts.length?alerts.map(x=>'<div class="ws-row"><span><b>'+
         esc(x.title)+'</b><br><small>'+esc(x.detail)+'</small></span>'+
         b('Review','alert:'+x.id)+'</div>').join(''):empty('No verified urgent alerts. Keep statuses fresh.'))+
@@ -6135,7 +6197,7 @@
 
   // Torn native ranked-war enhancement: use Torn's own member rows, not a floating overlay.
   // All source data is from existing WarStaxx API observations and opt-in FFScouter.
-  const nativeWarState={transitions:new Map(),original:new WeakMap(),lastWar:0,expandedId:0,toolbarExpanded:false};
+  const nativeWarState={transitions:new Map(),original:new WeakMap(),ourOriginal:new WeakMap(),lastWar:0,expandedId:0,toolbarExpanded:false};
   function isNativeWarPage(){
     return /^\/factions\.php$/i.test(location.pathname)&&/^#\/war(?:\/|$)/i.test(location.hash||'');
   }
@@ -6294,7 +6356,42 @@
     }
     return true;
   }
-  function nativeWarFilters(p,band,filter){
+  // The friendly roster has a separate sort: enemy country/availability
+  // grouping remains untouched and Torn's native sort is still available.
+  function nativeWarSortFriendly(list,mode='given'){
+    if(!list||nativeWarConflict(list))return false;
+    const rows=nativeWarRows(list),all=Array.from(list.children);
+    if(!rows.length||rows.length!==all.length||rows.some(r=>!r.classList.contains('your')))return false;
+    if(!nativeWarState.ourOriginal.has(list))
+      nativeWarState.ourOriginal.set(list,new Map(rows.map((r,i)=>[nativeWarPlayerId(r),i])));
+    const original=nativeWarState.ourOriginal.get(list);
+    const measure=impact=>{
+      if(mode==='earned')return impact.earned;
+      if(mode==='net')return impact.net;
+      if(mode==='share')return impact.share;
+      if(mode==='hits')return impact.attacks;
+      return impact.given;
+    };
+    const keys=new Map(rows.map(row=>{
+      const id=nativeWarPlayerId(row);
+      return [id,liveWarMemberImpact(id)];
+    }));
+    const sorted=rows.slice().sort((a,b)=>{
+      const idA=nativeWarPlayerId(a),idB=nativeWarPlayerId(b);
+      if(mode==='torn')return (original.get(idA)??Infinity)-(original.get(idB)??Infinity);
+      const x=measure(keys.get(idA)),y=measure(keys.get(idB));
+      if(x===null&&y!==null)return 1;
+      if(y===null&&x!==null)return -1;
+      return (y??0)-(x??0)||(original.get(idA)??Infinity)-(original.get(idB)??Infinity);
+    });
+    if(sorted.some((row,i)=>row!==rows[i])){
+      const frag=document.createDocumentFragment();
+      sorted.forEach(row=>frag.appendChild(row));
+      list.appendChild(frag);
+    }
+    return true;
+  }
+    function nativeWarFilters(p,band,filter){
     if(filter==='okay')return memberState(p)==='okay';
     if(filter==='hospital')return memberState(p)==='hospital';
     if(filter==='returning')return flightEvidence(p).kind==='returning';
@@ -6404,7 +6501,17 @@
       '.faction-war ul.members-list li .wsnw-intel .wsnw-conceded{background:#50303b!important;border-color:#976371!important;color:#ffe1e1!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-conceded.wsnw-unknown{color:#a4b5c3!important;background:#203549!important;border-color:#395168!important}'+
       '.faction-war ul.members-list li .wsnw-intel .wsnw-friendly-skull{color:#efd9ff!important;background:#613189!important;border-color:#b67af2!important}'+
-      '.faction-war .wsnw-legend.wsnw-our-legend{background:#233142;border-color:#425a70}';
+      '.faction-war .wsnw-legend.wsnw-our-legend{background:#233142;border-color:#425a70}'+
+      '.faction-war .wsnw-legend.wsnw-our-legend{grid-template-columns:26px minmax(0,1.1fr) minmax(0,1.65fr) minmax(0,.72fr) minmax(0,1fr)}'+
+      '.faction-war ul.members-list li.your.wsnw-enhanced:not(.wsnw-expanded)>.wsnw-intel{grid-template-columns:26px minmax(0,1.1fr) minmax(0,1.65fr) minmax(0,.72fr) minmax(0,1fr)!important}'+
+      '.faction-war ul.members-list li.your.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip="presence"]{display:none!important}'+
+      '.faction-war ul.members-list li.your.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip="impact"]{grid-column:3;grid-row:1}'+
+      '.faction-war ul.members-list li.your.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip="net"]{grid-column:4;grid-row:1}'+
+      '.faction-war ul.members-list li.your.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip="share"]{grid-column:5;grid-row:1}'+
+      '.faction-war ul.members-list li .wsnw-intel .wsnw-net-negative{color:#ffc7c7!important;background:#542b3a!important;border-color:#9d5165!important}'+
+      '.faction-war ul.members-list li .wsnw-intel .wsnw-net-positive{color:#a4f1cf!important;background:#184b42!important;border-color:#37937a!important}'+
+      '.faction-war ul.members-list li .wsnw-intel .wsnw-under-fire-chip{color:#ffe9a2!important;background:#674021!important;border-color:#e4a64d!important;font-weight:900!important}'+
+      '.faction-war ul.members-list li.your.wsnw-under-fire{border-left:4px solid #f9ae51!important}';
     document.head.appendChild(style);
   }
   // An opt-in small, draggable chain indicator. Never mounted over an attack page.
@@ -6474,7 +6581,7 @@
     for(const h of document.querySelectorAll('.faction-war ul.members-list li.wsnw-country-heading'))h.remove();
     for(const row of document.querySelectorAll('.faction-war ul.members-list li.wsnw-enhanced')){
       row.classList.remove('wsnw-enhanced','wsnw-recent','wsnw-hospital-soon','wsnw-hospital-warning','wsnw-filtered');
-      row.classList.remove('wsnw-heavy-target','wsnw-newly-okay','wsnw-expanded');
+      row.classList.remove('wsnw-heavy-target','wsnw-newly-okay','wsnw-expanded','wsnw-under-fire');
       row.querySelectorAll('.wsnw-intel,.wsnw-detail,.wsnw-badge,.wsnw-copy').forEach(el=>el.remove());
     }
   }
@@ -6489,8 +6596,8 @@
       list.before(heading);
     }
     heading.classList.toggle('wsnw-our-legend',ours);
-    const columns='<span>Skull</span><span>Timer / travel</span><span>Seen</span>'+
-      (ours?'<span>Given pts</span><span>Hits</span>':'<span>Stats</span><span>FF</span>');
+    const columns=ours?'<span>Skull</span><span>Timer</span><span>Earn / Given</span><span>Net</span><span>Them % / hits</span>':
+      '<span>Skull</span><span>Timer / travel</span><span>Seen</span><span>Stats</span><span>FF</span>';
     if(heading.innerHTML!==columns)heading.innerHTML=columns;
   }
   function nativeWarToolbar(box,conflict,score,chain){
@@ -6502,7 +6609,8 @@
       cfg.nativeWarSort:'availability';
     const filter=['all','okay','hospital','returning','heavy','assigned','watched','active5','active60','offline'].includes(cfg.nativeWarFilter)?
       cfg.nativeWarFilter:'all';
-    const signature=[mode,filter,conflict,nativeWarState.toolbarExpanded,cfg.nativeWarCountryGroups].join(':');
+    const friendlySort=['given','net','earned','share','hits','torn'].includes(cfg.nativeFriendlySort)?cfg.nativeFriendlySort:'given';
+    const signature=[mode,filter,friendlySort,conflict,nativeWarState.toolbarExpanded,cfg.nativeWarCountryGroups].join(':');
     const scoreText=score?'Us '+fmt(score.our)+' / Them '+fmt(score.enemy):'LIVE WAR';
     const chainText=chain.fresh?'Chain '+fmt(chain.count)+' ('+chain.remaining+'s)':'Chain unknown';
     if(toolbar.dataset.signature===signature){
@@ -6523,7 +6631,10 @@
       '</select></label>'+
       '<button type="button" data-wsnw-action="war">War Room</button>'+
       '<button type="button" data-wsnw-action="more" aria-expanded="'+(nativeWarState.toolbarExpanded?'true':'false')+'">'+(nativeWarState.toolbarExpanded?'Less':'More')+'</button>'+
-      (nativeWarState.toolbarExpanded?'<button type="button" data-wsnw-action="skulls">Skulls</button>'+
+      (nativeWarState.toolbarExpanded?'<label>Our sort <select data-wsnw-friendly-sort>'+ 
+        [['given','Most given'],['net','Best net'],['earned','Most earned'],['share','Enemy %'],['hits','Most hit'],['torn','Torn order']].map(x=>
+          '<option value="'+x[0]+'" '+(friendlySort===x[0]?'selected':'')+'>'+x[1]+'</option>').join('')+
+        '</select></label><button type="button" data-wsnw-action="skulls">Skulls</button>'+
         '<button type="button" data-wsnw-action="turtle">Turtle</button>'+
         '<button type="button" data-wsnw-action="hit">HIT</button>':'')+
       (conflict?'<span class="wsnw-note">External script controls row order</span>':'');
@@ -6632,7 +6743,7 @@
           infoBar.insertBefore(roleChip,timer);
         const country=chip('country',place.country!=='Torn'&&place.country!=='Unknown'&&kind!=='away'?place.country:'',
           'wsnw-country','Reported location: '+place.country+' | '+place.source);
-        const seen=chip('presence',nativeWarLastSeen(p,now),isOnline(p)?'wsnw-online':'wsnw-presence',
+        const seen=chip('presence',enemy||expanded?nativeWarLastSeen(p,now):'',isOnline(p)?'wsnw-online':'wsnw-presence',
           'Last Torn action '+age(p.lastAt)+' | status '+p.lastAction);
         if(seen){seen.dataset.wsnwLastAt=String(positive(p.lastAt));
           seen.dataset.wsnwAction=String(p.lastAction||'Unknown');}
@@ -6653,22 +6764,43 @@
             orders.has(id)?'ORDER':cfg.watchlist[id]?'WATCH':'',
             '',orders.has(id)?'Local assigned hitter':'Watchlisted target');
         }else{
-          for(const key of ['bss','ff','order'])chip(key,'');
-          const received=concessions?.byMember?.[id]||null,
-            present=Boolean(concessions?.known&&(concessions.complete||received)),
-            prefix=concessions?.complete?'':'≥',
-            amount=present?prefix+fmt(received?.enemyScore||0):'—',
-            hits=present?prefix+fmt(received?.scoringAttacks||0):'—',
-            source=cfg.autoConceded===false?'Disabled in WarStaxx settings':
-              !concessions?.known?'Awaiting Limited faction attacks API data':
-              concessions.complete?'Scanned from war start through '+stamp(concessions.lastFetch):
-                'Partial scanned incoming ranked-war attacks; full war not yet covered',
-            detail='Enemy ranked-war points earned by hitting this member, not a deduction from their own score. '+source+
-              (concessions?.error?' | '+concessions.error:'');
-          chip('conceded',expanded?'GIVEN '+amount:amount,
-            present&&n(received?.enemyScore)>0?'wsnw-conceded':'wsnw-conceded wsnw-unknown',detail);
-          chip('received',expanded?'HITS '+hits:hits,present?'':'wsnw-unknown',
-            'Scoring enemy ranked-war hits received. '+source);
+          for(const key of ['bss','ff','order','conceded','received'])chip(key,'');
+          const impact=cfg.autoConceded===false?null:liveWarMemberImpact(id),
+            captured=Boolean(impact?.known),
+            complete=Boolean(impact?.complete),
+            observed=value=>value===null||value===undefined?'—':
+              (complete?'':'≥')+(nativeCompactTotal(value)||'0'),
+            earned=observed(impact?.earned??null),given=observed(impact?.given??null),
+            net=impact?.net===null||impact?.net===undefined?'—':
+              (complete?'':'~')+(impact.net>=0?'+':'')+fmt(impact.net),
+            share=impact?.share===null||impact?.share===undefined?'—':
+              (complete?'':'≥')+fmt(impact.share)+'%',
+            hits=observed(impact?.hits??null),
+            hot=Boolean(impact?.underFire),
+            source=cfg.autoConceded===false?'Live impact scanning disabled in Settings':
+              !captured?'Awaiting current-war attack-history scan':
+              complete?'Scanned through '+stamp(impact.lastFetch):
+                'Incomplete war-start scan; E/G are known minimums and net is an uncertain proxy',
+            detail='E = our points earned attacking the opponent; G = enemy points earned hitting this member. '+
+              'Both are observed ranked-war attack respect, not verified official personal war points. '+source+
+              (impact?.error?' | '+impact.error:'');
+          row.classList.toggle('wsnw-under-fire',hot);
+          chip('impact',expanded?'EARN '+earned+' | GIVEN '+given:'E'+earned+' G'+given,
+            impact?.given>0?'wsnw-conceded':'',detail);
+          chip('net',expanded?'NET '+net:net,
+            impact?.net===null?'wsnw-unknown':impact.net<0?'wsnw-net-negative':'wsnw-net-positive',
+            'Observed earned minus conceded (proxy). '+source);
+          const shareText=expanded?'ENEMY SHARE '+share+' | RECEIVED '+hits+
+              ' scoring hits | '+(impact?.in30??0)+' attacks in 30m':
+              share+' · '+(impact?.hits??'—')+'H'+(hot?' !':'');
+          chip('share',shareText,hot?'wsnw-under-fire-chip':'',
+            'Share of current official enemy score attributable to captured attacks on this member (approximate). '+source);
+          chip('underfire',expanded&&hot?'REPEATED ATTACKS: '+impact.in30+' in 30m / '+impact.in60+' in 60m':'',
+            'wsnw-under-fire-chip','Recent incoming attack pressure; inspect hospital and protection strategy');
+          chip('skullperf',expanded&&cfg.blackSkulls[id]?
+            'BLACK SKULL | OUR HITS '+observed(impact?.ownHits??null)+
+            ' | EARN / HIT '+(impact?.ownHits&&impact.earned!==null?fmt(impact.earned/impact.ownHits):'—'):'',
+            'wsnw-friendly-skull','Observed Black Skull offensive performance. '+source);
         }
         let intel=infoBar.querySelector('.wsnw-intel-link');
         if(enemy){
@@ -6691,7 +6823,13 @@
           row.style?.setProperty?.('--wsnw-expanded-height',rowHeight+'px');
         }else row.style?.removeProperty?.('--wsnw-expanded-height');
       }
-      if(fresh&&!conflict)nativeWarSort(list,enemyMap,cfg.nativeWarSort||'availability');
+      if(!conflict){
+        if(rows.some(row=>row.classList.contains('enemy'))){
+          if(fresh)nativeWarSort(list,enemyMap,cfg.nativeWarSort||'availability');
+        }else if(rows.some(row=>row.classList.contains('your'))){
+          nativeWarSortFriendly(list,cfg.nativeFriendlySort||'given');
+        }
+      }
     }
   }
   if(typeof window!=='undefined'&&typeof window.addEventListener==='function')
@@ -6829,8 +6967,10 @@
   },true);
   document.addEventListener('change',e=>{
     const sort=e.target?.closest?.('#wsnw-toolbar [data-wsnw-sort]'),
+      friendlySort=e.target?.closest?.('#wsnw-toolbar [data-wsnw-friendly-sort]'),
       filter=e.target?.closest?.('#wsnw-toolbar [data-wsnw-filter]');
     if(sort){cfg.nativeWarSort=String(sort.value);saveCfg();syncNativeWar();}
+    if(friendlySort){cfg.nativeFriendlySort=String(friendlySort.value);saveCfg();syncNativeWar();}
     if(filter){cfg.nativeWarFilter=String(filter.value);saveCfg();syncNativeWar();}
   });
   function mountFactionShortcut(){
