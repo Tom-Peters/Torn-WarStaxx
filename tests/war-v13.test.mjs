@@ -57,7 +57,9 @@ test('Skull Capo can choose top percentage or minimum BSS without misclassifying
   "const state={data:{enemies:[{id:1,bss:1000,level:10},{id:2,bss:800,level:99},"+
   "{id:3,bss:500,level:20},{id:4,bss:200,level:10},{id:5,bss:null,level:100}],ours:[]}};",
   'const enemyBattleEstimate=p=>({value:p.bss,source:"spy"});',
-  'const concessionSnapshot=()=>null;'
+  'const concessionSnapshot=()=>null;',
+  'const manualHeavyTargets=()=>({});',
+  'const attackHistoryFor=()=>({wins:0});'
  ].join('\n');
  const f=fixture(setup,'  function heavyRule(','  function enemyRole(',
    '({cfg,heavyRule,enemyRoleBands})');
@@ -129,7 +131,8 @@ test('Squad reports preserve in-war Black Skulls identity and use official earne
   "reports:{44:{factions:[{id:1,members:[{id:10,name:'Skull',score:200,attacks:10},"+
   "{id:20,name:'Regular',score:90,attacks:6}]}]}}}};",
   "const warAttackRows=()=>[{side:'enemies',attacker:100,defender:10,respect:45,at:1},"+
-   "{side:'enemies',attacker:100,defender:20,respect:15,at:2}];"
+   "{side:'enemies',attacker:100,defender:20,respect:15,at:2}];",
+  'const concessionSnapshot=()=>null;'
  ].join('\n');
  const f=fixture(setup,'  function inboundWarImpact(','  function ownHistoricalEfficiency(',
    '({cfg,warSquadSnapshot,snapshotWarSquads,squadWarSummary})');
