@@ -111,9 +111,9 @@ test('report backfill skips rate-limited war and advances to older reports',asyn
 });
 
 test('release syntax, hub identity and Torn PDA ASCII safety',()=>{
-  assert.match(source,/^\/\/ @version\s+1\.5\.26$/m);
-  assert.match(source,/const ID='war', VER='1\.5\.26'/);
-  assert.match(source,/version='1\.5\.26'/);
+  assert.match(source,/^\/\/ @version\s+1\.5\.27$/m);
+  assert.match(source,/const ID='war', VER='1\.5\.27'/);
+  assert.match(source,/version='1\.5\.27'/);
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
   assert.match(source,/rosterFresh\('enemies'\)\?fmt\(them\.online\)/);
