@@ -35,6 +35,7 @@ function targetFixture(){
     'const bsScore=spy=>spy?.bss??null;',
     'const ffscouter=id=>({bss:({102:120,104:90,105:50})[id]||null});',
     'const ffIsStale=()=>false;',
+    'const concessionSnapshot=()=>null;',
     "const memberState=p=>String(p.status||'unknown').toLowerCase();",
     'const isOnline=p=>Boolean(p.online);',
     'const lastKnownMemberScore=(side,id)=>id===101?800:100;',
