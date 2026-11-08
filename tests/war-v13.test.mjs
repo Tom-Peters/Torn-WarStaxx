@@ -191,7 +191,7 @@ test('Black Skulls and regular-member reports have separate copyable, source-lab
 });
 test('Skull Capo screen, custom controls and dual after-action reports are wired',()=>{
  for(const token of [
-  "const ID='war', VER='1.5.29'",
+  "const ID='war', VER='1.5.30'",
   "leader:'Skull Capo command'",
   "SKULL CAPO | BLACK SKULLS COMMAND",
   "id=\"ws-heavy-mode\"","id=\"ws-heavy-percent\"","id=\"ws-heavy-bss\"",
