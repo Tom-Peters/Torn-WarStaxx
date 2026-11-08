@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.5.28
+// @version      1.5.29
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.5.28', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.5.29', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -268,9 +268,11 @@
   if(heavyRuleMigrated)saveCfg();
   const parseArray=(value)=>Array.isArray(value)?value.filter(v=>v&&typeof v==='object'):Object.entries(value&&typeof value==='object'?value:{}).filter(([key])=>/^\d+$/.test(key)).map(([key,v])=>({...(v&&typeof v==='object'&&!Array.isArray(v)?v:{}),id:positive(v?.id)||positive(v?.faction_id)||positive(key)}));
   const unpack=(j,k)=>j?.[k]??j;
-  function roster(j){
+  function roster(j,previous=[]){
     const list=parseArray(unpack(j,'members'));
-    return list.map(p=>({
+    const prior=new Map((Array.isArray(previous)?previous:[]).map(p=>[positive(p?.id),p]));
+    return list.map(p=>{
+      const member={
       id:positive(p.id||p.user_id||p.player_id),name:String(p.name||('Player '+p.id)),level:n(p.level),
       position:String(p.position||''),daysInFaction:n(p.days_in_faction),
       revivable:p.is_revivable===true,onWall:p.is_on_wall===true,inOc:p.is_in_oc===true,
@@ -282,7 +284,23 @@
       until:n(p.status?.until)*1000,
       lastAction:String(p.last_action?.status||'Unknown'),lastAt:n(p.last_action?.timestamp)*1000,
       updated:Date.now()
-    })).filter(p=>p.id);
+      };
+      // A hospital status can hide the country. Carry genuine travel/abroad
+      // evidence (or a prior hospital location), not a default Torn guess.
+      if(memberState(member)==='hospital'){
+        const reported=nativeWarLocation(member);
+        if(reported.country!=='Unknown')member.hospitalCountry=reported.country;
+        else{
+          const earlier=prior.get(member.id);
+          if(earlier&&['away','hospital'].includes(memberState(earlier))){
+            const previousLocation=nativeWarLocation(earlier);
+            if(previousLocation.country!=='Unknown')
+              member.hospitalCountry=previousLocation.country;
+          }
+        }
+      }
+      return member;
+    }).filter(p=>p.id);
   }
   const officialNumber=value=>value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value))?Number(value):null;
   function warHistory(j){
@@ -554,6 +572,19 @@
     for(const [country,pattern] of nativeCountries)if(pattern.test(text))return country;
     return '';
   }
+  // Match a country immediately after a place preposition. A player named
+  // "Canada" in "Hospitalized by Canada" is not evidence of geography.
+  function nativeCountryInStatus(value){
+    const parts=String(value||'').split(/\b(?:in|at|abroad(?:\s+in)?)\s+(?:the\s+)?/i);
+    for(const part of parts.slice(1)){
+      const text=part.trim();
+      for(const [country,pattern] of nativeCountries){
+        const match=text.match(pattern);
+        if(match&&match.index===0)return country;
+      }
+    }
+    return '';
+  }
   function nativeWarLocation(p){
     if(!p)return {country:'Unknown',phase:'unknown',source:'Missing player'};
     const kind=memberState(p);
@@ -571,9 +602,16 @@
       }
       return {country:'Unknown',phase:'unknown-travel',eta:positive(p.until),source:'Destination not provided'};
     }
-    if(['okay','hospital','jail','fallen'].includes(kind)){
-      // Hospital descriptions can include player names: do not treat a name "Canada" as a country.
-      const where=current||(/\b(?:in|at|abroad)\s+/i.test(desc)?nativeCountryName(desc):'');
+    if(kind==='hospital'){
+      const described=nativeCountryInStatus(desc);
+      const where=current||described||nativeCountryName(p.hospitalCountry);
+      if(where)return {country:where,phase:'present',
+        source:current?'Torn location field':described?'Torn hospital status':'Prior observed location/destination'};
+      // Hospital can be in any country: lack of a travel status does NOT mean Torn.
+      return {country:'Unknown',phase:'unknown-hospital',source:'Hospital location not provided by Torn'};
+    }
+    if(['okay','jail','fallen'].includes(kind)){
+      const where=current||nativeCountryInStatus(desc);
       if(where)return {country:where,phase:'present',source:'Torn member status'};
       return {country:'Torn',phase:'present',source:'Inferred from non-travel status'};
     }
@@ -2194,13 +2232,13 @@
         if(w&&w.opponentId)setOpponent(w.opponentId);
       }
       const own=await call('/faction/'+cfg.ourId+'/members','ours',force?0:90*1000);
-      if(own)state.data.ours=roster(own);
+      if(own)state.data.ours=roster(own,state.data.ours);
       if(state.data.war?.id&&state.data.ours.length)snapshotWarSquads(state.data.war.id);
       if(positive(cfg.enemyId)){
         const old=state.data.enemies.slice(),oldAt=n(state.data.updated.enemies);
         const enemy=await call('/faction/'+cfg.enemyId+'/members','enemies',force?0:90*1000);
         if(enemy){
-          const fresh=roster(enemy);
+          const fresh=roster(enemy,old);
           if(oldAt&&Date.now()-oldAt<5*MIN&&activeWarNow())observeNativeWarTransitions(old,fresh,positive(state.data.war?.id));
           state.data.enemies=fresh;
           if(previousWarId&&state.data.war&&previousWarId===positive(state.data.war.id)&&
@@ -3223,7 +3261,7 @@
       // This is a read-only official request initiated by the player's HIT tap.
       const response=await call('/faction/'+cfg.ourId+'/members','ours',0);
       if(!response)throw new Error('Current roster is temporarily unavailable; refresh then press HIT.');
-      state.data.ours=roster(response);
+      state.data.ours=roster(response,state.data.ours);
       const now=ourWarReadiness();
       if(now.kind==='hospital'){
         open({section:'overview'});
@@ -3237,7 +3275,7 @@
       }
       if(!rosterFresh('enemies')){
         const enemies=await call('/faction/'+cfg.enemyId+'/members','enemies',0);
-        if(enemies)state.data.enemies=roster(enemies);
+        if(enemies)state.data.enemies=roster(enemies,state.data.enemies);
       }
       save();warQuick('hit');
     }catch(e){
@@ -7762,7 +7800,7 @@
       // Only the existing official Torn faction-members endpoint; never scrape opponent pages.
       const fresh=await call('/faction/'+cfg.enemyId+'/members','enemies',20000);
       if(fresh){
-        const next=roster(fresh);
+        const next=roster(fresh,prior);
         if(oldAt&&Date.now()-oldAt<5*MIN)
           observeNativeWarTransitions(prior,next,positive(state.data.war?.id));
         state.data.enemies=next;
@@ -7774,7 +7812,7 @@
       if(positive(cfg.ourId)&&canCall('ours',60000)){
         try{
           const ours=await call('/faction/'+cfg.ourId+'/members','ours',60000);
-          if(ours){state.data.ours=roster(ours);save();}
+          if(ours){state.data.ours=roster(ours,state.data.ours);save();}
         }catch(_){}
       }
       if(canCall('chain',30000)){

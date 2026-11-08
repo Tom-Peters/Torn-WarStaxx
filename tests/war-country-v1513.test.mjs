@@ -31,7 +31,7 @@ test('Torn travel routes: Canada outbound joins Canada, Canada return joins Torn
   assert.equal(x.nativeWarLocation({status:'Traveling',statusText:'Returning to Torn'}).country,'Torn');
   assert.equal(x.nativeWarLocation({status:'Abroad',statusText:'In Mexico'}).country,'Mexico');
   assert.equal(x.nativeWarLocation({status:'Traveling',statusText:'Traveling'}).country,'Unknown');
-  assert.equal(x.nativeWarLocation({status:'Hospital',statusText:'Hospitalized by Canada'}).country,'Torn',
+  assert.equal(x.nativeWarLocation({status:'Hospital',statusText:'Hospitalized by Canada'}).country,'Unknown',
     'A player named Canada is not evidence of being in Canada');
   assert.equal(x.nativeWarLocation({status:'Hospital',statusText:'Hospitalized in Canada'}).country,'Canada');
 });
