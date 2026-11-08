@@ -53,7 +53,7 @@ test('Torn PDA: compact rows keep the native player/status cells intact',()=>{
   const context={
     document:{getElementById:()=>({}),querySelector:()=>box},state,cfg,nativeWarState,Date,Map,Set,
     isNativeWarPage:()=>true,activeWarNow:()=>true,nativeWarStyle:()=>{},nativeWarToolbar:()=>{},
-    renderNativeChainBubble:()=>{},inboundWarImpact:()=>null,nativeWarLegend:()=>{},nativeWarRows:()=>[row],nativeWarPlayerId:x=>x.id,
+    renderNativeChainBubble:()=>{},inboundWarImpact:()=>null,liveEnemyWarImpact:()=>null,nativeWarLegend:()=>{},nativeWarRows:()=>[row],nativeWarPlayerId:x=>x.id,
     nativeWarConflict:()=>false,enemyRoleBands:()=>({heavy:new Set([123]),regular:new Set()}),
     rosterFresh:()=>true,warScore:()=>null,chainStatus:()=>({fresh:false}),
     positive:x=>Number(x)>0?Number(x):0,memberState:p=>p.status.toLowerCase(),
