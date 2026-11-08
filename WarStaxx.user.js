@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.5.27
+// @version      1.5.28
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='1.5.27';
+  const id='war', version='1.5.28';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.5.27', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.5.28', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -6472,8 +6472,16 @@
     try{return positive(new URL(anchor.href,location.href).searchParams.get('XID'));}catch(_){return 0;}
   }
   function nativeWarConflict(list){
+    // Diagnostics: TWSE badges and timers may be present without owning the order.
     return list?.getAttribute('data-ffscouter-active-filter')==='true'||
       Boolean(list?.querySelector('.twse-copy-btn,[data-twse-overridden],[data-twse-last-action-timestamp]'));
+  }
+  function nativeWarActiveSortConflict(list){
+    // Decoration (copy, last seen, hospital timer) is not an active sorter.
+    // Only an explicit sort/filter ownership marker blocks country grouping.
+    return list?.getAttribute?.('data-ffscouter-active-filter')==='true'||
+      list?.getAttribute?.('data-twse-active-sort')==='true'||
+      Boolean(list?.querySelector?.('[data-ffscouter-active-sort="true"],[data-twse-active-sort="true"]'));
   }
   function observeNativeWarTransitions(before,after,warId,at=Date.now()){
     if(!positive(warId)||!Array.isArray(before)||!Array.isArray(after))return;
@@ -6540,7 +6548,7 @@
   function nativeWarSort(list,playerMap,mode){
     if(!list)return false;
     const priorHeaders=Array.from(list.querySelectorAll(':scope > li.wsnw-country-heading'));
-    if(nativeWarConflict(list)){
+    if(nativeWarActiveSortConflict(list)){
       // An external sorter wins. Remove only WarStaxx-generated group headings.
       priorHeaders.forEach(h=>h.remove());
       return false;
@@ -6640,7 +6648,7 @@
   function nativeWarSortFriendly(list,mode='given'){
     if(!list)return false;
     const priorHeaders=Array.from(list.querySelectorAll(':scope > li.wsnw-country-heading'));
-    if(nativeWarConflict(list)){
+    if(nativeWarActiveSortConflict(list)){
       priorHeaders.forEach(h=>h.remove());
       return false;
     }
@@ -6789,6 +6797,22 @@
     const remaining=positive(until)-at;
     if(!positive(until)||remaining<=0)return '';
     return remaining<=5*MIN?'wsnw-soon':remaining<=15*MIN?'wsnw-warning':'';
+  }
+  function nativeWarPaintHospital(timer,tier){
+    // Inline !important beats Torn's native theme and competing add-on styles.
+    // Only touch the WarStaxx-owned status chip, never a Torn-owned status cell.
+    const colors=tier==='wsnw-soon'?
+      ['#c0ffe0','#155840','#48df9b']:
+      tier==='wsnw-warning'?['#ffe1a1','#794615','#ffb44e']:null;
+    const style=timer?.style;
+    if(!style||typeof style.setProperty!=='function')return;
+    for(const name of ['color','background-color','border-color','box-shadow']){
+      if(!colors){style.removeProperty?.(name);continue;}
+      const value=name==='color'?colors[0]:
+        name==='background-color'?colors[1]:
+        name==='border-color'?colors[2]:'inset 3px 0 '+colors[2];
+      style.setProperty(name,value,'important');
+    }
   }
   function nativeWarHospitalShort(until,at=Date.now()){
     if(!positive(until))return 'H ?';
@@ -7111,9 +7135,9 @@
       // If another Torn add-on owns the status timer, highlight its native cell
       // instead of showing a duplicate status chip.
       '.faction-war ul.members-list li.wsnw-hospital-warning > .status{'+
-        'box-shadow:inset 0 -3px #ffb44e!important}'+
+        'box-shadow:inset 0 -4px #ffb44e!important;outline:1px solid #b37a37!important}'+
       '.faction-war ul.members-list li.wsnw-hospital-soon > .status{'+
-        'box-shadow:inset 0 -3px #48df9b!important}';
+        'box-shadow:inset 0 -4px #48df9b!important;outline:1px solid #319a74!important}';
     document.head.appendChild(style);
   }
   // An opt-in small, draggable chain indicator. Never mounted over an attack page.
@@ -7455,6 +7479,9 @@
         '<option value="'+x[0]+'" '+(filter===x[0]?'selected':'')+'>'+x[1]+'</option>').join('')+
       '</select></label></div>'+pulseHtml+
       (nativeWarState.toolbarExpanded?'<div class="wsnw-extra">'+
+        '<button type="button" data-wsnw-action="countries" aria-pressed="'+
+          (cfg.nativeWarCountryGroups!==false?'true':'false')+'">'+
+          (cfg.nativeWarCountryGroups!==false?'Countries ON':'Countries OFF')+'</button>'+
         '<button type="button" data-wsnw-action="skulls">Black Skulls</button>'+
         '<button type="button" data-wsnw-action="turtle">Turtle</button>'+
         '<button type="button" data-wsnw-action="hit">HIT</button>'+
@@ -7476,7 +7503,7 @@
       ourMap=new Map(state.data.ours.map(p=>[p.id,p])),
       band=enemyRoleBands(),fresh=rosterFresh('enemies'),score=warScore(),chain=chainStatus(),
       concessions=cfg.autoConceded===false?null:inboundWarImpact(state.data.war.id);
-    const conflict=lists.some(nativeWarConflict);
+    const conflict=lists.some(nativeWarActiveSortConflict);
     nativeWarToolbar(box,conflict,score,chain,band);
     renderNativeChainBubble(chain);
     const orders=new Map();
@@ -7551,8 +7578,8 @@
         };
         let message='';
         if(enemy&&!fresh)message='STALE';
-        else if(other)message=''; // External timer already sits in Torn's normal status cell.
         else if(kind==='hospital')message=expanded?'HOSP '+hospitalCountdown(p.until,now):nativeWarHospitalShort(p.until,now);
+        else if(other)message=''; // Keep the external status for non-hospital states.
         else if(kind==='away'){
           const place=nativeWarLocation(p);
           if(place.phase==='inbound')message='TO '+place.country+(place.eta?' '+flightCountdown(place.eta,now):'');
@@ -7565,7 +7592,9 @@
           (enemy&&kind==='okay'&&fresh?'wsnw-ready ':'')+hospitalTier,'Torn roster observed '+age(state.data.updated[enemy?'enemies':'ours'])+
           ' | '+place.country+' ('+place.source+')');
         if(timer){
-          if(kind==='hospital'&&!other&&(!enemy||fresh))timer.dataset.wsnwExpiry=String(positive(p.until));
+          nativeWarPaintHospital(timer,hospitalTier);
+          if(kind==='hospital'&&(!enemy||fresh)&&positive(p.until))
+            timer.dataset.wsnwExpiry=String(positive(p.until));
           else timer.removeAttribute('data-wsnw-expiry');
           if(kind==='away'&&place.phase==='inbound'&&positive(place.eta)){
             timer.dataset.wsnwEta=String(place.eta);
@@ -7784,6 +7813,7 @@
       const tier=kind==='hospital'?nativeWarHospitalTier(expiry,now):'';
       span.classList.toggle('wsnw-soon',tier==='wsnw-soon');
       span.classList.toggle('wsnw-warning',tier==='wsnw-warning');
+      nativeWarPaintHospital(span,tier);
       row.classList.toggle('wsnw-hospital-soon',tier==='wsnw-soon');
       row.classList.toggle('wsnw-hospital-warning',tier==='wsnw-warning');
     }
@@ -7864,6 +7894,15 @@
     const button=e.target?.closest?.('#wsnw-toolbar [data-wsnw-action]');
     if(button&&isNativeWarPage()){
       e.preventDefault();e.stopPropagation();
+      if(button.dataset.wsnwAction==='countries'){
+        cfg.nativeWarCountryGroups=cfg.nativeWarCountryGroups===false;
+        if(cfg.nativeWarCountryGroups){
+          // Torn order intentionally disables grouping. Restore useful defaults.
+          if(cfg.nativeWarSort==='torn')cfg.nativeWarSort='availability';
+          if(cfg.nativeFriendlySort==='torn')cfg.nativeFriendlySort='given';
+        }
+        saveCfg();syncNativeWar();return;
+      }
       if(button.dataset.wsnwAction==='friendly-direction'){
         cfg.nativeFriendlyDesc=cfg.nativeFriendlyDesc===false;
         saveCfg();syncNativeWar();return;
