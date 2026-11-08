@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.5.17
+// @version      1.5.18
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.5.17', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.5.18', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -199,7 +199,7 @@
   const link=id=>'https://www.torn.com/profiles.php?XID='+positive(id);
   const attackLink=id=>'https://www.torn.com/loader.php?sid=attack&user2ID='+positive(id);
   const apiKeyPda=typeof window.PDA_APIKEY==='string'?window.PDA_APIKEY:'###PDA-APIKEY###';
-  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},controlAssignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,warStripCompact:true,warStripScope:'contextual',nativeWarEnabled:true,nativeWarCountryGroups:true,nativeWarSort:'availability',nativeWarFilter:'all',nativeChainBubble:false,priorityNotifications:true,hitterRisk:{},heavyPolicy:{mode:'percent',percent:40,minBss:0},shared:{enabled:false,endpoint:'',token:'',canWrite:false},hidden:false};
+  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,autoConceded:true,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},controlAssignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,warStripCompact:true,warStripScope:'contextual',nativeWarEnabled:true,nativeWarCountryGroups:true,nativeWarSort:'availability',nativeWarFilter:'all',nativeChainBubble:false,priorityNotifications:true,hitterRisk:{},heavyPolicy:{mode:'percent',percent:40,minBss:0},shared:{enabled:false,endpoint:'',token:'',canWrite:false},hidden:false};
   const cfg=Object.assign({},defaults,safeRead(CONFIG,{}));
   cfg.assignments=cfg.assignments&&typeof cfg.assignments==='object'?cfg.assignments:{};
   cfg.ordersByEnemy=cfg.ordersByEnemy&&typeof cfg.ordersByEnemy==='object'?cfg.ordersByEnemy:{};
@@ -220,13 +220,14 @@
     cfg.heavyPolicy&&typeof cfg.heavyPolicy==='object'?cfg.heavyPolicy:{});
   cfg.shared=Object.assign({enabled:false,endpoint:'',token:'',canWrite:false},
     cfg.shared&&typeof cfg.shared==='object'?cfg.shared:{});
-  const freshData=()=>({autoSpies:{},ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},factionBasic:{},publicIntel:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},scoreTimelines:{},warTimelines:{},afterActions:{},ownerReadiness:{},availabilityEvents:{},chain:{},squadSnapshots:{},attackBssSnapshots:{},sampleCount:0});
+  const freshData=()=>({autoSpies:{},ours:[],enemies:[],ourWars:[],enemyWars:[],reports:{},activity:{},factionBasic:{},publicIntel:{},ffstats:{},attacks:[],seenAttacks:{},updated:{},errors:{},backoff:{},war:null,meta:{},scoreTimelines:{},warTimelines:{},afterActions:{},ownerReadiness:{},availabilityEvents:{},chain:{},squadSnapshots:{},attackBssSnapshots:{},concededWars:{},sampleCount:0});
   const state={data:Object.assign(freshData(),safeRead(DATA,{})),open:false,tab:'overview',showMore:false,
     filter:'all',sort:'warScore',search:'',publicRequested:{},commanderFilter:'black',controlFocus:0,loading:false,ffLoading:false,spinner:'',error:'',notice:null,scanning:false,alerts:[],chosen:0,
     lastRefresh:0,historicalRead:0,localKeyError:false,sharedBusy:false,sharedDirty:false,sharedRevision:0,sharedSyncAt:0,sharedEditVersion:0,sharedError:'',warMore:false,quickHitPending:false,stripScrolled:false,stripExpanded:false,warExpected:false,selectedWar:0,selectedTimeline:0,selectedPace:0,selectedDebrief:0,detailFrom:'targets',leaderFilter:'all',hitterFilter:'all',renderedPlayerId:0,skipDraftRestore:false};
   state.data.reports=state.data.reports||{};
   state.data.squadSnapshots=state.data.squadSnapshots||{};
   state.data.attackBssSnapshots=state.data.attackBssSnapshots||{};
+  state.data.concededWars=state.data.concededWars&&typeof state.data.concededWars==='object'&&!Array.isArray(state.data.concededWars)?state.data.concededWars:{};
   state.data.activity=state.data.activity||{};
   state.data.ffstats=state.data.ffstats||{};
   state.data.publicIntel=state.data.publicIntel||{};
@@ -2095,6 +2096,7 @@
       if(urgentReport)state.data.meta.lastDebriefAttempt=Date.now();
       await refreshHistory(force||urgentReport);
       await refreshAttacks();
+      await refreshWarConcessions(force);
       try{
         const chain=await call('/faction/'+cfg.ourId+'/chain','chain',30*1000);
         if(chain){const snapshot=chainSnapshot(chain);if(snapshot)state.data.chain=snapshot;}
@@ -3976,7 +3978,99 @@
 
   // Enemy scored attacks against our members count toward their faction's
   // ranked-war score, not deductions from the defender's personal score.
+
+  // Respect earned on enemy ranked-war hits is score gained against our faction.
+  // The attack IDs and defender IDs are from the official Torn faction attack feed.
+  function concessionRecord(warId,create=false){
+    const w=warAttackWindow(warId),key=String(positive(warId));
+    if(!w||!positive(w.ourId)||!positive(w.enemyId)||!positive(Math.floor(w.start/1000)))return null;
+    let rec=state.data.concededWars[key];
+    if(rec&&(positive(rec.ourId)!==w.ourId||positive(rec.enemyId)!==w.enemyId||
+        n(rec.start)!==w.start))rec=null;
+    if(!rec&&create){
+      rec={warId:positive(warId),ourId:w.ourId,enemyId:w.enemyId,start:w.start,
+        cursor:Math.max(0,Math.floor(w.start/1000)-1),seen:{},byMember:{},
+        total:0,rows:0,fetches:0,lastFetch:0,caughtUpAt:0,complete:false,error:''};
+      state.data.concededWars[key]=rec;
+    }
+    return rec||null;
+  }
+  function captureConcessionAttacks(rec,records){
+    if(!rec)return 0;
+    let added=0;
+    const w=warAttackWindow(rec.warId);
+    if(!w||w.start!==n(rec.start))return 0;
+    for(const a of records){
+      if(!positive(a.id)||rec.seen[a.id]||a.ranked!==true||
+          a.attackerFaction!==w.enemyId||a.defenderFaction!==w.ourId||
+          !positive(a.defender)||!n(a.at)||a.at<w.start||a.at>w.end+60000)continue;
+      rec.seen[a.id]=1;added++;rec.rows++;
+      const target=rec.byMember[a.defender]||
+        (rec.byMember[a.defender]={id:a.defender,attacks:0,scoringAttacks:0,enemyScore:0,lastAt:0});
+      target.attacks++;
+      const points=officialNumber(a.respect);
+      if(points!==null&&points>0){target.enemyScore+=points;target.scoringAttacks++;rec.total+=points;}
+      target.lastAt=Math.max(n(target.lastAt),a.at);
+    }
+    return added;
+  }
+  function concessionSnapshot(warId=positive(state.data.war?.id),at=Date.now()){
+    const rec=concessionRecord(warId,false);
+    if(!rec||!rec.fetches)return null;
+    const active=positive(state.data.war?.id)===positive(warId);
+    // Complete means all pages scanned from war start through a recent fetch.
+    // It is not a claim that the live opponent score can no longer change.
+    const complete=Boolean(rec.complete&&rec.caughtUpAt&&
+      (!active||at-n(rec.caughtUpAt)<2*MIN));
+    return {known:true,partial:!complete,complete,byMember:rec.byMember,
+      rows:rec.rows,total:rec.total,lastFetch:rec.lastFetch,caughtUpAt:rec.caughtUpAt,
+      error:String(rec.error||''),warId:rec.warId};
+  }
+  async function refreshWarConcessions(force=false){
+    if(cfg.autoConceded===false||!activeWarNow()||
+       (!isNativeWarPage()&&!state.open)||!positive(cfg.ourId)||!effectiveKey()||
+       state.concededBusy||!canCall('concessions',force?0:40*1000))return;
+    const w=warAttackWindow(state.data.war.id),rec=concessionRecord(state.data.war.id,true);
+    if(!w||!rec)return;
+    state.concededBusy=true;
+    try{
+      if(!rec.fetches){
+        // Reuse previously captured partial evidence without pretending it is complete.
+        captureConcessionAttacks(rec,warAttackRows(w.id));
+      }
+      const from=Math.max(Math.floor(w.start/1000)-1,n(rec.cursor)),
+        to=Math.floor(Date.now()/1000),
+        response=await call('/faction/attacks?limit=100&sort=ASC&from='+from+'&to='+to,
+          'concessions',force?0:40*1000);
+      if(!response)return;
+      const source=parseArray(unpack(response,'attacks')),parsed=attacks(response);
+      captureConcessionAttacks(rec,parsed);
+      rec.fetches++;rec.lastFetch=Date.now();rec.error='';
+      if(source.length<100){
+        rec.cursor=to;rec.complete=true;rec.caughtUpAt=rec.lastFetch;
+      }else{
+        const highest=Math.max(0,...parsed.map(a=>Math.floor(a.at/1000)));
+        if(highest>from){
+          // Inclusive cursor retains attacks sharing the same Torn timestamp.
+          rec.cursor=highest;rec.complete=false;
+        }else{
+          rec.complete=false;
+          rec.error='Attack pagination did not advance. Totals remain partial.';
+        }
+      }
+      for(const key of Object.keys(state.data.concededWars)
+        .sort((a,b)=>n(state.data.concededWars[b]?.lastFetch)-n(state.data.concededWars[a]?.lastFetch))
+        .slice(4))delete state.data.concededWars[key];
+      save();
+    }catch(e){
+      rec.error=String(e.message||e).slice(0,150);
+      save();
+    }finally{state.concededBusy=false;}
+  }
+
   function inboundWarImpact(warId=positive(state.data.war?.id)){
+    const captured=concessionSnapshot(warId);
+    if(captured)return captured;
     const rows=warAttackRows(warId).filter(a=>a.side==='enemies'),
       known=rows.length>0,
       byMember={},safePoints=a=>officialNumber(a.respect)!==null?
@@ -4038,8 +4132,8 @@
       rows:selected.slice().sort((a,b)=>n(b.score)-n(a.score)).map(p=>({
         id:p.id,name:p.name,score:officialNumber(p.score),
         attacks:officialNumber(p.attacks),
-        received:inbound.known?inbound.byMember[p.id]?.enemyScore||0:null,
-        incomingHits:inbound.known?inbound.byMember[p.id]?.scoringAttacks||0:null
+        received:inbound.known&&(inbound.complete||inbound.byMember[p.id])?inbound.byMember[p.id]?.enemyScore||0:null,
+        incomingHits:inbound.known&&(inbound.complete||inbound.byMember[p.id])?inbound.byMember[p.id]?.scoringAttacks||0:null
       }))};
   }
 
@@ -4153,8 +4247,8 @@
       points=report?officialNumber(report.score):ledger?.respect??null,
       incoming=inboundWarImpact(warId),
       received=incoming.known?incoming.byMember[positive(player.id)]||null:null,
-      enemyPointsReceived=incoming.known?received?.enemyScore||0:null,
-      enemyScoringHits=incoming.known?received?.scoringAttacks||0:null,
+      enemyPointsReceived=incoming.known&&(incoming.complete||received)?received?.enemyScore||0:null,
+      enemyScoringHits=incoming.known&&(incoming.complete||received)?received?.scoringAttacks||0:null,
       base=ownHistoricalEfficiency(player.id,warId),
       perHit=hits&&points!==null?points/hits:null;
     let status='Insufficient comparable evidence',ratio=null;
@@ -5279,6 +5373,7 @@
       '</select></label><p class="ws-small">WarStaxx always hides the bar on the Torn attack screen. The TornStaxx launcher remains available.</p>'+
       '<label>Automatic refresh<select id="ws-interval">'+[90,120,180,300].map(s=>'<option value="'+s+'" '+(cfg.refreshSeconds===s?'selected':'')+'>'+s+' seconds while visible</option>').join('')+'</select></label>'+
       '<label>Historical wars per side<select id="ws-limit">'+[3,5,8,12,20].map(s=>'<option value="'+s+'" '+(cfg.historyLimit===s?'selected':'')+'>'+s+' wars</option>').join('')+'</select></label>'+
+      '<label><input type="checkbox" id="ws-conceded" '+(cfg.autoConceded!==false?'checked':'')+'> Automatically count enemy ranked-war points earned against each of our members. Requires Limited faction attacks permission on your Torn API key; partial data is clearly marked.</label>'+ 
       '<label><input type="checkbox" id="ws-attacks" '+(cfg.enableAttacks?'checked':'')+'> Read faction attacks (optional faction API permission): FF observations, sampled ranked-war hit ledger and live opponent scoring where available</label>'+ 
       '<label><input type="checkbox" id="ws-owner-ready" '+(cfg.autoOwnerReadiness!==false?'checked':'')+'> Read my own energy and medical cooldown (only the Torn API-key owner; requires user bars/cooldowns permissions)</label>'+
       '<label><input type="checkbox" id="ws-priority-notifications" '+(cfg.priorityNotifications!==false?'checked':'')+
@@ -5833,6 +5928,7 @@
       cfg.refreshSeconds=Math.max(90,Math.min(300,positive($('#ws-interval',root)?.value)||120));
       cfg.historyLimit=Math.max(2,Math.min(20,positive($('#ws-limit',root)?.value)||8));
       cfg.enableAttacks=Boolean($('#ws-attacks',root)?.checked);
+      cfg.autoConceded=Boolean($('#ws-conceded',root)?.checked);
       cfg.autoOwnerReadiness=Boolean($('#ws-owner-ready',root)?.checked);
       cfg.priorityNotifications=Boolean($('#ws-priority-notifications',root)?.checked);
       const oldEndpoint=String(cfg.shared.endpoint||'').trim();
@@ -6256,6 +6352,12 @@
       '#wsnw-chain-bubble button{margin-left:4px;background:#164d6a;border:1px solid #438caa;border-radius:5px;color:white;padding:3px 6px;font:10px system-ui,sans-serif;cursor:pointer}'+
       '@media(max-width:600px){#wsnw-toolbar{gap:3px;padding:4px 5px}#wsnw-toolbar button,#wsnw-toolbar select{min-height:27px;padding:3px 6px} .faction-war ul.members-list li.wsnw-enhanced > .wsnw-intel{gap:3px!important;padding:1px 2px!important} .faction-war ul.members-list li .wsnw-intel .wsnw-chip{font-size:11px!important;padding:1px 3px!important}}';
     style.textContent+=".faction-war ul.members-list li.wsnw-enhanced:not(.wsnw-expanded){height:56px!important;min-height:56px!important}\n.faction-war ul.members-list li.wsnw-enhanced:not(.wsnw-expanded)>.wsnw-intel{display:grid!important;grid-template-columns:26px minmax(0,1.35fr) minmax(0,.8fr) minmax(0,1.15fr) minmax(0,.85fr)!important;gap:3px!important;top:36px!important;height:20px!important;min-height:20px!important;padding:0 4px!important;align-content:center!important;align-items:center!important;overflow:hidden!important;white-space:nowrap!important;touch-action:pan-y pinch-zoom!important}\n.faction-war ul.members-list li.wsnw-enhanced:not(.wsnw-expanded) .wsnw-owner{display:none!important}\n.faction-war ul.members-list li.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip=\"role\"]{grid-column:1;grid-row:1;justify-self:center}\n.faction-war ul.members-list li.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip=\"status\"]{grid-column:2;grid-row:1}\n.faction-war ul.members-list li.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip=\"presence\"]{grid-column:3;grid-row:1}\n.faction-war ul.members-list li.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip=\"bss\"]{grid-column:4;grid-row:1}\n.faction-war ul.members-list li.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip=\"ff\"]{grid-column:5;grid-row:1}\n.faction-war ul.members-list li.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip=\"country\"],.faction-war ul.members-list li.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip=\"order\"]{display:none!important}\n.faction-war ul.members-list li.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel .wsnw-chip:not(.wsnw-heavy){min-width:0!important;max-width:100%!important;justify-content:flex-start!important;font-size:10px!important;padding:1px 2px!important;border-radius:2px!important}\n.faction-war ul.members-list li.wsnw-expanded .wsnw-intel .wsnw-owner{display:block!important;position:static!important}\n.faction-war ul.members-list li.wsnw-country-heading{min-height:32px!important;margin:6px 0 2px!important;padding:5px 8px!important;box-shadow:none!important}\n.faction-war ul.members-list li.wsnw-country-heading .wsnw-country-title{font-size:12px!important}\n.faction-war ul.members-list li.wsnw-country-heading .wsnw-country-meta{font-size:10px!important}\n.faction-war .wsnw-legend{display:grid;grid-template-columns:26px minmax(0,1.35fr) minmax(0,.8fr) minmax(0,1.15fr) minmax(0,.85fr);align-items:center;gap:3px;padding:4px 7px;margin:3px 0 0;border:1px solid #2c536c;border-bottom:0;background:#173347;color:#a6d3e7;font:800 9px/1.1 system-ui,sans-serif;text-transform:uppercase;letter-spacing:.15px;box-sizing:border-box}\n.faction-war .wsnw-legend span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n.faction-war .wsnw-legend span:first-child{text-align:center}\n#wsnw-toolbar{gap:5px;padding:5px 7px;margin:4px 0;border-radius:6px}\n#wsnw-toolbar strong{font-size:11px}\n#wsnw-toolbar button,#wsnw-toolbar select{min-height:27px;padding:3px 6px}\n@media(max-width:600px){.faction-war .wsnw-legend{font-size:8px;gap:2px;padding:3px 4px}.faction-war ul.members-list li.wsnw-enhanced:not(.wsnw-expanded)>.wsnw-intel{gap:2px!important;padding:0 3px!important}}\n";
+    style.textContent+='.faction-war ul.members-list li.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip="conceded"]{grid-column:4;grid-row:1}'+
+      '.faction-war ul.members-list li.wsnw-enhanced:not(.wsnw-expanded) .wsnw-intel [data-wsnw-chip="received"]{grid-column:5;grid-row:1}'+
+      '.faction-war ul.members-list li .wsnw-intel .wsnw-conceded{background:#50303b!important;border-color:#976371!important;color:#ffe1e1!important}'+
+      '.faction-war ul.members-list li .wsnw-intel .wsnw-conceded.wsnw-unknown{color:#a4b5c3!important;background:#203549!important;border-color:#395168!important}'+
+      '.faction-war ul.members-list li .wsnw-intel .wsnw-friendly-skull{color:#efd9ff!important;background:#613189!important;border-color:#b67af2!important}'+
+      '.faction-war .wsnw-legend.wsnw-our-legend{background:#233142;border-color:#425a70}';
     document.head.appendChild(style);
   }
   // An opt-in small, draggable chain indicator. Never mounted over an attack page.
@@ -6330,15 +6432,19 @@
     }
   }
   function nativeWarLegend(list,rows){
-    if(!rows.some(row=>row.classList.contains('enemy'))||typeof list.before!=='function')return;
+    const enemy=rows.some(row=>row.classList.contains('enemy')),
+      ours=!enemy&&rows.some(row=>row.classList.contains('your'));
+    if((!enemy&&!ours)||typeof list.before!=='function')return;
     let heading=list.previousElementSibling;
     if(!heading?.classList?.contains('wsnw-legend')){
       heading=el('div','wsnw-legend');
       heading.setAttribute('aria-label','WarStaxx tactical table column headings');
-      heading.innerHTML='<span>Skull</span><span>Timer / travel</span>'+
-        '<span>Seen</span><span>Stats</span><span>FF</span>';
       list.before(heading);
     }
+    heading.classList.toggle('wsnw-our-legend',ours);
+    const columns='<span>Skull</span><span>Timer / travel</span><span>Seen</span>'+
+      (ours?'<span>Given pts</span><span>Hits</span>':'<span>Stats</span><span>FF</span>');
+    if(heading.innerHTML!==columns)heading.innerHTML=columns;
   }
   function nativeWarToolbar(box,conflict,score,chain){
     let toolbar=document.getElementById('wsnw-toolbar');
@@ -6386,7 +6492,8 @@
     nativeWarStyle();
     const enemyMap=new Map(state.data.enemies.map(p=>[p.id,p])),
       ourMap=new Map(state.data.ours.map(p=>[p.id,p])),
-      band=enemyRoleBands(),fresh=rosterFresh('enemies'),score=warScore(),chain=chainStatus();
+      band=enemyRoleBands(),fresh=rosterFresh('enemies'),score=warScore(),chain=chainStatus(),
+      concessions=cfg.autoConceded===false?null:inboundWarImpact(state.data.war.id);
     const conflict=lists.some(nativeWarConflict);
     nativeWarToolbar(box,conflict,score,chain);
     renderNativeChainBubble(chain);
@@ -6470,8 +6577,9 @@
         let role='';
         if(enemy)role=band.heavy.has(id)?'\u2620':
           expanded?(band.regular.has(id)?'REGULAR':'UNKNOWN'):'';
-        else if(cfg.blackSkulls[id])role='BLACK SKULL';
-        const roleChip=chip('role',role,enemy&&band.heavy.has(id)?'wsnw-heavy':'',
+        else if(cfg.blackSkulls[id])role='☠';
+        const roleChip=chip('role',role,enemy&&band.heavy.has(id)?'wsnw-heavy':
+          !enemy&&cfg.blackSkulls[id]?'wsnw-friendly-skull':'',
           enemy?'BLACK SKULL TARGET: high-strength opponent reserved for Black Skulls; not a guaranteed win':'Your Black Skulls member');
         if(roleChip&&enemy&&band.heavy.has(id)&&timer&&roleChip.nextElementSibling!==timer)
           infoBar.insertBefore(roleChip,timer);
@@ -6499,6 +6607,21 @@
             '',orders.has(id)?'Local assigned hitter':'Watchlisted target');
         }else{
           for(const key of ['bss','ff','order'])chip(key,'');
+          const received=concessions?.byMember?.[id]||null,
+            present=Boolean(concessions?.known&&(concessions.complete||received)),
+            prefix=concessions?.complete?'':'≥',
+            amount=present?prefix+fmt(received?.enemyScore||0):'—',
+            hits=present?prefix+fmt(received?.scoringAttacks||0):'—',
+            source=cfg.autoConceded===false?'Disabled in WarStaxx settings':
+              !concessions?.known?'Awaiting Limited faction attacks API data':
+              concessions.complete?'Scanned from war start through '+stamp(concessions.lastFetch):
+                'Partial scanned incoming ranked-war attacks; full war not yet covered',
+            detail='Enemy ranked-war points earned by hitting this member, not a deduction from their own score. '+source+
+              (concessions?.error?' | '+concessions.error:'');
+          chip('conceded',expanded?'GIVEN '+amount:amount,
+            present&&n(received?.enemyScore)>0?'wsnw-conceded':'wsnw-conceded wsnw-unknown',detail);
+          chip('received',expanded?'HITS '+hits:hits,present?'':'wsnw-unknown',
+            'Scoring enemy ranked-war hits received. '+source);
         }
         let intel=infoBar.querySelector('.wsnw-intel-link');
         if(enemy){
@@ -6559,6 +6682,7 @@
           if(chain){const data=chainSnapshot(chain);if(data){state.data.chain=data;save();}}
         }catch(_){}
       }
+      await refreshWarConcessions();
       syncNativeWar();
     }catch(e){
       // Shared call() already handles API rate-limit/error backoff. Keep the native UI stable.
