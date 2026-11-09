@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.7.0
+// @version      2.0.0
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='1.7.0';
+  const id='war', version='2.0.0';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,10 +183,10 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.7.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='2.0.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
-  const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
-  const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
+  const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics','dashboard','scouting','archive'];
+  const labels={overview:'Live war',enemy:'Players',reports:'Tools & reports',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics',dashboard:'Full dashboard',scouting:'Faction scouting',archive:'Detailed reports'};
   const $=(s,root=document)=>root.querySelector(s);
   const $$=(s,root=document)=>Array.from(root.querySelectorAll(s));
   const n=v=>Number.isFinite(Number(v))?Number(v):0;
@@ -2404,6 +2404,14 @@
     '@media(max-width:640px){#warstaxx-root .ws-panel{top:0;bottom:0;width:100%;border-radius:0}#warstaxx-root .ws-head{padding:8px}#warstaxx-root .ws-head strong{font-size:18px}#warstaxx-root .ws-head small{font-size:8px}#warstaxx-root .ws-content{padding:8px}#warstaxx-root .ws-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}#warstaxx-root .ws-card{padding:9px}#warstaxx-root .ws-number{font-size:21px}}',
     '@media(pointer:coarse){#warstaxx-root button,#warstaxx-root a.ws-btn{min-height:44px}#warstaxx-root .ws-ff-button{min-height:40px}}',
     '@media(max-width:600px){#warstaxx-root .ws-table-wrap{max-width:100%;border:1px solid #294f70;border-radius:8px;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}#warstaxx-root .ws-table-wrap table:not(.ws-leader-table) th:first-child,#warstaxx-root .ws-table-wrap table:not(.ws-leader-table) td:first-child{position:sticky;left:0;z-index:1;background:#102d49;box-shadow:1px 0 0 #335c7b}#warstaxx-root .ws-table-wrap table:not(.ws-leader-table) td:first-child{max-width:180px;overflow-wrap:anywhere}}',
+    '#warstaxx-root .ws-panel{width:min(1180px,100%);background:#081523;border-color:#254660}#warstaxx-root .ws-head{background:#0b1c30;padding:9px 14px}#warstaxx-root .ws-tabs{display:grid;grid-template-columns:repeat(3,1fr);overflow:visible;padding:6px;gap:6px}#warstaxx-root .ws-tabs button{min-height:44px;border-radius:9px;font-weight:750}#warstaxx-root .ws-content{padding:16px;background:#081523}#warstaxx-root .ws-footer{padding:5px 12px}',
+    '#warstaxx-root .ws-workspace-head{margin:0 0 14px}#warstaxx-root .ws-workspace-head>small{color:#55d5f4;letter-spacing:1.4px;font-size:10px;font-weight:800}#warstaxx-root h1{font-size:clamp(21px,3vw,29px);line-height:1.2;margin:5px 0 8px}#warstaxx-root .ws-workspace-head p{max-width:72ch;font-size:12px}#warstaxx-root .ws-card{background:#102438;border-color:#29435a;border-radius:12px}#warstaxx-root .ws-row small{display:block;margin-top:4px}#warstaxx-root .ws-row{gap:10px}#warstaxx-root .ws-row>span:first-child{min-width:0;overflow-wrap:anywhere}',
+    '#warstaxx-root .ws-scoreboard{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));background:linear-gradient(120deg,#11334d,#102138);border:1px solid #31516c;border-radius:12px;padding:14px 8px;text-align:center}#warstaxx-root .ws-scoreboard small{display:block;font-size:10px;letter-spacing:.7px}#warstaxx-root .ws-scoreboard strong{display:block;font-size:clamp(19px,3vw,30px);font-variant-numeric:tabular-nums}#warstaxx-root .ws-positive{color:#71e6b4}#warstaxx-root .ws-negative{color:#ff929e}#warstaxx-root .ws-live-meta{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0 12px;font-size:11px;color:#a7bdd0}',
+    '#warstaxx-root .ws-segments{display:flex;gap:5px;flex-wrap:wrap;margin:10px 0 14px}#warstaxx-root .ws-segments button{background:#112a40;border:1px solid #31516a;border-radius:8px;min-height:40px;padding:7px 11px;font-size:12px;color:#c7daeb}#warstaxx-root .ws-segments button[aria-pressed=true]{background:#135a83;border-color:#62d7f5;color:#fff}#warstaxx-root .ws-priority-grid,#warstaxx-root .ws-roster-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}#warstaxx-root .ws-action-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}',
+    '#warstaxx-root .ws-launch-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}#warstaxx-root .ws-tool-group{margin:18px 0 24px}#warstaxx-root .ws-tool-tile{display:flex;flex-direction:column;gap:6px;text-align:left;padding:14px;border:1px solid #294b66;border-radius:10px;background:#10273b;min-height:83px;color:#e3f5ff}#warstaxx-root .ws-tool-tile:hover{border-color:#55c6f4;background:#16354d}#warstaxx-root .ws-tool-tile span{color:#a7bfd3;font-size:12px}',
+    '#warstaxx-root .ws-roster-controls{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px}#warstaxx-root .ws-roster-controls>*{width:100%;min-width:0;min-height:42px}#warstaxx-root .ws-country-title{padding:10px 12px;margin:16px 0 8px;background:#153b56;border-left:4px solid #59d2ef;border-radius:5px;color:#def8ff}#warstaxx-root .ws-player-row{min-width:0;background:#102438;border:1px solid #2b465d;border-radius:11px;padding:11px}#warstaxx-root .ws-player-heading{display:flex;flex-wrap:wrap;align-items:center;gap:6px}#warstaxx-root .ws-player-heading>.ws-btn{font-size:16px;font-weight:800;background:none;border:0;text-align:left;padding:4px 0;color:#c5f1ff;max-width:100%;overflow-wrap:anywhere}#warstaxx-root .ws-player-status{margin-left:auto;font-size:11px;padding:4px 7px;background:#24384b;border-radius:6px}#warstaxx-root .ws-player-status.soon{background:#163e32;color:#86f6b8}#warstaxx-root .ws-player-status.near{background:#513415;color:#ffcc82}#warstaxx-root .ws-skull-mark{background:#6332a0;color:white;border-radius:5px;padding:2px 7px}',
+    '#warstaxx-root .ws-player-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:8px 0;padding:9px 0;border-block:1px solid #294256}#warstaxx-root .ws-player-metrics small{display:block;font-size:10px;text-transform:uppercase}#warstaxx-root .ws-player-metrics b{font-size:14px;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}#warstaxx-root .ws-player-foot{display:flex;align-items:center;justify-content:space-between;gap:6px;color:#a7bfd3;font-size:10px}#warstaxx-root .ws-player-row details{margin-bottom:0}#warstaxx-root .ws-player-row summary{font-size:11px;padding:7px 0;min-height:34px}#warstaxx-root .ws-route-back{margin-bottom:8px}#warstaxx-root button:focus-visible,#warstaxx-root summary:focus-visible{outline:2px solid #70dcff;outline-offset:3px}',
+    '@media(max-width:680px){#warstaxx-root .ws-content{padding:10px}#warstaxx-root .ws-priority-grid,#warstaxx-root .ws-roster-grid{grid-template-columns:1fr}#warstaxx-root .ws-launch-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#warstaxx-root .ws-roster-controls{grid-template-columns:1fr 1fr}#warstaxx-root .ws-roster-controls input{grid-column:1/-1}#warstaxx-root .ws-tabs button{padding:6px 3px;font-size:12px}#warstaxx-root .ws-segments button{flex:1 0 auto}#warstaxx-root .ws-tool-tile{padding:11px}#warstaxx-root .ws-head small{letter-spacing:0}}',
     '@media(max-width:420px){#warstaxx-root .ws-head-buttons{flex-shrink:0}#warstaxx-root .ws-head-buttons button{padding:6px 9px;min-width:42px}#warstaxx-root .ws-refresh-label{display:none}#warstaxx-root .ws-head strong{font-size:17px}#warstaxx-root .ws-head small{letter-spacing:0;font-size:8px}#warstaxx-root .ws-row{align-items:flex-start}}'
   ].join('');
   function card(title,body){return '<section class="ws-card"><h2>'+esc(title)+'</h2>'+body+'</section>';}
@@ -6142,6 +6150,158 @@
     if(field)field.value='';
     if(results)results.textContent='';
   }
+  const workspace={lane:'priorities',side:'enemies',query:'',filter:'all',country:'all',sort:'status'};
+  const routeTrail=[];
+  function rememberRoute(){
+    const route={tab:state.tab,chosen:state.chosen,playerOpen:state.playerOpen,
+      selectedWar:state.selectedWar,scroll:n($('.ws-content',root)?.scrollTop)};
+    const last=routeTrail[routeTrail.length-1];
+    if(last&&last.tab===route.tab&&last.chosen===route.chosen&&last.playerOpen===route.playerOpen){
+      routeTrail[routeTrail.length-1]=route;
+    }else routeTrail.push(route);
+    if(routeTrail.length>30)routeTrail.shift();
+  }
+  function workspaceBack(){
+    const prior=routeTrail.pop();
+    if(!prior){navigate('overview');return;}
+    Object.assign(state,{tab:prior.tab,chosen:prior.chosen,playerOpen:prior.playerOpen,selectedWar:prior.selectedWar});
+    render();$('.ws-content',root).scrollTop=prior.scroll;
+  }
+  function workspaceTabs(items,current,prefix){
+    return '<div class="ws-segments">'+items.map(([id,label])=>
+      '<button type="button" data-action="'+esc(prefix+id)+'" aria-pressed="'+(id===current)+'">'+esc(label)+'</button>').join('')+'</div>';
+  }
+  function workspaceHeader(kicker,title,detail=''){
+    return '<header class="ws-workspace-head"><small>'+esc(kicker)+'</small><h1>'+esc(title)+'</h1>'+
+      (detail?'<p>'+esc(detail)+'</p>':'')+'</header>';
+  }
+  function warWorkspace(){
+    if(!activeWarNow())return statusNote()+workspaceHeader('WARSTAXX','Ready for the next war',
+      'Connect once. WarStaxx detects your faction and opponent from Torn.')+
+      '<div class="ws-launch-grid">'+workspaceTile('Settings','Connect API / check permissions','settings')+
+      workspaceTile('Players','Browse cached faction rosters','enemy')+
+      workspaceTile('Past wars','Review official results','history')+
+      workspaceTile('Scout opponent','Faction history and activity','scouting')+'</div>'+
+      card('Connection status','<p>'+(!effectiveKey()?'No API key configured. Open Settings to connect.':
+        !positive(cfg.ourId)?'Your faction has not been identified yet. Refresh or review Settings.':
+        'No fresh active war confirmed. Cached information remains available under Players and Reports.')+'</p>'+b('Refresh intelligence','refresh'));
+    const score=warScore(),chain=chainStatus(),tasks=operationalQueue().filter(x=>x.group==='now').slice(0,3);
+    const lanes=[['priorities','Priorities'],['mission','My hit'],['skulls','Black Skulls'],['defence','Defence']];
+    let h=statusNote()+workspaceHeader('LIVE WAR',state.data.war.opponentName||'Opponent faction')+
+      '<div class="ws-scoreboard"><div><small>OUR POINTS</small><strong>'+scoreLabel(score?.our)+'</strong></div>'+
+      '<div><small>NET LEAD</small><strong class="'+(score?.net<0?'ws-negative':'ws-positive')+'">'+
+      (score?(score.net>=0?'+':'')+fmt(score.net):'?')+'</strong></div>'+
+      '<div><small>THEIR POINTS</small><strong>'+scoreLabel(score?.enemy)+'</strong></div></div>'+
+      '<div class="ws-live-meta"><span>'+esc(age(state.data.updated.wars))+' | Target '+scoreLabel(score?.target)+'</span><span>'+esc(chain.fresh?'Chain '+chain.count+' / '+chain.remaining+'s':'Chain unverified')+'</span></div>'+
+      workspaceTabs(lanes,workspace.lane,'workspace-lane:');
+    if(workspace.lane==='mission')return h+missionPanel()+card('Manual actions','<div class="ws-toolbar">'+b('Heal','fast-heal')+b('Turtle','fast-turtle')+b('Find matchup','tab:matchups')+'</div>');
+    if(workspace.lane==='skulls')return h+skullReleaseCard(100)+regularBreakersCard()+
+      '<div class="ws-toolbar">'+b('Manage squad','tab:leader')+b('Assign hitters','tab:command')+b('Copy squad brief','copy-skull-chat')+'</div>';
+    if(workspace.lane==='defence')return h+protectionCard(100)+
+      '<div class="ws-toolbar">'+b('Set defensive duties','tab:turtle')+b('Hospital control','tab:control')+'</div>';
+    return h+'<div class="ws-priority-grid">'+
+      card('Next decisions',tasks.length?tasks.map(x=>'<div class="ws-row"><span><b>'+esc(x.title)+'</b><small>'+esc(x.detail)+'</small></span>'+b('Review',x.action)+'</div>').join(''):empty('No urgent intervention evidenced. Check your mission or browse players.'))+
+      card('Quick actions','<div class="ws-action-grid">'+b('My next hit','workspace-lane:mission')+b('Browse targets','tab:enemy')+b('Orders','tab:command')+b('Copy briefing','copy-ops')+'</div>'+deskChangesCard())+'</div>'+
+      '<div class="ws-priority-grid">'+protectionCard(3)+skullReleaseCard(3)+'</div>'+
+      '<details data-ws-disclosure="country-outlook"><summary>Country outlook / next 30 minutes</summary>'+warPlanningCard()+'</details>';
+  }
+  function workspacePlayers(at=Date.now()){
+    const side=workspace.side,fresh=rosterFresh(side,at),bands=enemyRoleBands(),q=workspace.query.trim().toLowerCase();
+    const rows=state.data[side].map(player=>({player,location:nativeWarLocation(player),kind:memberState(player),
+      skull:side==='ours'?Boolean(cfg.blackSkulls[player.id]):bands.heavy.has(player.id),
+      impact:side==='ours'?liveWarMemberImpact(player.id):liveEnemyWarImpact(player.id)}));
+    const countries=[...new Set(rows.map(x=>x.location.country))].sort((a,b)=>a==='Unknown'?1:b==='Unknown'?-1:a.localeCompare(b));
+    const selected=rows.filter(x=>{
+      const p=x.player;
+      if(q&&!String(p.name+' '+p.id+' '+(p.position||'')).toLowerCase().includes(q))return false;
+      if(workspace.country!=='all'&&x.location.country!==workspace.country)return false;
+      if(workspace.filter==='skulls'&&!x.skull)return false;
+      if(workspace.filter==='watched'&&!cfg.watchlist[p.id])return false;
+      if(['okay','hospital','away'].includes(workspace.filter)&&(!fresh||x.kind!==workspace.filter))return false;
+      return true;
+    });
+    const own=nativeWarOwnLocation(),countryOrder=(a,b)=>
+      own.known&&(a===own.country||b===own.country)?(a===b?0:a===own.country?-1:1):
+      a==='Unknown'?1:b==='Unknown'?-1:a.localeCompare(b);
+    const rank={okay:0,hospital:1,away:2,jail:3,fallen:4,unknown:5};
+    selected.sort((a,b)=>{
+      const group=countryOrder(a.location.country,b.location.country);if(a.location.country!==b.location.country)return group;
+      let order=0;
+      if(workspace.sort==='name')order=a.player.name.localeCompare(b.player.name);
+      else if(workspace.sort==='recent')order=n(b.player.lastAt)-n(a.player.lastAt);
+      else if(workspace.sort==='points')order=(b.impact.given??b.impact.scored??-1)-(a.impact.given??a.impact.scored??-1);
+      else if(workspace.sort==='net')order=(b.impact.net??-Infinity)-(a.impact.net??-Infinity);
+      else if(workspace.sort==='hospital')order=(a.kind==='hospital'&&a.player.until>at?a.player.until:Infinity)-(b.kind==='hospital'&&b.player.until>at?b.player.until:Infinity);
+      else order=(rank[a.kind]??5)-(rank[b.kind]??5);
+      return (Number.isNaN(order)?0:order)||a.player.name.localeCompare(b.player.name)||a.player.id-b.player.id;
+    });
+    return {side,fresh,rows:selected,total:rows.length,countries};
+  }
+  function workspacePlayerRow(row,side,fresh){
+    const p=row.player,own=side==='ours',impact=row.impact,
+      strength=nativeWarStrength(p),remaining=n(p.until)-Date.now(),
+      timer=row.kind==='hospital'?(remaining>0?Math.ceil(remaining/MIN)+'m':'Refresh status'):'',
+      tone=fresh&&row.kind==='hospital'&&remaining>0?(remaining<=5*MIN?'soon':remaining<=15*MIN?'near':''):'';
+    const metric=(label,value)=>'<span><small>'+esc(label)+'</small><b>'+(value!==null&&value!==undefined&&!impact.complete?(label==='Net*'?'~':'\u2265'):'')+scoreLabel(value)+'</b></span>';
+    return '<article class="ws-player-row"><div class="ws-player-heading">'+
+      infoButton(p.name,p.id)+(row.skull?'<span class="ws-skull-mark" aria-label="Black Skull">\u2620</span>':'')+
+      '<span class="ws-player-status '+tone+'">'+esc(fresh?p.status:'Cached: '+p.status)+(timer?' / '+timer:'')+'</span></div>'+
+      '<div class="ws-player-metrics">'+(own?metric('Earned',impact.earned)+metric('Given',impact.given)+metric('Net*',impact.net):
+        metric('Scored',impact.scored)+metric('Hits',impact.hits)+'<span><small>STRENGTH</small><b>'+esc(strength.short)+'</b></span>')+'</div>'+
+      '<div class="ws-player-foot"><span>'+esc(nativeWarLastSeen(p))+'</span><span>'+
+      (impact.known?(impact.complete?'Captured feed':'Partial feed')+' / '+age(impact.lastFetch):'Awaiting attacks')+'</span>'+b('Intel','player:'+p.id)+'</div>'+
+      '<details data-ws-disclosure="roster-'+side+'-'+p.id+'"><summary>More / actions</summary><p class="ws-small">'+esc(strength.detail)+
+      '</p>'+(own?'':ffBadge(p.id))+'<div class="ws-toolbar">'+a('Profile',link(p.id))+b('Copy ID','copy-player:'+p.id)+
+      (own?b('Matchups','hitter:'+p.id):b(cfg.watchlist[p.id]?'Unwatch':'Watch','watch:'+p.id))+'</div></details></article>';
+  }
+  function rosterWorkspace(){
+    let data=workspacePlayers();
+    if(workspace.country!=='all'&&!data.countries.includes(workspace.country)){workspace.country='all';data=workspacePlayers();}
+    const own=data.side==='ours';
+    const options=(id,items,current)=>'<select id="'+id+'" aria-label="'+id.replace('ws-roster-','')+'">'+
+      items.map(([v,t])=>'<option value="'+esc(v)+'" '+(current===v?'selected':'')+'>'+esc(t)+'</option>').join('')+'</select>';
+    let h=statusNote()+workspaceHeader('PLAYERS','One roster. Both factions.', 'Tap a name for full intelligence. Countries stay grouped; the selected sort applies within each country.')+
+      workspaceTabs([['enemies','Opponents'],['ours','Our faction']],data.side,'workspace-side:')+
+      '<div class="ws-roster-controls"><input id="ws-roster-query" type="search" value="'+esc(workspace.query)+'" placeholder="Find name or ID" aria-label="Search roster">'+
+      options('ws-roster-country',[['all','All countries'],...data.countries.map(x=>[x,x])],workspace.country)+
+      options('ws-roster-sort',[['status','Okay first'],['hospital','Hospital expiry'],['name','Name A-Z'],['recent','Recent activity'],['points',own?'Most points given':'Most points scored'],...(own?[['net','Best net']]:[])],workspace.sort)+'</div>'+
+      workspaceTabs([['all','All'],['okay','Okay'],['hospital','Hospital'],['away','Away'],['skulls','Skulls'],['watched','Watched']],workspace.filter,'workspace-filter:')+
+      '<div class="ws-live-meta"><span>'+data.rows.length+' / '+data.total+' players | '+(data.fresh?'Roster '+esc(age(state.data.updated[data.side])):'STALE ROSTER')+'</span>'+b('Reset filters','workspace-reset')+'</div>'+
+      '<p class="ws-small">Points are captured ranked-war attack respect, not official member scores. Partial values are minimums; net* is uncertain when either side is incomplete.</p>';
+    let country=null;
+    for(const row of data.rows){
+      if(country!==row.location.country){if(country!==null)h+='</div>';country=row.location.country;
+        h+='<h2 class="ws-country-title">'+esc(country)+'</h2><div class="ws-roster-grid">';}
+      h+=workspacePlayerRow(row,data.side,data.fresh);
+    }
+    if(country!==null)h+='</div>';
+    return h+(data.rows.length?'':empty(data.total?'No players match. Reset filters to see the full roster.':'No roster loaded. Refresh or check Settings.'));
+  }
+  function workspaceTile(title,detail,tab){
+    return '<button type="button" class="ws-tool-tile" data-action="tab:'+esc(tab)+'"><strong>'+esc(title)+'</strong><span>'+esc(detail)+'</span></button>';
+  }
+  function archiveWorkspace(){
+    const groups=[['Command',[
+      ['Squad command','Black Skulls, roles and coverage','leader'],['Orders','Assign hitters and review duties','command'],
+      ['Defence','Protect exposed members','turtle'],['Operations','All current checks and warnings','operations'],
+      ['Hospital control','Watcher assignments','control'],['My matchups','Compare hitter and target evidence','matchups']]],
+      ['Performance',[
+      ['Member comparison','Official results across recent wars','archive'],['After-action','Completed war review','afteraction'],
+      ['Hit ledger','Captured attacks and outcomes','ledger'],['Score pace','Momentum and observed scoring','pace'],
+      ['War history','Official reports and scorecards','history'],['Timelines','Observed war progress','timeline']]],
+      ['Intelligence',[
+      ['Faction scouting','Opponent history and strength','scouting'],['Player dossiers','Detailed enemy analysis','targets'],
+      ['Activity','Sampled online and travel patterns','activity'],['Threats','Enemy impact and priorities','threats'],
+      ['Strategy','Member-by-member planning','strategy'],['Full dashboard','All legacy metrics','dashboard']]],
+      ['Setup',[
+      ['Settings','Keys, FFScouter and shared orders','settings'],['Diagnostics','Data access and freshness','diagnostics'],
+      ['Alerts','All current alerts','alerts'],['Black Skulls tools','Chain, bonuses and squad performance','skulls'],
+      ['Quick commander','Compact member controls','commander'],['Saved assignments','Review stored orders','assignments']]]];
+    return statusNote()+workspaceHeader('TOOLS & REPORTS','Everything has a place.', 'Choose a task. Your existing intelligence and controls are retained.')+
+      '<div class="ws-toolbar">'+b('Find a player or tool','find')+b('Refresh reports','refresh')+'</div>'+
+      groups.map(([name,items])=>'<section class="ws-tool-group"><h2>'+name+'</h2><div class="ws-launch-grid">'+
+        items.map(([title,detail,tab])=>workspaceTile(title,detail,tab)).join('')+'</div></section>').join('');
+  }
   const disclosureViews=new Map();
   let previousDisclosureView=null;
   let previousBodyOverflow=null,previousModalFocus=null;
@@ -6154,13 +6314,13 @@
     // The permanent Torn strip is layer 0; the modal has exactly three primary screens.
     // All legacy deep links remain valid and are reachable from Reports / Opponent.
     const primary=['overview','enemy','reports'];
-    const detailGroup=['intel','targets','matchups','timeline','activity','history','threats']
+    const detailGroup=['intel','targets','matchups','timeline','activity','history','threats','scouting']
       .includes(state.tab)?'enemy':'reports';
     $('.ws-tabs',root).innerHTML=primary.map(tab=>
       '<button type="button" class="'+((state.tab===tab||
         !primary.includes(state.tab)&&tab===detailGroup)?'on':'')+
       '" data-tab="'+tab+'">'+esc(labels[tab])+'</button>').join('');
-    const pages={overview,enemy:enemyScreen,reports:reportsScreen,leader:leaderScreen,skulls:blackSkullsRoom,commander,operations,ledger,threats,control,turtle,command,pace,afteraction,intel,targets,matchups,timeline,strategy,activity,history,assignments:orders,alerts:alertView,settings,diagnostics};
+    const pages={overview:warWorkspace,enemy:rosterWorkspace,reports:archiveWorkspace,dashboard:overview,scouting:enemyScreen,archive:reportsScreen,leader:leaderScreen,skulls:blackSkullsRoom,commander,operations,ledger,threats,control,turtle,command,pace,afteraction,intel,targets,matchups,timeline,strategy,activity,history,assignments:orders,alerts:alertView,settings,diagnostics};
     const content=$('.ws-content',root);
     const scroll=content.scrollTop;
     if(previousDisclosureView){
@@ -6189,9 +6349,9 @@
       })):null;
     try{
       const detail=!primary.includes(state.tab)?
-        '<div class="ws-toolbar">'+b('Back to '+(detailGroup==='enemy'?'Opponent':'Reports'),
+        '<div class="ws-toolbar">'+b((detailGroup==='enemy'?'All players':'All tools'),
           'tab:'+detailGroup)+' '+pill(labels[state.tab]||state.tab)+'</div>':'';
-      content.innerHTML='<nav class="ws-toolbar" aria-label="Quick war navigation">'+b('Now','tab:overview')+b('Skulls','tab:leader')+b('Our team','tab:turtle')+b('Find','find')+'</nav>'+detail+(state.tab==='targets'&&state.playerOpen?
+      content.innerHTML=(routeTrail.length?'<div class="ws-route-back">'+b('Back','workspace-back')+'</div>':'')+detail+(state.tab==='targets'&&state.playerOpen?
         playerIntel(state.chosen):(pages[state.tab]||overview)());
     }catch(e){content.innerHTML=empty('Render error: '+String(e.message||e));}
     const savedDisclosures=disclosureViews.get(disclosureView);
@@ -6232,6 +6392,7 @@
   }
   function navigate(tab,focus){
     if(!sections.includes(tab))tab='overview';
+    if(state.open&&(state.tab!==tab||state.playerOpen))rememberRoute();
     state.tab=tab;state.open=true;state.playerOpen=false;state.selectedWar=0;
     root.style.display='block';render();
     $('.ws-content',root).scrollTop=0;
@@ -6282,6 +6443,17 @@
     event('panel',{id:ID,open:false});
   }
   function handle(action){
+    if(action==='workspace-back'){workspaceBack();return;}
+    if(action.startsWith('workspace-lane:')){
+      const value=action.slice(15);if(['priorities','mission','skulls','defence'].includes(value)){workspace.lane=value;render();}return;
+    }
+    if(action.startsWith('workspace-side:')){
+      const value=action.slice(15);if(['ours','enemies'].includes(value)){workspace.side=value;workspace.country='all';if(value==='enemies'&&workspace.sort==='net')workspace.sort='points';render();}return;
+    }
+    if(action.startsWith('workspace-filter:')){
+      const value=action.slice(17);if(['all','okay','hospital','away','skulls','watched'].includes(value)){workspace.filter=value;render();}return;
+    }
+    if(action==='workspace-reset'){Object.assign(workspace,{query:'',filter:'all',country:'all',sort:'status'});render();return;}
     if(action==='refresh'){refresh(true);return;}
     if(action.startsWith('copy-player:')){
       const id=positive(action.slice(12));
@@ -6394,7 +6566,7 @@
       saveCfg();confirmed('Readiness saved locally for 45 minutes. No teammate API data was accessed.');render();return;
     }
     if(action==='match-more'){state.showAllMatchups=!state.showAllMatchups;render();return;}
-    if(action.startsWith('hitter:')){const id=positive(action.slice(7));if(state.data.ours.some(p=>p.id===id)){state.chosen=id;navigate('matchups');}return;}
+    if(action.startsWith('hitter:')){const id=positive(action.slice(7));if(state.data.ours.some(p=>p.id===id)){navigate('matchups');state.chosen=id;render();}return;}
     if(action.startsWith('pace-war:')){state.selectedPace=positive(action.slice(9));navigate('pace');return;}
     if(action==='pace-live'){state.selectedPace=0;navigate('pace');return;}
     if(action==='timeline-latest'){state.selectedTimeline=0;navigate('timeline');return;}
@@ -6525,7 +6697,7 @@
     if(action.startsWith('tab:')){navigate(action.slice(4));event('visit',{id:ID,section:state.tab});return;}
     if(action.startsWith('alert:')){const x=currentAlerts().find(a=>a.id===action.slice(6));if(x?.targetId){focusOpportunity(x.targetId);return;}navigate(x?.tab||'alerts');return;}
     if(action.startsWith('tool:')){close();event('open',{id:action.slice(5)});return;}
-    if(action.startsWith('player:')){state.tab='targets';state.chosen=positive(action.slice(7));state.playerOpen=true;render();$('.ws-content',root).scrollTop=0;return;}
+    if(action.startsWith('player:')){rememberRoute();state.tab='targets';state.chosen=positive(action.slice(7));state.playerOpen=true;render();$('.ws-content',root).scrollTop=0;return;}
     if(action.startsWith('spy:')){
       const id=positive(action.slice(4));const box=$('.ws-content',root);
       const s={observedAt:Date.now()};
@@ -6672,6 +6844,8 @@
     }
   });
   root.addEventListener('change',e=>{
+    if(e.target.id==='ws-roster-country'){workspace.country=e.target.value;render();return;}
+    if(e.target.id==='ws-roster-sort'){workspace.sort=e.target.value;render();return;}
     const risk=e.target.closest('[data-skull-risk]');
     if(risk){
       const id=positive(risk.dataset.skullRisk),mode=String(risk.value);
@@ -6726,6 +6900,7 @@
     if(e.target.id==='ws-sort'){state.sort=e.target.value;render();}
   });
   root.addEventListener('input',e=>{
+    if(e.target.id==='ws-roster-query'){workspace.query=e.target.value;const pos=e.target.selectionStart;render();const input=$('#ws-roster-query',root);if(input){input.focus({preventScroll:true});try{input.setSelectionRange(pos,pos);}catch(_){}}return;}
     if(e.target.id==='ws-find-input'){drawFinder();return;}
     if(e.target.id==='ws-search'){
       state.search=e.target.value;
@@ -7734,7 +7909,7 @@
       cfg.nativeEnemyMetric:'points';
     const pulse=nativeWarTacticalPulse(bands),pulseHtml=nativeWarPulseMarkup(pulse,filter);
     const signature=[mode,filter,friendlySort,friendlyDesc,metric,conflict,nativeWarState.toolbarExpanded,
-      cfg.nativeWarCountryGroups].join(':');
+      cfg.nativeWarCountryGroups,cfg.nativeFriendlyFilter].join(':');
     const scoreText=score?'Us '+fmt(score.our)+' / Them '+fmt(score.enemy):'LIVE WAR',
       chainText=chain.fresh?'Chain '+fmt(chain.count)+' ('+chain.remaining+'s)':'Chain unknown';
     if(toolbar.dataset.signature===signature){
@@ -7768,8 +7943,9 @@
       '<button type="button" data-wsnw-action="war">War Room</button>'+
       '<button type="button" data-wsnw-action="more" aria-expanded="'+
         (nativeWarState.toolbarExpanded?'true':'false')+'">'+
-        (nativeWarState.toolbarExpanded?'Less':'More')+'</button></div>'+
-      '<div class="wsnw-controls">'+
+        (nativeWarState.toolbarExpanded?'Close filters':'Sort / filters')+'</button>'+
+      (filter!=='all'||cfg.nativeFriendlyFilter!=='all'?'<button type="button" data-wsnw-action="reset-filters">'+esc(filter)+(cfg.nativeFriendlyFilter==='black'?' / Our skulls':'')+' / clear</button>':'')+'</div>'+
+      '<div class="wsnw-controls"'+(nativeWarState.toolbarExpanded?'':' style="display:none"')+'>'+
       '<label>OUR <select data-wsnw-friendly-sort aria-label="Sort our faction">'+
       [['given','Given'],['net','Net'],['earned','Earned'],['share','Enemy %'],
         ['hits','Received hits'],['pace','Pts / hour'],['torn','Torn order']].map(x=>
@@ -8212,6 +8388,7 @@
     const button=e.target?.closest?.('#wsnw-toolbar [data-wsnw-action]');
     if(button&&isNativeWarPage()){
       e.preventDefault();e.stopPropagation();
+      if(button.dataset.wsnwAction==='reset-filters'){cfg.nativeWarFilter='all';cfg.nativeFriendlyFilter='all';saveCfg();syncNativeWar();return;}
       if(button.dataset.wsnwAction==='countries'){
         cfg.nativeWarCountryGroups=cfg.nativeWarCountryGroups===false;
         if(cfg.nativeWarCountryGroups){

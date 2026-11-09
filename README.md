@@ -1,4 +1,16 @@
-> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v1.7.0). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v2.0.0). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+
+## v2.0.0 - WarStaxx workspace revamp (9 November 2026)
+
+The main interface is rebuilt around three areas, retaining existing specialist tools, stored data and installation URLs.
+
+- **Live war:** a compact score/chain header and four task views: Priorities, My hit, Black Skulls and Defence. Priorities shows the top operational decisions, quick actions, protection and releases. The full country outlook is expandable.
+- **Players:** one shared layout for opponents and our faction. Country sections, instant name/ID search, status/Skull/watch filters, country selection and within-country sorting. Names lead each entry; three key metrics sit beneath. Extra actions expand vertically. Stale status filters are blocked; partial attack totals and uncertain net figures are labelled.
+- **Tools & reports:** a task directory grouped into Command, Performance, Intelligence and Setup. Every existing screen remains reachable, including the full dashboard, scouting and detailed reports.
+- **Navigation:** Back returns from player intelligence to the previous view and scroll position. Disclosure state remains scoped by view/player. No forced jump to an unrelated Reports page when using Back.
+- **Visual system:** navy/cyan surfaces, clear score hierarchy, responsive player grids, larger names, purple skull badges, visible keyboard focus and compact mobile navigation. No additional sticky war banner.
+- **Native Torn war toolbar:** advanced sort/filter controls fold under Sort / filters. Active filters remain visible with a clear action for both faction lists. Existing country sorting, countdown colouring and attack-page protection remain.
+- Uses existing API calls and read-only data engines; no extra network permissions, key migration or automatic gameplay. No real player records in fixtures. Actual Torn PDA appearance still needs device verification.
 
 ## v1.7.0 - Action-first war command (9 November 2026)
 

@@ -20,11 +20,11 @@ function fixture(){
     {globalCfg:cfg,globalState:state,Date,Math});
   return {...funcs,cfg,state};
 }
-test('userscript v1.7.0 is ASCII and the PDA probe matches the release',()=>{
+test('userscript v2.0.0 is ASCII and the PDA probe matches the release',()=>{
   assert.ok(source.startsWith('// ==UserScript==\n'));
-  assert.match(source,/^\/\/ @version\s+1\.7\.0$/m);
-  assert.match(source,/const id='war', version='1\.7\.0'/);
-  assert.match(source,/const ID='war', VER='1\.7\.0'/);
+  assert.match(source,/^\/\/ @version\s+2\.0\.0$/m);
+  assert.match(source,/const id='war', version='2\.0\.0'/);
+  assert.match(source,/const ID='war', VER='2\.0\.0'/);
   assert.doesNotMatch(source,/[^\x00-\x7F]/);
   assert.doesNotThrow(()=>new Script(source));
 });

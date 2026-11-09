@@ -9,7 +9,7 @@ function region(from,to){
   assert.ok(a>=0&&b>a,'Required source region: '+from);
   return source.slice(a,b);
 }
-test('v1.7.0 command summary is compact, useful and non-sticky',()=>{
+test('v2.0.0 command summary is compact, useful and non-sticky',()=>{
   const bar=region('  function renderWarStrip(force=false){','  function confirmed(message){');
   const scroll=region('  function handleWarScroll(e){','  function renderWarStrip(force=false){');
   assert.match(bar,/position:static;top:auto;z-index:auto/);
@@ -37,7 +37,7 @@ test('native tactical rows retain Torn columns and align secondary intelligence 
   assert.match(source,/\.faction-war \.wsnw-legend/);
 });
 test('PDA ASCII quoting and syntax remain safe',()=>{
-  assert.match(source,/^\/\/ @version\s+1\.7\.0$/m);
+  assert.match(source,/^\/\/ @version\s+2\.0\.0$/m);
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
 });

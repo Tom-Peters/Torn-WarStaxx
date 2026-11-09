@@ -40,6 +40,7 @@ function start(path='/factions.php',seed={}){
     addEventListener:(name,handler)=>{(listeners[name]??=[]).push(handler);},
     dispatchEvent:e=>{events.push(e);for(const fn of listeners[e.type]||[])fn(e);},
     getElementById:()=>null,
+    querySelectorAll:()=>[],
     querySelector:selector=>selector.includes('#mainContainer')?host:null,
   };
   const win={};win.top=win;win.self=win;
@@ -103,12 +104,20 @@ test('active war home, squad, reports and disclosures render across navigation w
  open('overview');
  assert.doesNotMatch(content.innerHTML,/Render error:/);
  assert.match(content.innerHTML,/Protect our points/);
- const section=content.querySelectorAll('details').find(x=>x.dataset.wsDisclosure==='live-analysis');
+ const section=content.querySelectorAll('details').find(x=>x.dataset.wsDisclosure==='country-outlook');
  assert.equal(section.open,false);section.open=true;
  open('overview');
- assert.equal(content.querySelectorAll('details').find(x=>x.dataset.wsDisclosure==='live-analysis').open,true);
- for(const tab of ['leader','turtle','reports']){open(tab);assert.doesNotMatch(content.innerHTML,/Render error:/);}
+ assert.equal(content.querySelectorAll('details').find(x=>x.dataset.wsDisclosure==='country-outlook').open,true);
+ for(const tab of ['leader','turtle','enemy','reports','archive']){open(tab);assert.doesNotMatch(content.innerHTML,/Render error:/);}
  assert.match(content.innerHTML,/data-action="war:8"/);
+ open('enemy');content.scrollTop=314;
+ const click=action=>body.child.listeners.click({target:{closest:selector=>selector==='[data-action]'?{dataset:{action}}:null},preventDefault:()=>{}});
+ click('player:101');assert.match(content.innerHTML,/PLAYER INTELLIGENCE/);
+ click('workspace-back');assert.match(content.innerHTML,/One roster/);assert.equal(content.scrollTop,314);
+ click('workspace-side:ours');assert.match(content.innerHTML,/Regular Alpha/);
+ assert.doesNotMatch(content.innerHTML,/Render error:/);
+
  open('overview');
- assert.equal(content.querySelectorAll('details').find(x=>x.dataset.wsDisclosure==='live-analysis').open,true);
+ assert.equal(content.querySelectorAll('details').find(x=>x.dataset.wsDisclosure==='country-outlook').open,true);
+ for(const lane of ['mission','skulls','defence','priorities']){click('workspace-lane:'+lane);assert.doesNotMatch(content.innerHTML,/Render error:/);}
 });

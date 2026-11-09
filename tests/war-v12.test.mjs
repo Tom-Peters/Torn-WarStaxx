@@ -129,7 +129,7 @@ test('past-war hitter comparison needs two comparable reports and five attacks',
 test('four-layer navigation and existing advanced pages remain functional',()=>{
  for(const token of [
    "const sections=['overview','enemy','reports','leader','skulls'",
-   "labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS'",
+   "labels={overview:'Live war',enemy:'Players',reports:'Tools & reports'",
    "const primary=['overview','enemy','reports']",
    "if(!activeWarNow()){",
    'WARSTAXX | STANDBY',
@@ -144,10 +144,10 @@ test('four-layer navigation and existing advanced pages remain functional',()=>{
    "function bonusHitRecommendation()",
    "function roleMatch(",
    "markSharedDirty();confirmed('Manual duty",
-   "const pages={overview,enemy:enemyScreen,reports:reportsScreen,leader:leaderScreen",
+   "const pages={overview:warWorkspace,enemy:rosterWorkspace,reports:archiveWorkspace,dashboard:overview,scouting:enemyScreen,archive:reportsScreen,leader:leaderScreen",
    "function warQuick(action)"
  ])assert.ok(source.includes(token),'Missing '+token);
- assert.match(source,/\/\/ @version\s+1\.7\.0/);
+ assert.match(source,/\/\/ @version\s+2\.0\.0/);
  assert.doesNotMatch(source,/[^\x00-\x7f]/);
  assert.doesNotThrow(()=>new Script(source));
 });

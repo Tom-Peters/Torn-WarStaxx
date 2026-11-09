@@ -91,7 +91,7 @@ test('Operations tab, manual controls and safe user-script installer remain wire
     "'operations','ledger'"]){
     assert.ok(source.includes(fragment),'Missing integration: '+fragment);
   }
-  assert.match(source,/\/\/ @version\s+1\.7\.0/);
+  assert.match(source,/\/\/ @version\s+2\.0\.0/);
   assert.ok(source.startsWith('// ==UserScript==\n'));
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
@@ -250,4 +250,32 @@ test('decision cards escape player text and retain manual navigation controls',(
   assert.doesNotMatch(html,/<img/);assert.match(html,/&lt;img/);
   assert.match(html,/data-action="fast-hit"/);
   assert.match(html,/data-ws-disclosure="breakers"/);
+});
+
+function workspaceRosterFixture(){
+ const now=Date.now(),workspace={side:'enemies',query:'',filter:'all',country:'all',sort:'status'};
+ const player=(id,name,country,status='okay')=>({id,name,country,status,lastAt:now-id,until:now+id*60000});
+ const state={data:{enemies:[player(1,'Zulu','Canada'),player(2,'Alpha','Canada','hospital'),player(3,'Beta','Torn'),player(4,'Hidden','Unknown')],ours:[]}};
+ let fresh=true;
+ const context={workspace,state,cfg:{watchlist:{2:true},blackSkulls:{}},n:v=>Number(v)||0,
+  rosterFresh:()=>fresh,enemyRoleBands:()=>({heavy:new Set([2])}),memberState:p=>p.status,
+  nativeWarLocation:p=>({country:p.country}),nativeWarOwnLocation:()=>({known:true,country:'Torn'}),
+  liveEnemyWarImpact:id=>({scored:id===2?20:null}),liveWarMemberImpact:()=>({net:null})};
+ const api=runInNewContext(part('  function workspacePlayers(','  function workspacePlayerRow(')+';({workspacePlayers})',context);
+ return {...api,workspace,state,setFresh:value=>{fresh=value;}};
+}
+test('unified roster groups current country first, sorts within countries and applies combined filters',()=>{
+ const m=workspaceRosterFixture();
+ assert.deepEqual(Array.from(m.workspacePlayers().rows,x=>x.player.id),[3,1,2,4]);
+ m.workspace.sort='points';assert.deepEqual(Array.from(m.workspacePlayers().rows,x=>x.player.id),[3,2,1,4]);
+ m.workspace.country='Canada';m.workspace.filter='watched';m.workspace.query='alpha';
+ assert.deepEqual(Array.from(m.workspacePlayers().rows,x=>x.player.id),[2]);
+ m.workspace.query='no match';assert.equal(m.workspacePlayers().rows.length,0);
+});
+test('unified roster blocks live status filters on stale data without hiding cached all view',()=>{
+ const m=workspaceRosterFixture();m.setFresh(false);m.workspace.filter='okay';
+ assert.equal(m.workspacePlayers().rows.length,0);
+ m.workspace.filter='all';assert.equal(m.workspacePlayers().rows.length,4);
+ m.workspace.side='ours';m.state.data.ours=[{id:9,name:'Own',country:'Torn',status:'okay'}];m.workspace.sort='net';
+ assert.equal(m.workspacePlayers().rows[0].player.id,9);
 });
