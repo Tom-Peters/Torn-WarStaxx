@@ -91,7 +91,7 @@ test('Operations tab, manual controls and safe user-script installer remain wire
     "'operations','ledger'"]){
     assert.ok(source.includes(fragment),'Missing integration: '+fragment);
   }
-  assert.match(source,/\/\/ @version\s+1\.5\.30/);
+  assert.match(source,/\/\/ @version\s+1\.6\.0/);
   assert.ok(source.startsWith('// ==UserScript==\n'));
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
@@ -126,4 +126,61 @@ test('ops data and copy controls never send API keys through the hub or automate
   assert.match(source,/copy-ops/);
   assert.doesNotMatch(part('  function operationalBrief(','  function overview('),/PDA_httpGet\(|GM_xmlhttpRequest\(|POST|GM_setValue\(/);
   assert.match(source,/If you separately opt in to FFScouter/);
+});
+
+function planningFixture(){
+  return runInNewContext(`
+    const MIN=60000, at=1800000000000;
+    const n=v=>Number.isFinite(Number(v))?Number(v):0;
+    const positive=v=>Number.isSafeInteger(Number(v))&&Number(v)>0?Number(v):0;
+    const cfg={assignments:{1:101},watchlist:{101:true}};
+    const state={data:{updated:{ours:at,enemies:at},
+      ours:[{id:1,name:'Hitter',status:'okay',country:'Torn'}],
+      enemies:[{id:101,name:'Target',status:'hospital',country:'Canada',until:at+5*MIN},
+      {id:102,name:'Other',status:'hospital',country:'Canada',until:at+15*MIN},
+      {id:103,name:'Expired',status:'hospital',country:'Torn',until:at-1},
+      {id:104,name:'Abroad',status:'away',country:'Canada',phase:'abroad'},
+      {id:105,name:'Flying',status:'away',country:'Canada',phase:'inbound'},
+      {id:106,name:'Unknown',status:'hospital',country:'Unknown',until:0}]}};
+    const rosterFresh=(side,now)=>now-state.data.updated[side]<5*MIN;
+    const memberState=p=>p.status;
+    const nativeWarLocation=p=>({country:p.country,phase:p.phase||'present'});
+    const hitterReadiness=p=>({energyEnough:p.energyEnough??null});
+  `+part('  function warAvailabilityHorizon(', '  function warPlanningBrief(')+
+    ';({at,cfg,state,warAvailabilityHorizon,assignmentAudit})');
+}
+test('country outlook keeps cumulative boundaries, abroad, flights and expired timers distinct',()=>{
+  const m=planningFixture(),h=m.warAvailabilityHorizon(m.at);
+  const canada=h.countries.find(x=>x.country==='Canada');
+  assert.equal(canada.enemies.available,1);
+  assert.deepEqual(Array.from(canada.enemies.exits),[1,2,2]);
+  assert.equal(h.countries.find(x=>x.country==='Torn').enemies.overdue,1);
+  assert.equal(h.countries.find(x=>x.country==='Unknown').enemies.untimed,1);
+  assert.equal(h.events.length,2);
+  assert.equal(h.events[0].assigned,true);
+  assert.equal(h.events[0].watched,true);
+});
+test('country outlook independently suppresses stale sides and never turns expired hospitals into available',()=>{
+  const m=planningFixture();m.state.data.updated.enemies=m.at-5*60000;
+  const h=m.warAvailabilityHorizon(m.at);
+  assert.equal(h.fresh.enemies,false);
+  assert.equal(h.events.length,0);
+  assert.equal(h.countries.length,1);
+  assert.equal(h.countries[0].ours.available,1);
+  assert.equal(h.countries[0].enemies.available,0); // rendered as ? via fresh flag
+});
+test('assignment audit flags country, availability, energy, collisions and removed members without mutation',()=>{
+  const m=planningFixture();
+  m.cfg.assignments[2]=101;
+  m.state.data.ours[0].energyEnough=false;
+  const before=JSON.stringify(m.cfg);
+  const a=m.assignmentAudit(m.at);
+  assert.equal(a.rows.length,2);
+  assert.match(a.rows[0].reasons.join(' '),/Target unavailable.*Different countries.*energy.*assigned to 2/);
+  assert.match(a.rows[1].reasons.join(' '),/no longer.*assigned to 2/);
+  assert.equal(JSON.stringify(m.cfg),before);
+  m.state.data.updated.ours=m.at-6*60000;
+  const stale=m.assignmentAudit(m.at);
+  assert.match(stale.rows[0].reasons[0],/Refresh both/);
+  assert.doesNotMatch(stale.rows[0].reasons.join(' '),/Different countries/);
 });

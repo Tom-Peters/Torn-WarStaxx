@@ -1,4 +1,13 @@
-> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v1.5.13). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v1.6.0). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+
+## v1.6.0 - Country outlook and assignment audit (9 November 2026)
+
+- **Next 30 minutes:** Live War Room and Operations now compare both factions by country: currently available members and cumulative hospital expiries within 5, 15 and 30 minutes. Hospital exits remain forecasts, never automatic Okay statuses. Stale sides display unknown counts independently.
+- **Release timeline:** Expand a combined, chronological hospital expiry list with faction, country, time, and assigned/watched markers. Expired or missing timers are counted separately; unknown countries remain explicit.
+- **Assignment audit:** Detect unavailable hitters/targets, different countries, unknown locations, known low energy, duplicate assignments and players missing from fresh rosters. Existing orders are preserved. This audit supplements matchup intelligence; it does not predict wins.
+- **Tactical briefing:** The existing copy action includes the country outlook and assignment conflicts for manual sharing. No additional requests, permissions, storage migration or external data sharing.
+- Fix the native tactical pulse hospital label rendering a literal Unicode escape.
+- Uses the existing single CI job and test suite. Live Torn PDA appearance still requires device verification.
 
 ## v1.5.14 - Location grouping and touch refinements (7 November 2026)
 

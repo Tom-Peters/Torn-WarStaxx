@@ -115,9 +115,9 @@ test('new navigation remains in WarStaxx and does not route queries to external 
 });
 
 test('Torn PDA userscript remains parser safe and versioned',()=>{
-  assert.match(source,/^\/\/ @version\s+1\.5\.30$/m);
-  assert.match(source,/const ID='war', VER='1\.5\.30'/);
-  assert.match(source,/version='1\.5\.30'/);
+  assert.match(source,/^\/\/ @version\s+1\.6\.0$/m);
+  assert.match(source,/const ID='war', VER='1\.6\.0'/);
+  assert.match(source,/version='1\.6\.0'/);
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
 });

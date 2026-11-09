@@ -81,7 +81,7 @@ test('temporary API failure preserves previous verified id',async()=>{
  assert.equal(a.saves,0);
 });
 test('metadata, old settings and safety contract remain intact',()=>{
- assert.match(code,/\/\/ @version\s+1\.5\.30/);
+ assert.match(code,/\/\/ @version\s+1\.6\.0/);
  assert.match(code,/factionAuto:true/);
  assert.match(code,/Detect my faction now/);
  assert.match(code,/id="ws-auto-faction"/);

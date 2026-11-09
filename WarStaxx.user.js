@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      1.5.30
+// @version      1.6.0
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='1.5.30';
+  const id='war', version='1.6.0';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='1.5.30', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='1.6.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics'];
   const labels={overview:'01 | ACT NOW',enemy:'02 | OPPONENT',reports:'03 | REPORTS',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics'};
@@ -3770,6 +3770,98 @@
       b('Copy command briefing','copy-leader-brief')+'</div>');
     return html+watchlistPanel();
   }
+  // Snapshot-based planning: hospital expiries are never promoted to Okay.
+  function warAvailabilityHorizon(at=Date.now()){
+    const fresh={ours:rosterFresh('ours',at),enemies:rosterFresh('enemies',at)};
+    const countries=new Map(),events=[],windows=[5,15,30];
+    const blank=()=>({available:0,exits:[0,0,0],overdue:0,untimed:0});
+    for(const side of ['ours','enemies']){
+      if(!fresh[side])continue;
+      for(const player of state.data[side]){
+        const location=nativeWarLocation(player),country=location.country;
+        if(!countries.has(country))countries.set(country,{country,ours:blank(),enemies:blank()});
+        const row=countries.get(country)[side],kind=memberState(player);
+        if(kind==='okay'||location.phase==='abroad')row.available++;
+        if(kind!=='hospital')continue;
+        const until=n(player.until);
+        if(until<=0){row.untimed++;continue;}
+        if(until<=at){row.overdue++;continue;}
+        windows.forEach((minutes,i)=>{if(until-at<=minutes*MIN)row.exits[i]++;});
+        if(until-at<=30*MIN)events.push({side,player,country,until,
+          minutes:Math.ceil((until-at)/MIN),
+          assigned:side==='enemies'&&Object.values(cfg.assignments).some(id=>positive(id)===player.id),
+          watched:side==='enemies'&&Boolean(cfg.watchlist[player.id])});
+      }
+    }
+    return {at,fresh,windows,countries:[...countries.values()].sort((a,b)=>
+      a.country==='Unknown'?1:b.country==='Unknown'?-1:a.country.localeCompare(b.country)),
+      events:events.sort((a,b)=>a.until-b.until||a.side.localeCompare(b.side)||a.player.id-b.player.id)};
+  }
+  function assignmentAudit(at=Date.now()){
+    const fresh=rosterFresh('ours',at)&&rosterFresh('enemies',at),rows=[];
+    const counts=new Map();
+    for(const target of Object.values(cfg.assignments)){
+      const id=positive(target);if(id)counts.set(id,(counts.get(id)||0)+1);
+    }
+    for(const [id,value] of Object.entries(cfg.assignments)){
+      const targetId=positive(value);if(!targetId)continue;
+      const friend=state.data.ours.find(p=>p.id===positive(id));
+      const enemy=state.data.enemies.find(p=>p.id===targetId);
+      const reasons=[],add=(text)=>reasons.push(text);
+      if(!fresh)add('Refresh both rosters before reviewing this order');
+      else if(!friend||!enemy)add(!friend?'Hitter is no longer in the loaded roster':'Target is no longer in the loaded roster');
+      else{
+        const own=nativeWarLocation(friend),target=nativeWarLocation(enemy);
+        const available=p=>memberState(p)==='okay'||nativeWarLocation(p).phase==='abroad';
+        if(!available(friend))add('Hitter unavailable: '+friend.status);
+        if(!available(enemy))add('Target unavailable: '+enemy.status);
+        if(own.country==='Unknown'||target.country==='Unknown')add('Location unverified');
+        else if(own.country!==target.country)add('Different countries: '+own.country+' / '+target.country);
+        if(hitterReadiness(friend,at).energyEnough===false)add('Known energy below 25');
+      }
+      if(counts.get(targetId)>1)add('Target assigned to '+counts.get(targetId)+' hitters');
+      if(reasons.length)rows.push({friend,enemy,friendId:positive(id),targetId,reasons});
+    }
+    return {fresh,rows,total:Object.values(cfg.assignments).filter(positive).length};
+  }
+  function warPlanningBrief(at=Date.now()){
+    const horizon=warAvailabilityHorizon(at),audit=assignmentAudit(at);
+    return 'COUNTRY OUTLOOK (our / enemy; snapshot, not win odds)\n'+
+      horizon.countries.map(row=>row.country+': available '+
+        (horizon.fresh.ours?row.ours.available:'?')+'/'+(horizon.fresh.enemies?row.enemies.available:'?')+
+        '; hospital expiries within 15m '+(horizon.fresh.ours?row.ours.exits[1]:'?')+'/'+
+        (horizon.fresh.enemies?row.enemies.exits[1]:'?')).join('\n')+
+      '\nASSIGNMENT CHECKS\n'+(audit.rows.length?audit.rows.map(row=>
+        (row.friend?.name||'#'+row.friendId)+' -> '+(row.enemy?.name||'#'+row.targetId)+': '+row.reasons.join('; ')).join('\n'):
+        'No status/location conflicts found. Matchup and energy still require verification.')+
+      '\nHospital timers can change through early medical use or new attacks. Expiry is not confirmed availability.';
+  }
+  function warPlanningCard(){
+    const h=warAvailabilityHorizon(),audit=assignmentAudit();
+    const pair=(row,field,index)=>['ours','enemies'].map(side=>!h.fresh[side]?'?':
+      index===undefined?row[side][field]:row[side][field][index]).join(' / ');
+    let body='<p><b>Our / enemy</b> in each cell. Available includes Okay and confirmed abroad statuses; counts do not establish a favourable matchup. Hospital columns are cumulative expiry windows, not guaranteed releases.</p>';
+    if(!h.fresh.ours||!h.fresh.enemies)body+='<p class="ws-note ws-warn">Stale or missing roster: '+
+      (!h.fresh.ours?'our faction ':'')+(!h.fresh.enemies?'opponent':'')+'. Affected counts stay unknown.</p>';
+    body+=h.countries.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Country</th><th>Available</th><th>H &lt;=5m</th><th>H &lt;=15m</th><th>H &lt;=30m</th></tr></thead><tbody>'+
+      h.countries.map(row=>'<tr><td>'+esc(row.country)+'</td><td>'+pair(row,'available')+'</td>'+
+        h.windows.map((_,i)=>'<td>'+pair(row,'exits',i)+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>':empty('Refresh rosters to build the country outlook.');
+    const overdue=h.countries.reduce((sum,row)=>sum+row.ours.overdue+row.enemies.overdue,0),
+      untimed=h.countries.reduce((sum,row)=>sum+row.ours.untimed+row.enemies.untimed,0);
+    if(overdue||untimed)body+='<p class="ws-small">'+overdue+' expired hospital timers need confirmation; '+untimed+' hospitalised players have no usable expiry. Neither is counted as available.</p>';
+    body+='<details><summary>Next 30 minutes: '+h.events.length+' hospital expiries</summary>'+
+      (h.events.length?h.events.slice(0,20).map(x=>'<div class="ws-row"><span>'+pill(x.side==='ours'?'OUR':'ENEMY')+' '+
+        infoButton(x.player.name,x.player.id)+'<br><small>'+esc(x.country)+' | '+x.minutes+'m | TCT '+esc(stamp(x.until))+
+        (x.assigned?' | Assigned':'')+(x.watched?' | Watched':'')+'</small></span></div>').join('')+
+        (h.events.length>20?'<p>Showing earliest 20 of '+h.events.length+' expiries.</p>':''):empty('No fresh hospital expiries observed in this window.'))+'</details>';
+    body+='<details'+(audit.rows.length?' open':'')+'><summary>Assignment checks: '+audit.rows.length+' / '+audit.total+' orders need review</summary>'+
+      (audit.rows.length?audit.rows.slice(0,20).map(row=>'<div class="ws-row"><span><b>'+esc(row.friend?.name||'#'+row.friendId)+' &rarr; '+
+        esc(row.enemy?.name||'#'+row.targetId)+'</b><br><small>'+esc(row.reasons.join(' | '))+'</small></span>'+
+        b('Review','tab:command')+'</div>').join('')+(audit.rows.length>20?'<p>Showing first 20 checks; use the leadership board for all orders.</p>':''):
+        empty('No status/location conflicts found. This is not a battle-strength or energy clearance.'))+'</details>'+
+      '<div class="ws-toolbar">'+b('Refresh','refresh')+b('Copy tactical briefing','copy-ops')+b('Review all orders','tab:command')+'</div>';
+    return card('Next 30 minutes | country outlook',body);
+  }
   function operationalQueue(at=Date.now(),coverageOverride=null){
     const items=[],add=(group,id,priority,title,detail,action,source,dueAt=0)=>{
       if(!items.some(x=>x.id===id))items.push({group,id,priority,title,detail,action,source,dueAt});
@@ -3893,7 +3985,7 @@
       'Our roster '+age(state.data.updated.ours)+' | enemy roster '+age(state.data.updated.enemies)+'\n'+
       groups.map(([id,label])=>label+'\n'+tasks.filter(x=>x.group===id).map(x=>
         '- '+x.title+' | '+x.detail+' | '+x.source).join('\n')).join('\n\n')+
-      '\n\nInformation is read-only or local. Timers are last observed estimates; no Torn action is performed.';
+      '\n\n'+warPlanningBrief(at)+'\n\nInformation is read-only or local. Timers are last observed estimates; no Torn action is performed.';
   }
   function operations(){
     const tasks=operationalQueue(),groups=[
@@ -3937,7 +4029,7 @@
           'Drafting is blocked while either roster is missing or older than five minutes.'))+
       '<div class="ws-toolbar">'+b('Draft all '+draft.length+' unique orders locally','draft-black',
         draft.length?'':'disabled')+b('Review manual assignments','tab:command')+'</div>');
-    return html+flightWatchPanel();
+    return html+warPlanningCard()+flightWatchPanel();
   }
   function ledger(){
     const id=positive(state.data.war?.id)||positive(latestFinished('ours')?.id);
@@ -5173,7 +5265,7 @@
       statAction('Enemy hospital',fresh?fmt(enemies.hospital):'Unknown','Watch expiry windows','tab:control')+
       statAction('Enemy active 24h',enemies.total?fmt(enemies.active24)+' / '+fmt(enemies.total):'Unknown','Last actions, not uptime','tab:activity')+
       statAction('Enemy points / hour',pace?.measurable?fmt(pace.rateEnemy):'Unknown','Sampled observations','tab:pace')+'</div>'+
-      hospitalWatchCard()+bonusTargetCard()+
+      warPlanningCard()+hospitalWatchCard()+bonusTargetCard()+
       liveWarImpactSummaryCard()+liveScoringPaceCard(6)+enemyScoreShareCard(10)+leaderboardCard(5)+
       card('Immediate priorities',alerts.length?alerts.map(x=>'<div class="ws-row"><span><b>'+
         esc(x.title)+'</b><br><small>'+esc(x.detail)+'</small></span>'+
@@ -7464,7 +7556,7 @@
     return '<div class="wsnw-radar" aria-label="Live war tactical pulse">'+
       '<span class="wsnw-radar-label">PULSE</span>'+
       item('pulse-heavy','SKULL '+count(p.heavyReady),filter==='heavy')+
-      item('pulse-hospital','H\\u22645 '+count(p.closeExit),filter==='exit5')+
+      item('pulse-hospital','H\u22645 '+count(p.closeExit),filter==='exit5')+
       item('pulse-scorers','SCORERS '+count(p.scorers,p.scanState==='PARTIAL'),filter==='scorers')+
       item('pulse-turtle','UNDER FIRE '+count(p.underFire,p.scanState==='PARTIAL'))+
       '<span class="wsnw-radar-source">'+
