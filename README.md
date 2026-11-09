@@ -1,4 +1,15 @@
-> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v1.6.0). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v1.7.0). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+
+## v1.7.0 - Action-first war command (9 November 2026)
+
+- **Simpler home:** protection priorities and upcoming heavy-target releases come first. Full chain, intelligence and analytics remain under an expandable section. Direct Now / Skulls / Our team / Find navigation is available throughout.
+- **Protect our points:** rank current members by exposed status and captured points conceded, with earned points, recent hits and stale-feed warnings alongside. Defence remains a manual coordination decision.
+- **Black Skulls release queue:** hospitalised heavy targets due within 30 minutes, sorted by expiry with country and assigned hitters. Full queue in squad command; expired timers never become available targets.
+- **Strong-regular threats:** highlight enemies with at least two captured scoring wins against the three strongest known regulars. Excludes Black Skulls from the reference group, marks incomplete data, and does not reconstruct past battle stats.
+- **Cross-war member comparison:** each current member's official points across up to six completed stored own-faction reports, average and change from earlier results. Missing records are unknown, not zero. Reports open directly from column headings.
+- **Since last refresh:** session-local roster status/location changes and observed score differences. Comparisons require fresh sequential roster observations and matching faction/war context; no fabricated activity between refreshes.
+- **Less reopening and scrolling:** expanded sections survive polling and navigation. Setup and long analytics are folded away; all existing deep links, controls, settings, keys and data remain.
+- No new API requests or network permissions. Tests use synthetic players. Browser launch in this workspace was blocked by its socket restriction; actual Torn PDA layout remains to be verified on-device.
 
 ## v1.6.0 - Country outlook and assignment audit (9 November 2026)
 

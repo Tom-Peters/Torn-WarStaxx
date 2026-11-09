@@ -91,7 +91,7 @@ test('Operations tab, manual controls and safe user-script installer remain wire
     "'operations','ledger'"]){
     assert.ok(source.includes(fragment),'Missing integration: '+fragment);
   }
-  assert.match(source,/\/\/ @version\s+1\.6\.0/);
+  assert.match(source,/\/\/ @version\s+1\.7\.0/);
   assert.ok(source.startsWith('// ==UserScript==\n'));
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
@@ -183,4 +183,71 @@ test('assignment audit flags country, availability, energy, collisions and remov
   const stale=m.assignmentAudit(m.at);
   assert.match(stale.rows[0].reasons[0],/Refresh both/);
   assert.doesNotMatch(stale.rows[0].reasons.join(' '),/Different countries/);
+});
+
+export function advancedDeskFixture(){
+  const at=Date.now();
+  const state={data:{war:{id:9},updated:{ours:at,enemies:at,wars:at},
+    ours:[{id:1,name:'Regular Alpha',status:'okay',country:'Torn',bss:100},
+      {id:2,name:'Regular Beta',status:'hospital',country:'Torn',bss:80},
+      {id:3,name:'Skull Gamma',status:'okay',country:'Torn',bss:500}],
+    enemies:[{id:101,name:'Heavy Delta',status:'hospital',country:'Canada',until:at+5*60000},
+      {id:102,name:'Heavy Epsilon',status:'hospital',country:'Torn',until:at+31*60000}],reports:{}}};
+  const cfg={ourId:10,enemyId:20,blackSkulls:{3:true},assignments:{3:101}};
+  const snapshot={complete:false,lastFetch:at,winsByDefender:{1:{101:{wins:2}},2:{101:{wins:1}},3:{102:{wins:9}}}};
+  const impacts={1:{known:true,given:10,earned:30,lastFetch:at,in30:3},2:{known:true,given:100,earned:5,lastFetch:at,in30:5}};
+  const context={state,cfg,snapshot,impacts,MIN:60000,n:v=>Number(v)||0,positive:v=>Number(v)>0?Number(v):0,
+    officialNumber:v=>v===null||v===undefined?null:Number(v),
+    activeWarNow:()=>Boolean(state.data.war),
+    rosterFresh:(side,now=Date.now())=>now-state.data.updated[side]<5*60000,
+    liveWarMemberImpact:id=>impacts[id]||{known:false},memberState:p=>p.status,
+    nativeWarLocation:p=>({country:p.country}),
+    friendlyBattleEstimate:p=>({value:p.bss??null}),concessionSnapshot:()=>snapshot,
+    enemyRoleBands:()=>({heavy:new Set([101,102]),reasons:new Map()}),
+    warScore:()=>state.score||{our:100,enemy:80},fmt:v=>String(Math.round(v*10)/10),age:()=> 'just now',
+    esc:v=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))};
+  const helper=part('  function card(title,body){','  function lastWarLine(');
+  return runInNewContext(helper+part('  function protectionPriorities(','  function warAvailabilityHorizon(')+
+    ';({state,cfg,snapshot,impacts,protectionPriorities,skullReleaseQueue,regularBreakers,recentMemberComparisons,captureDeskSnapshot,recordDeskChanges,decisionDesk,memberComparisonCard})',context);
+}
+test('protection prioritises exposed donors, releases exclude expired and distant targets, and repeat wins exclude skull victims',()=>{
+  const m=advancedDeskFixture(),at=Date.now();
+  assert.equal(m.protectionPriorities(at)[0].player.id,1);
+  assert.equal(m.skullReleaseQueue(at).length,1);
+  assert.equal(m.skullReleaseQueue(at)[0].assigned[0].id,3);
+  assert.equal(m.regularBreakers(at).rows[0].wins,3);
+  assert.equal(m.regularBreakers(at).rows.length,1);
+  m.state.data.updated.enemies=at-6*60000;
+  assert.equal(m.skullReleaseQueue(at).length,0);
+  m.state.data.war=null;
+  assert.equal(m.protectionPriorities(at).length,0);
+  assert.equal(m.regularBreakers(at).rows.length,0);
+});
+test('recent member comparison preserves missing points, excludes active/foreign wars, and compares actual samples',()=>{
+  const m=advancedDeskFixture();
+  const report=(id,end,score,faction=10)=>({id,war:{end},factions:[{id:faction,members:[{id:1,score}]}]});
+  m.state.data.reports={1:report(1,100,20),2:report(2,200,null),3:report(3,300,40),9:report(9,900,999),8:report(8,800,999,77)};
+  const x=m.recentMemberComparisons(),row=x.rows.find(r=>r.player.id===1);
+  assert.equal(x.reports.length,3);assert.equal(row.samples,2);
+  assert.equal(row.average,30);assert.equal(row.change,20);
+  assert.equal(x.rows.find(r=>r.player.id===2).average,null);
+  assert.match(m.memberComparisonCard(),/data-action="war:3"/);
+});
+test('refresh comparison scopes observations and ignores stale/no-refresh baselines',()=>{
+  const m=advancedDeskFixture(),at=Date.now(),before=m.captureDeskSnapshot();
+  m.state.data.enemies[0].status='okay';m.state.data.updated.enemies=at+1;
+  m.recordDeskChanges(before,at+2);
+  assert.equal(m.state.deskChanges.rows[0].id,101);
+  const old=m.captureDeskSnapshot();old.updated.enemies=at-6*60000;
+  m.state.data.updated.enemies=at+3;m.recordDeskChanges(old,at+4);
+  assert.equal(m.state.deskChanges.total,0);
+  m.state.data.war.id=10;m.recordDeskChanges(old,at+5);
+  assert.equal(m.state.deskChanges,null);
+});
+test('decision cards escape player text and retain manual navigation controls',()=>{
+  const m=advancedDeskFixture();m.state.data.ours[0].name='<img onerror="bad">';
+  const html=m.decisionDesk();
+  assert.doesNotMatch(html,/<img/);assert.match(html,/&lt;img/);
+  assert.match(html,/data-action="fast-hit"/);
+  assert.match(html,/data-ws-disclosure="breakers"/);
 });

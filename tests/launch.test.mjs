@@ -18,12 +18,20 @@ class FakeElement {
     if (!this.nodes[sel])this.nodes[sel]=new FakeElement('div');
     return this.nodes[sel];
   }
-  querySelectorAll(){return [];}
+  set innerHTML(value){
+    this.markup=value;
+    this.details=Array.from(String(value).matchAll(/<details([^>]*)>/g),match=>({
+      dataset:{wsDisclosure:match[1].match(/data-ws-disclosure="([^"]+)"/)?.[1]},
+      open:/\sopen(?:\s|$)/.test(match[1])
+    }));
+  }
+  get innerHTML(){return this.markup;}
+  querySelectorAll(selector){return selector==='details'?this.details:[];}
 }
 class FakeEvent {
   constructor(type,{detail}={}){this.type=type;this.detail=detail;}
 }
-function start(path='/factions.php'){
+function start(path='/factions.php',seed={}){
   const listeners={};const events=[];
   const head=new FakeElement('head'),body=new FakeElement('body'),host=new FakeElement('main');
   const doc={
@@ -36,7 +44,7 @@ function start(path='/factions.php'){
   };
   const win={};win.top=win;win.self=win;
   win.addEventListener=()=>{};
-  const localStorage={getItem:()=>null,setItem:()=>{}};
+  const localStorage={getItem:key=>seed[key]?JSON.stringify(seed[key]):null,setItem:()=>{}};
   const timers=[];
   const sandbox={
     document:doc,window:win,location:{hostname:'www.torn.com',pathname:path,search:''},
@@ -79,4 +87,28 @@ test('DOM click launch bridge opens the War interface without CustomEvent commun
  assert.equal(body.child.style.display,'block','DOM .click() opens War modal even without hub events');
  assert.ok(events.some(e=>e.type==='staxx:panel'&&e.detail.id==='war'&&e.detail.open),
   'War acknowledges that its visible panel opened');
+});
+
+
+test('active war home, squad, reports and disclosures render across navigation without losing expansion',()=>{
+ const now=Date.now();
+ const member=(id,name,status)=>({id,name,status,lastAction:'Online',lastAt:now,level:50,statusText:status,until:now+240000});
+ const seed={'warstaxx-config-v1':{ourId:10,enemyId:20,blackSkulls:{3:true},assignments:{3:101}},
+  'warstaxx-data-v1':{ours:[member(1,'Regular Alpha','Okay'),member(3,'Skull Gamma','Okay')],
+    enemies:[member(101,'Heavy Delta','Hospital')],updated:{ours:now,enemies:now,wars:now},
+    war:{id:9,opponentId:20,opponentName:'Example enemy',start:Math.floor(now/1000)-3600,status:'active',factions:[{id:10,score:120},{id:20,score:80}]},
+    reports:{8:{id:8,war:{end:Math.floor(now/1000)-5000},factions:[{id:10,members:[{id:1,name:'Regular Alpha',score:50}]}]}}}};
+ const {doc,body}=start('/index.php',seed),content=body.child.querySelector('.ws-content');
+ const open=section=>doc.dispatchEvent(new FakeEvent('staxx:open',{detail:{id:'war',section}}));
+ open('overview');
+ assert.doesNotMatch(content.innerHTML,/Render error:/);
+ assert.match(content.innerHTML,/Protect our points/);
+ const section=content.querySelectorAll('details').find(x=>x.dataset.wsDisclosure==='live-analysis');
+ assert.equal(section.open,false);section.open=true;
+ open('overview');
+ assert.equal(content.querySelectorAll('details').find(x=>x.dataset.wsDisclosure==='live-analysis').open,true);
+ for(const tab of ['leader','turtle','reports']){open(tab);assert.doesNotMatch(content.innerHTML,/Render error:/);}
+ assert.match(content.innerHTML,/data-action="war:8"/);
+ open('overview');
+ assert.equal(content.querySelectorAll('details').find(x=>x.dataset.wsDisclosure==='live-analysis').open,true);
 });

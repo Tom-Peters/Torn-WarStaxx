@@ -85,7 +85,7 @@ test('high-BSS coverage gaps are prioritised; lower risk labels remain honest',(
 });
 test('distributed Torn PDA userscript is ASCII-only, parser safe and versioned',()=>{
   assert.ok(source.startsWith('// ==UserScript==\n'));
-  assert.match(source,/^\/\/ @version\s+1\.6\.0$/m);
+  assert.match(source,/^\/\/ @version\s+1\.7\.0$/m);
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
 });
