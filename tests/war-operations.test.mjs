@@ -135,7 +135,7 @@ test('all five operations are routed and do not automate Torn gameplay',()=>{
     "action.startsWith('save-readiness:')","action.startsWith('review-debrief:')",
     "action.startsWith('copy-debrief:')","id:'enemy-accelerating'","id:'inbound-return'"])
     assert.ok(source.includes(item),'Missing '+item);
-  assert.match(source,/\/\/ @version\s+2\.0\.0/);
+  assert.match(source,/\/\/ @version\s+2\.1\.0/);
   assert.doesNotThrow(()=>new Script(source));
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
 });

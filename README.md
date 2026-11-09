@@ -1,4 +1,12 @@
-> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v2.0.0). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+> **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v2.1.0). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
+
+## v2.1.0 - One next step (9 November 2026)
+
+- Home now presents one actionable recommendation, one short reason and one primary button. Priorities cover connection, stale data, uncovered imminent heavy-target exits, repeated incoming hits, eligible personal targets and orders needing review. When no suitable hit is verified, it says so explicitly.
+- The score is a quiet context line. Operational cards, country forecasts and supporting tools are behind an optional disclosure instead of competing for attention.
+- Player rows show name, status and one key fact by default; detailed metrics and actions expand on demand.
+- Extra native war pulse counters appear only when Sort / filters is open. The main action has stronger depth, contrast and spacing.
+- Recommendations reuse existing evidence and manual action paths. They do not execute attacks or imply a guaranteed win. Settings and stored intelligence are retained.
 
 ## v2.0.0 - WarStaxx workspace revamp (9 November 2026)
 

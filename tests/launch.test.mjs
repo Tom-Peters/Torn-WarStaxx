@@ -103,11 +103,11 @@ test('active war home, squad, reports and disclosures render across navigation w
  const open=section=>doc.dispatchEvent(new FakeEvent('staxx:open',{detail:{id:'war',section}}));
  open('overview');
  assert.doesNotMatch(content.innerHTML,/Render error:/);
- assert.match(content.innerHTML,/Protect our points/);
- const section=content.querySelectorAll('details').find(x=>x.dataset.wsDisclosure==='country-outlook');
+ assert.match(content.innerHTML,/ws-primary-action/);
+ const section=content.querySelectorAll('details').find(x=>x.dataset.wsDisclosure==='war-evidence');
  assert.equal(section.open,false);section.open=true;
  open('overview');
- assert.equal(content.querySelectorAll('details').find(x=>x.dataset.wsDisclosure==='country-outlook').open,true);
+ assert.equal(content.querySelectorAll('details').find(x=>x.dataset.wsDisclosure==='war-evidence').open,true);
  for(const tab of ['leader','turtle','enemy','reports','archive']){open(tab);assert.doesNotMatch(content.innerHTML,/Render error:/);}
  assert.match(content.innerHTML,/data-action="war:8"/);
  open('enemy');content.scrollTop=314;
@@ -118,6 +118,6 @@ test('active war home, squad, reports and disclosures render across navigation w
  assert.doesNotMatch(content.innerHTML,/Render error:/);
 
  open('overview');
- assert.equal(content.querySelectorAll('details').find(x=>x.dataset.wsDisclosure==='country-outlook').open,true);
+ assert.equal(content.querySelectorAll('details').find(x=>x.dataset.wsDisclosure==='war-evidence').open,true);
  for(const lane of ['mission','skulls','defence','priorities']){click('workspace-lane:'+lane);assert.doesNotMatch(content.innerHTML,/Render error:/);}
 });

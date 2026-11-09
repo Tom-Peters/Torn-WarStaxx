@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      2.0.0
+// @version      2.1.0
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='2.0.0';
+  const id='war', version='2.1.0';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='2.0.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='2.1.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics','dashboard','scouting','archive'];
   const labels={overview:'Live war',enemy:'Players',reports:'Tools & reports',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics',dashboard:'Full dashboard',scouting:'Faction scouting',archive:'Detailed reports'};
@@ -2412,6 +2412,7 @@
     '#warstaxx-root .ws-roster-controls{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px}#warstaxx-root .ws-roster-controls>*{width:100%;min-width:0;min-height:42px}#warstaxx-root .ws-country-title{padding:10px 12px;margin:16px 0 8px;background:#153b56;border-left:4px solid #59d2ef;border-radius:5px;color:#def8ff}#warstaxx-root .ws-player-row{min-width:0;background:#102438;border:1px solid #2b465d;border-radius:11px;padding:11px}#warstaxx-root .ws-player-heading{display:flex;flex-wrap:wrap;align-items:center;gap:6px}#warstaxx-root .ws-player-heading>.ws-btn{font-size:16px;font-weight:800;background:none;border:0;text-align:left;padding:4px 0;color:#c5f1ff;max-width:100%;overflow-wrap:anywhere}#warstaxx-root .ws-player-status{margin-left:auto;font-size:11px;padding:4px 7px;background:#24384b;border-radius:6px}#warstaxx-root .ws-player-status.soon{background:#163e32;color:#86f6b8}#warstaxx-root .ws-player-status.near{background:#513415;color:#ffcc82}#warstaxx-root .ws-skull-mark{background:#6332a0;color:white;border-radius:5px;padding:2px 7px}',
     '#warstaxx-root .ws-player-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:8px 0;padding:9px 0;border-block:1px solid #294256}#warstaxx-root .ws-player-metrics small{display:block;font-size:10px;text-transform:uppercase}#warstaxx-root .ws-player-metrics b{font-size:14px;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}#warstaxx-root .ws-player-foot{display:flex;align-items:center;justify-content:space-between;gap:6px;color:#a7bfd3;font-size:10px}#warstaxx-root .ws-player-row details{margin-bottom:0}#warstaxx-root .ws-player-row summary{font-size:11px;padding:7px 0;min-height:34px}#warstaxx-root .ws-route-back{margin-bottom:8px}#warstaxx-root button:focus-visible,#warstaxx-root summary:focus-visible{outline:2px solid #70dcff;outline-offset:3px}',
     '@media(max-width:680px){#warstaxx-root .ws-content{padding:10px}#warstaxx-root .ws-priority-grid,#warstaxx-root .ws-roster-grid{grid-template-columns:1fr}#warstaxx-root .ws-launch-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#warstaxx-root .ws-roster-controls{grid-template-columns:1fr 1fr}#warstaxx-root .ws-roster-controls input{grid-column:1/-1}#warstaxx-root .ws-tabs button{padding:6px 3px;font-size:12px}#warstaxx-root .ws-segments button{flex:1 0 auto}#warstaxx-root .ws-tool-tile{padding:11px}#warstaxx-root .ws-head small{letter-spacing:0}}',
+    '#warstaxx-root .ws-focus-home{max-width:760px;margin:8px auto}#warstaxx-root .ws-focus-context{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-weight:700;color:#cee8f8;margin:6px 4px 24px}#warstaxx-root .ws-focus-context span{font-size:12px;color:#91abc1;font-weight:400}#warstaxx-root .ws-next-step{position:relative;padding:32px;background:radial-gradient(ellipse at top right,#164f70,transparent 75%),linear-gradient(150deg,#15334f,#0c1e32);border:1px solid #3b7297;border-radius:20px;box-shadow:0 18px 45px #0005}#warstaxx-root .ws-step-marker{display:grid;place-items:center;background:#1b5579;color:#b9eeff;width:40px;height:40px;border-radius:12px;font-size:24px;margin-bottom:18px}#warstaxx-root .ws-next-step.attention{border-left:4px solid #f4aa62}#warstaxx-root .ws-next-step.ready{border-left:4px solid #75dfae}#warstaxx-root .ws-next-step h1{font-size:clamp(25px,5vw,36px);max-width:25ch;margin:0 0 14px}#warstaxx-root .ws-next-step p{font-size:15px;line-height:1.7;max-width:52ch;color:#b8cfe0;margin-bottom:25px}#warstaxx-root .ws-primary-action{display:flex;align-items:center;justify-content:space-between;gap:22px;width:100%;min-height:54px;border:1px solid #75d4ff;border-radius:11px;padding:13px 18px;background:linear-gradient(110deg,#1775ac,#135588);color:white;font-weight:800;box-shadow:0 6px 16px #0004}#warstaxx-root .ws-primary-action:disabled{opacity:.6;cursor:wait}#warstaxx-root .ws-focus-freshness{font-size:11px;text-align:center;color:#8da9bd;margin:14px}#warstaxx-root .ws-focus-extra{margin-top:28px;background:transparent;border-color:#243b50}#warstaxx-root .ws-player-glance{font-size:12px;color:#a9bfd1}#warstaxx-root .ws-focus-extra>summary{font-weight:500} @media(max-width:600px){#warstaxx-root .ws-next-step{padding:23px}#warstaxx-root .ws-focus-context{margin-bottom:18px}}',
     '@media(max-width:420px){#warstaxx-root .ws-head-buttons{flex-shrink:0}#warstaxx-root .ws-head-buttons button{padding:6px 9px;min-width:42px}#warstaxx-root .ws-refresh-label{display:none}#warstaxx-root .ws-head strong{font-size:17px}#warstaxx-root .ws-head small{letter-spacing:0;font-size:8px}#warstaxx-root .ws-row{align-items:flex-start}}'
   ].join('');
   function card(title,body){return '<section class="ws-card"><h2>'+esc(title)+'</h2>'+body+'</section>';}
@@ -6175,35 +6176,49 @@
     return '<header class="ws-workspace-head"><small>'+esc(kicker)+'</small><h1>'+esc(title)+'</h1>'+
       (detail?'<p>'+esc(detail)+'</p>':'')+'</header>';
   }
+  function nextWarStep(){
+    const step=(title,reason,label,action,tone='calm')=>({title,reason,label,action,tone});
+    if(!effectiveKey())return step('Connect WarStaxx', 'Add your Torn API key once so I can show you a useful next step.', 'Connect', 'tab:settings');
+    if(!positive(cfg.ourId))return step('Find your faction', 'Your faction has not been identified yet.', 'Detect faction', 'detect-faction');
+    if(!activeWarNow())return step('Check for a war', 'No current war is confirmed. Check Torn before making a war decision.', 'Check now', 'refresh');
+    if(!rosterFresh('ours')||!rosterFresh('enemies'))return step('Update before acting', 'The roster is too old to recommend a target or defensive action.', 'Update now', 'refresh','attention');
+    const release=skullReleaseQueue().find(x=>x.minutes<=5&&!x.assigned.length);
+    if(release)return step('Cover '+release.player.name,
+      'This Black Skull target has no assigned hitter and its hospital timer ends in about '+release.minutes+'m. Confirm availability after expiry.',
+      'Choose a hitter','tab:command','attention');
+    const exposed=protectionPriorities().find(x=>x.exposed&&x.feedFresh&&x.impact.underFire);
+    if(exposed)return step('Review protection for '+exposed.player.name,
+      'They are exposed and taking repeated hits. Coordinate cover while keeping useful scorers active.',
+      'Review defence','tab:turtle','attention');
+    const mission=myMission();
+    if(mission.target)return step('Review '+mission.target.player.name,
+      mission.hasOrder?'Your saved target passes the current checks. Check the latest status and matchup before attacking.':
+        'This is an eligible option found by your current matchup checks. Review the evidence before deciding to hit.',
+      'Open target','player:'+mission.target.player.id,'ready');
+    if(mission.self.energy!==null&&mission.self.energy<25)return step('Check your energy',
+      'Your last known energy is below the 25 needed for an attack. Review readiness before choosing a hit.',
+      'Review readiness','tab:command');
+    if(mission.hasOrder)return step('Check your saved order',
+      mission.issue||'Your assigned target is not currently verified as suitable.',
+      'Review my order',mission.self.id?'hitter:'+mission.self.id:'tab:matchups','attention');
+    return step('No verified hit right now',
+      'There is not enough evidence for a suitable hit. You do not need to force one; update the information or inspect possible targets.',
+      'Check again','refresh');
+  }
   function warWorkspace(){
-    if(!activeWarNow())return statusNote()+workspaceHeader('WARSTAXX','Ready for the next war',
-      'Connect once. WarStaxx detects your faction and opponent from Torn.')+
-      '<div class="ws-launch-grid">'+workspaceTile('Settings','Connect API / check permissions','settings')+
-      workspaceTile('Players','Browse cached faction rosters','enemy')+
-      workspaceTile('Past wars','Review official results','history')+
-      workspaceTile('Scout opponent','Faction history and activity','scouting')+'</div>'+
-      card('Connection status','<p>'+(!effectiveKey()?'No API key configured. Open Settings to connect.':
-        !positive(cfg.ourId)?'Your faction has not been identified yet. Refresh or review Settings.':
-        'No fresh active war confirmed. Cached information remains available under Players and Reports.')+'</p>'+b('Refresh intelligence','refresh'));
-    const score=warScore(),chain=chainStatus(),tasks=operationalQueue().filter(x=>x.group==='now').slice(0,3);
-    const lanes=[['priorities','Priorities'],['mission','My hit'],['skulls','Black Skulls'],['defence','Defence']];
-    let h=statusNote()+workspaceHeader('LIVE WAR',state.data.war.opponentName||'Opponent faction')+
-      '<div class="ws-scoreboard"><div><small>OUR POINTS</small><strong>'+scoreLabel(score?.our)+'</strong></div>'+
-      '<div><small>NET LEAD</small><strong class="'+(score?.net<0?'ws-negative':'ws-positive')+'">'+
-      (score?(score.net>=0?'+':'')+fmt(score.net):'?')+'</strong></div>'+
-      '<div><small>THEIR POINTS</small><strong>'+scoreLabel(score?.enemy)+'</strong></div></div>'+
-      '<div class="ws-live-meta"><span>'+esc(age(state.data.updated.wars))+' | Target '+scoreLabel(score?.target)+'</span><span>'+esc(chain.fresh?'Chain '+chain.count+' / '+chain.remaining+'s':'Chain unverified')+'</span></div>'+
-      workspaceTabs(lanes,workspace.lane,'workspace-lane:');
-    if(workspace.lane==='mission')return h+missionPanel()+card('Manual actions','<div class="ws-toolbar">'+b('Heal','fast-heal')+b('Turtle','fast-turtle')+b('Find matchup','tab:matchups')+'</div>');
-    if(workspace.lane==='skulls')return h+skullReleaseCard(100)+regularBreakersCard()+
-      '<div class="ws-toolbar">'+b('Manage squad','tab:leader')+b('Assign hitters','tab:command')+b('Copy squad brief','copy-skull-chat')+'</div>';
-    if(workspace.lane==='defence')return h+protectionCard(100)+
-      '<div class="ws-toolbar">'+b('Set defensive duties','tab:turtle')+b('Hospital control','tab:control')+'</div>';
-    return h+'<div class="ws-priority-grid">'+
-      card('Next decisions',tasks.length?tasks.map(x=>'<div class="ws-row"><span><b>'+esc(x.title)+'</b><small>'+esc(x.detail)+'</small></span>'+b('Review',x.action)+'</div>').join(''):empty('No urgent intervention evidenced. Check your mission or browse players.'))+
-      card('Quick actions','<div class="ws-action-grid">'+b('My next hit','workspace-lane:mission')+b('Browse targets','tab:enemy')+b('Orders','tab:command')+b('Copy briefing','copy-ops')+'</div>'+deskChangesCard())+'</div>'+
-      '<div class="ws-priority-grid">'+protectionCard(3)+skullReleaseCard(3)+'</div>'+
-      '<details data-ws-disclosure="country-outlook"><summary>Country outlook / next 30 minutes</summary>'+warPlanningCard()+'</details>';
+    const next=nextWarStep(),live=activeWarNow(),score=live?warScore():null;
+    const situation=score?(score.net>=0?'Leading by ':'Behind by ')+fmt(Math.abs(score.net))+' points':'No confirmed live score';
+    return '<div class="ws-focus-home">'+
+      (state.error?'<p class="ws-note ws-warn" role="alert">'+esc(state.error)+'</p>':'')+
+      '<p class="ws-focus-context">'+esc(live?(state.data.war.opponentName||'Current war'):'WarStaxx')+'<span>'+esc(situation)+'</span></p>'+
+      '<section class="ws-next-step '+next.tone+'"><div class="ws-step-marker" aria-hidden="true">'+
+        (next.tone==='attention'?'!':next.tone==='ready'?'\u2197':'\u2022')+'</div><h1>'+esc(next.title)+'</h1>'+
+      '<p>'+esc(next.reason)+'</p><button class="ws-primary-action" type="button" data-action="'+esc(next.action)+'" '+
+      (state.loading?'disabled':'')+'>'+esc(state.loading?'Updating...':next.label)+' <span aria-hidden="true">\u2192</span></button></section>'+
+      '<p class="ws-focus-freshness">'+(state.loading?'Checking Torn now...':live?'Roster checked '+esc(age(Math.min(n(state.data.updated.ours),n(state.data.updated.enemies)))):'Connect / refresh to check current conditions.')+'</p>'+
+      '<details class="ws-focus-extra" data-ws-disclosure="war-evidence"><summary>Show the wider picture</summary>'+
+      '<div class="ws-toolbar">'+b('Squad command','tab:leader')+b('My mission','workspace-mission')+b('All operations','tab:operations')+'</div>'+
+      (live?deskChangesCard()+warPlanningCard():b('Past wars','tab:history'))+'</details></div>';
   }
   function workspacePlayers(at=Date.now()){
     const side=workspace.side,fresh=rosterFresh(side,at),bands=enemyRoleBands(),q=workspace.query.trim().toLowerCase();
@@ -6246,11 +6261,13 @@
     return '<article class="ws-player-row"><div class="ws-player-heading">'+
       infoButton(p.name,p.id)+(row.skull?'<span class="ws-skull-mark" aria-label="Black Skull">\u2620</span>':'')+
       '<span class="ws-player-status '+tone+'">'+esc(fresh?p.status:'Cached: '+p.status)+(timer?' / '+timer:'')+'</span></div>'+
+      '<p class="ws-player-glance">'+esc(own?'Given '+(!impact.complete&&impact.given!==null?'at least ':'')+scoreLabel(impact.given)+' captured points':strength.short)+'</p>'+
+      '<details data-ws-disclosure="roster-'+side+'-'+p.id+'"><summary>Details and actions</summary>'+
       '<div class="ws-player-metrics">'+(own?metric('Earned',impact.earned)+metric('Given',impact.given)+metric('Net*',impact.net):
         metric('Scored',impact.scored)+metric('Hits',impact.hits)+'<span><small>STRENGTH</small><b>'+esc(strength.short)+'</b></span>')+'</div>'+
       '<div class="ws-player-foot"><span>'+esc(nativeWarLastSeen(p))+'</span><span>'+
       (impact.known?(impact.complete?'Captured feed':'Partial feed')+' / '+age(impact.lastFetch):'Awaiting attacks')+'</span>'+b('Intel','player:'+p.id)+'</div>'+
-      '<details data-ws-disclosure="roster-'+side+'-'+p.id+'"><summary>More / actions</summary><p class="ws-small">'+esc(strength.detail)+
+      '<p class="ws-small">'+esc(strength.detail)+
       '</p>'+(own?'':ffBadge(p.id))+'<div class="ws-toolbar">'+a('Profile',link(p.id))+b('Copy ID','copy-player:'+p.id)+
       (own?b('Matchups','hitter:'+p.id):b(cfg.watchlist[p.id]?'Unwatch':'Watch','watch:'+p.id))+'</div></details></article>';
   }
@@ -6443,6 +6460,7 @@
     event('panel',{id:ID,open:false});
   }
   function handle(action){
+    if(action==='workspace-mission'){const id=positive(state.data.meta?.ownerId);if(id)handle('hitter:'+id);else navigate('matchups');return;}
     if(action==='workspace-back'){workspaceBack();return;}
     if(action.startsWith('workspace-lane:')){
       const value=action.slice(15);if(['priorities','mission','skulls','defence'].includes(value)){workspace.lane=value;render();}return;
@@ -7970,7 +7988,7 @@
         ['offline','Offline'],['heavy','Heavy targets'],['scorers','War scorers'],['assigned','Assigned'],
         ['watched','Watched']].map(x=>
         '<option value="'+x[0]+'" '+(filter===x[0]?'selected':'')+'>'+x[1]+'</option>').join('')+
-      '</select></label></div>'+pulseHtml+
+      '</select></label></div>'+(nativeWarState.toolbarExpanded?pulseHtml:'')+
       (nativeWarState.toolbarExpanded?'<div class="wsnw-extra">'+
         '<button type="button" data-wsnw-action="countries" aria-pressed="'+
           (cfg.nativeWarCountryGroups!==false?'true':'false')+'">'+

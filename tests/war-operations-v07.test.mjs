@@ -91,7 +91,7 @@ test('Operations tab, manual controls and safe user-script installer remain wire
     "'operations','ledger'"]){
     assert.ok(source.includes(fragment),'Missing integration: '+fragment);
   }
-  assert.match(source,/\/\/ @version\s+2\.0\.0/);
+  assert.match(source,/\/\/ @version\s+2\.1\.0/);
   assert.ok(source.startsWith('// ==UserScript==\n'));
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
@@ -278,4 +278,33 @@ test('unified roster blocks live status filters on stale data without hiding cac
  m.workspace.filter='all';assert.equal(m.workspacePlayers().rows.length,4);
  m.workspace.side='ours';m.state.data.ours=[{id:9,name:'Own',country:'Torn',status:'okay'}];m.workspace.sort='net';
  assert.equal(m.workspacePlayers().rows[0].player.id,9);
+});
+
+function nextStepFixture(){
+ const context={cfg:{ourId:10},effectiveKey:()=>true,positive:Number,activeWarNow:()=>true,
+  rosterFresh:()=>true,skullReleaseQueue:()=>[],protectionPriorities:()=>[],
+  myMission:()=>({self:{id:1,energy:100},target:null,hasOrder:false})};
+ const build=()=>runInNewContext(part('  function nextWarStep(){','  function warWorkspace(){')+';nextWarStep()',context);
+ return {context,build};
+}
+test('one-step recommendation gates tactical advice behind connection and fresh data',()=>{
+ const x=nextStepFixture();x.context.effectiveKey=()=>false;
+ assert.equal(x.build().action,'tab:settings');
+ x.context.effectiveKey=()=>true;x.context.rosterFresh=()=>false;
+ x.context.myMission=()=>{throw Error('Stale advice must not evaluate hits');};
+ assert.equal(x.build().action,'refresh');
+});
+test('one-step recommendation prioritises imminent uncovered heavy targets and known repeated pressure',()=>{
+ const x=nextStepFixture();x.context.skullReleaseQueue=()=>[{player:{name:'Example'},minutes:4,assigned:[]}];
+ assert.equal(x.build().action,'tab:command');
+ x.context.skullReleaseQueue=()=>[];
+ x.context.protectionPriorities=()=>[{player:{name:'Example'},exposed:true,feedFresh:true,impact:{underFire:true}}];
+ assert.equal(x.build().action,'tab:turtle');
+});
+test('one-step recommendation opens intelligence for eligible targets and never invents a hit',()=>{
+ const x=nextStepFixture();assert.equal(x.build().title,'No verified hit right now');
+ x.context.myMission=()=>({self:{id:1,energy:100},target:{player:{id:50,name:'Example'}},hasOrder:true});
+ assert.equal(x.build().action,'player:50');
+ x.context.myMission=()=>({self:{id:1,energy:10},target:null,hasOrder:false});
+ assert.equal(x.build().title,'Check your energy');
 });
