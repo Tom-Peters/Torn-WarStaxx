@@ -55,7 +55,7 @@ test('installable userscript starts at byte zero with a complete metadata header
 
 
 test('current version sideband is restricted to War-TornStaxx and keeps credentials private',()=>{
- assert.match(code,/\/\/ @version\s+2\.3\.0/);
+ assert.match(code,/\/\/ @version\s+2\.4\.0/);
  assert.match(code,/tornstaxx-war-runtime-v1/);
  assert.match(code,/__tornstaxxBridge:bridge/);
  assert.match(code,/e\.source&&e\.source!==window/);

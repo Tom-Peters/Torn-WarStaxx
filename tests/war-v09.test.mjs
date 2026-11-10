@@ -120,7 +120,7 @@ test('command strip and item shortcuts are manual, PDA parser safe',()=>{
     "if(action==='war-more')","function strongestVerifiedHit("]){
     assert.ok(source.includes(token),'Missing '+token);
   }
-  assert.match(source,/\/\/ @version\s+2\.3\.0/);
+  assert.match(source,/\/\/ @version\s+2\.4\.0/);
   assert.ok(source.startsWith('// ==UserScript==\n'));
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));

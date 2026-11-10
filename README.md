@@ -1,3 +1,12 @@
+## v2.4.0 - BSE beside player names throughout Torn
+
+- Compact BSE badges attach to visible standard Torn profile-name links, including bounties, people abroad, searches and other player lists. This works without loading a faction roster or being in a war.
+- Tap a badge to expand or collapse its source and estimate age. BSE is estimated total battle stats; the different BSS metric is never substituted. Missing estimates show `BSE ?`, disabled lookups show `BSE off`, and stale estimates are marked.
+- Uses the existing explicit FFScouter opt-in and registered key. Only near-viewport player IDs are fetched, deduplicated into batches of at most 205 at most once per minute. Positive results are cached for 24 hours, missing results for 30 minutes; failures back off and hidden pages do not fetch. The cache is bounded and shared with roster intelligence.
+- Handles list replacements, changed player IDs and navigation without duplicate badges. Attack pages are excluded. Names and their original links remain intact; nothing attacks automatically.
+
+Validation: full Node suite, ASCII/PDA parser checks and DOM fixtures for badge insertion, repeated names, disclosure toggling, row reuse/removal and route cleanup. These are local checks, not a live Torn PDA device test. Update the existing WarStaxx installation; no extra userscript is needed.
+
 ## 2.3.0 - Native action details
 
 Known roster members receive expandable intelligence beside their exact native profile attack link. Shows location/status, strength provenance and last seen evidence, marks stale roster information cached, and opens the player dossier. Unknown profiles and unmatched anchors receive nothing. No extra API calls or automated attacks.

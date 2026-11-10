@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      2.3.0
+// @version      2.4.0
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='2.3.0';
+  const id='war', version='2.4.0';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='2.3.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='2.4.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics','dashboard','scouting','archive'];
   const labels={overview:'Live war',enemy:'Players',reports:'Tools & reports',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics',dashboard:'Full dashboard',scouting:'Faction scouting',archive:'Detailed reports'};
@@ -2210,12 +2210,14 @@
     return result;
   }
   async function refreshFF(force=false){
+    if(pageBseBusy||rosterFFBusy)return;
     if(!cfg.ffEnabled||!cfg.ffConsent||!ffApiKey()||!state.data.enemies.length)return;
     if(!canCall('ffscouter',force?0:10*MIN))return;
     const ids=[...new Set([...state.data.enemies,...state.data.ours].map(p=>p.id).concat(positive(state.data.meta?.ownerId)).filter(Boolean))].slice(0,205);
     if(!ids.length)return;
     const url='https://ffscouter.com/api/v1/get-stats?key='+encodeURIComponent(ffApiKey())+
       '&targets='+ids.join(',');
+    rosterFFBusy=true;
     try{
       await checkFFRegistration();
       const results=await ffRequest(url);
@@ -2234,7 +2236,7 @@
       state.data.backoff.ffscouter={count,until:Date.now()+Math.min(HOUR,2**count*MIN)};
       state.data.errors.ffscouter=String(e.message||e).slice(0,150);
     }
-    save();
+    rosterFFBusy=false;save();
   }
   async function refreshAttacks(){
     if(!cfg.enableAttacks||!activeWarNow()||!positive(cfg.ourId))return;
@@ -6051,7 +6053,7 @@
       '<h3>FFScouter \u00b7 optional, independent service</h3><p>When enabled with explicit consent, WarStaxx uses your registered FFScouter key or your existing Torn PDA key if the separate field is empty. It sends that key and target player IDs to FFScouter, not to TornStaxx hub. You must first register the key with FFScouter. Read the <a href="https://ffscouter.com/#data-policy" target="_blank" rel="noopener noreferrer">FFScouter data policy</a>; free and premium plans may offer different data.</p>'+ 
       '<label>Optional FFScouter-specific API key<input id="ws-ffkey" type="password" autocomplete="off" placeholder="'+(cfg.ffKey?'Separate key saved; blank keeps it':effectiveKey()?'Uses your Torn PDA key when opted in':'Enter a registered key or connect Torn PDA key')+'"></label>'+ 
       '<label><input type="checkbox" id="ws-ff-consent" '+(cfg.ffConsent?'checked':'')+'> I have read the FFScouter data policy and knowingly enable this third-party lookup.</label>'+ 
-      '<label><input type="checkbox" id="ws-ff-enable" '+(cfg.ffEnabled?'checked':'')+'> Show estimated FF next to players and fetch no more than once per 10 minutes.</label>'+
+      '<label><input type="checkbox" id="ws-ff-enable" '+(cfg.ffEnabled?'checked':'')+'> Show FF and BSE estimates. Roster checks every 10 minutes; new visible player IDs in batches at most once per minute, with estimates cached for 24 hours.</label>'+
       '<div class="ws-toolbar">'+b('Save settings','save-settings')+b('Verify FF key','check-ff-key')+b('Refresh FF','refresh-ff')+b('Use PDA key for FF','clear-ff-key')+b('Detect my faction now','detect-faction')+b('Refresh all now','refresh')+b('Clear stored API key','clear-key')+'</div>'+
       '<p class="ws-small">API access depends on your custom key scope. Opponent member lists and ranked-war history use public selections; your own detailed attacks require faction access.</p>')+
       card('Local intelligence controls','<p>War histories, observations and spy reports stay in this device browser storage. Only selected role/order fields sync to an explicitly configured Worker.</p>'+
@@ -7303,6 +7305,58 @@
       source:estimate.source,detail:'Battle Stat Score, not total stats. '+estimate.source};
     return {short:'Stats unknown',source:'None',detail:'No usable current estimate'};
   }
+  // Generic profile links cover bounties, abroad, searches, faction lists and forums.
+  // BSE is a total-stat estimate. Never substitute the different BSS metric.
+  const pageBseRows=new Map();let pageBseBusy=false,rosterFFBusy=false;
+  function pagePlayerId(anchor){
+    try{const u=new URL(anchor.getAttribute('href'),location.href);
+      if(!/^(www\.)?torn\.com$/i.test(u.hostname)||u.protocol!=='https:'||u.pathname.toLowerCase()!=='/profiles.php')return 0;
+      const value=Array.from(u.searchParams).find(([k])=>k.toLowerCase()==='xid')?.[1];
+      return /^[1-9][0-9]{0,9}$/.test(value||'')?Number(value):0;
+    }catch(_){return 0;}
+  }
+  function pageBseValue(id){
+    const x=ffscouter(id);
+    if(x&&Number.isFinite(x.bsEstimate)&&x.bsEstimate>0)return {label:'BSE ~'+nativeCompactTotal(x.bsEstimate),
+      detail:'Estimated total battle stats: '+fmt(x.bsEstimate)+' / FFScouter / '+(ffIsStale(x)?'STALE / ':'')+'estimate updated '+age(x.updatedAt||x.at),stale:ffIsStale(x)};
+    return {label:cfg.ffEnabled&&cfg.ffConsent?'BSE ?':'BSE off',detail:cfg.ffEnabled&&cfg.ffConsent?
+      (state.data.errors.ffscouter||'No total-stat estimate available. Unknown does not mean zero.'):'Enable FFScouter in WarStaxx Settings to look up player estimates.',stale:false};
+  }
+  function syncPageBse(){
+    if(document.hidden)return;
+    const attack=['/attack.php','/attack'].includes(location.pathname.toLowerCase())||(new URLSearchParams(location.search).get('sid')||'').toLowerCase().startsWith('attack');
+    const links=attack?[]:Array.from(document.querySelectorAll('a[href*="profiles.php"]')).filter(a=>
+      a.textContent.trim()&&!a.closest('#warstaxx-root,#staxx-hub-root,#tch-root,#hhj-compact-panel,[contenteditable="true"]')&&a.getClientRects().length).slice(0,1000);
+    const live=new Set(links),ids=new Set();
+    for(const [a,row] of pageBseRows)if(!a.isConnected||!live.has(a)||pagePlayerId(a)!==row.id){row.wrap.remove();pageBseRows.delete(a);}
+    if(!document.getElementById('ws-page-bse-style')){const css=document.createElement('style');css.id='ws-page-bse-style';
+      css.textContent='.ws-page-bse{display:inline;margin-left:4px;font:11px/1.4 system-ui}.ws-page-bse button{display:inline-block;vertical-align:baseline;border:1px solid #416584;border-radius:4px;padding:2px 5px;background:#122e47;color:#9ce5ff;font:inherit;cursor:pointer;touch-action:manipulation}.ws-page-bse[data-stale=true] button{color:#ffcc91}.ws-page-bse small:not([hidden]){display:block;max-width:320px;white-space:normal;padding:5px;background:#10283f;color:#eaf6ff}.ws-page-bse small[hidden]{display:none}';document.head.appendChild(css);}
+    for(const a of links){const id=pagePlayerId(a);if(!id)continue;let row=pageBseRows.get(a);
+      if(!row){const wrap=document.createElement('span');wrap.className='ws-page-bse';const button=document.createElement('button'),detail=document.createElement('small');
+        button.type='button';button.setAttribute('aria-expanded','false');detail.hidden=true;
+        button.onclick=e=>{e.preventDefault();e.stopPropagation();detail.hidden=!detail.hidden;button.setAttribute('aria-expanded',String(!detail.hidden));};
+        wrap.append(button,detail);a.insertAdjacentElement('afterend',wrap);row={id,wrap,button,detail};pageBseRows.set(a,row);}
+      const value=pageBseValue(id);row.button.textContent=value.label;row.button.setAttribute('aria-label',value.label+' for '+a.textContent.trim());row.detail.textContent=value.detail;row.wrap.dataset.stale=String(value.stale);
+      if(row.wrap.previousElementSibling!==a)a.insertAdjacentElement('afterend',row.wrap);
+      const r=a.getBoundingClientRect();if(r.bottom>=-300&&r.top<window.innerHeight+600)ids.add(id);
+    }
+    void refreshPageBse(Array.from(ids));
+  }
+  async function refreshPageBse(ids){
+    if(document.hidden||pageBseBusy||rosterFFBusy||!cfg.ffEnabled||!cfg.ffConsent||!ffApiKey()||!canCall('ffscouter')||!canCall('fflists',MIN))return;
+    const now=Date.now(),key=ffApiKey(),needed=[...new Set(ids)].filter(id=>Number.isSafeInteger(id)&&id>0).filter(id=>{const x=state.data.ffstats[id];return !x||now-n(x.at)>(x.bsEstimate>0?24*HOUR:30*MIN);}).slice(0,205);
+    if(!needed.length)return;
+    pageBseBusy=true;state.data.updated.fflists=now;
+    try{await checkFFRegistration();if(document.hidden||!cfg.ffEnabled||!cfg.ffConsent||ffApiKey()!==key)return;
+      const parsed=parseFFRows(await ffRequest('https://ffscouter.com/api/v1/get-stats?key='+encodeURIComponent(key)+'&targets='+needed.join(',')),needed);
+      if(!cfg.ffEnabled||!cfg.ffConsent||ffApiKey()!==key)return;
+      Object.assign(state.data.ffstats,parsed);delete state.data.errors.ffscouter;delete state.data.backoff.ffscouter;
+      const oldest=Object.keys(state.data.ffstats).sort((a,b)=>n(state.data.ffstats[b].at)-n(state.data.ffstats[a].at));
+      for(const id of oldest.slice(5000))delete state.data.ffstats[id];
+    }catch(e){const count=Math.min(6,n(state.data.backoff.ffscouter?.count)+1);
+      state.data.backoff.ffscouter={count,until:Date.now()+Math.min(HOUR,2**count*MIN)};state.data.errors.ffscouter=String(e.message||e).slice(0,150);
+    }finally{pageBseBusy=false;save();}
+  }
   function syncNativeProfile(){
     let box=document.getElementById('warstaxx-profile-detail');
     const id=positive(new URLSearchParams(location.search).get('XID'));
@@ -8508,7 +8562,7 @@
     if(!document.body){document.addEventListener('DOMContentLoaded',boot,{once:true});return;}
     styleSheet();document.body.appendChild(root);
     // Show a low-profile, on-page fallback on faction routes; never create another floating FAB.
-    renderWarStrip();mountFactionShortcut();syncNativeWar();
+    renderWarStrip();mountFactionShortcut();syncNativeWar();syncPageBse();
     if(!root.querySelector('.ws-panel')||!root.querySelector('.ws-tabs')||
        !root.querySelector('.ws-content')||!root.querySelector('.ws-sync'))
        throw new Error('War panel elements are missing');
@@ -8530,7 +8584,9 @@
   }},45000);
   const warStripTimer=setInterval(()=>{if(!document.hidden)renderWarStrip();},10000);
   const hospitalClockTimer=setInterval(()=>{if(!document.hidden)updateHospitalCountdowns();},10000);
-  const nativeWarTimer=setInterval(()=>{if(!document.hidden){syncNativeWar();syncNativeProfile();}},5000);
+  const nativeWarTimer=setInterval(()=>{if(!document.hidden){syncNativeWar();syncNativeProfile();syncPageBse();}},5000);
+  window.addEventListener('hashchange',syncPageBse);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncPageBse();});
   const nativeWarClock=setInterval(tickNativeWar,1000);
   const nativeWarPolling=setInterval(()=>{if(!document.hidden)pollNativeWar();},20000);
   // Torn can navigate to an attack without a full reload.
