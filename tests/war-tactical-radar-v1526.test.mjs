@@ -61,10 +61,10 @@ test('stale rosters never invent counts or claim confirmed zeros',()=>{
 });
 test('published script, loader, application and package share one release version',()=>{
   const packageJson=JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8'));
-  assert.match(source,/^\/\/ @version\s+2\.1\.0$/m);
-  assert.match(source,/const id='war', version='2\.1\.0';/);
-  assert.match(source,/const ID='war', VER='2\.1\.0'/);
-  assert.equal(packageJson.version,'2.1.0');
+  assert.match(source,/^\/\/ @version\s+2\.2\.0$/m);
+  assert.match(source,/const id='war', version='2\.2\.0';/);
+  assert.match(source,/const ID='war', VER='2\.2\.0'/);
+  assert.equal(packageJson.version,'2.2.0');
   assert.doesNotMatch(source,/[^\x00-\x7f]/,'Torn PDA must parse ASCII-only userscript source');
   assert.doesNotThrow(()=>new Script(source));
 });

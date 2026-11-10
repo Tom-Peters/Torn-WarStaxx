@@ -26,9 +26,9 @@ test('attack routes suppress the banner for all modes while faction/item routes 
     assert.equal(mode('https://www.torn.com/factions.php',scope,true),'full');
     assert.equal(mode('https://www.torn.com/item.php',scope,false,'heal'),'full');
   }
-  assert.equal(mode('https://www.torn.com/index.php'),'mini');
+  assert.equal(mode('https://www.torn.com/index.php'),'hidden');
   assert.equal(mode('https://www.torn.com/index.php','faction'),'hidden');
-  assert.equal(mode('https://www.torn.com/index.php','everywhere'),'full');
+  assert.equal(mode('https://www.torn.com/index.php','everywhere'),'hidden');
 });
 test('render guard removes the attack bar before mounting it and leaves the hub separate',()=>{
   const render=region('  function renderWarStrip(force=false){','  function confirmed(message){');

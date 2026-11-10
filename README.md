@@ -1,3 +1,9 @@
+## 2.2.0 - Workspace and native-page separation
+
+Preserves the recently redesigned next-step workspace and player roster. The full tools directory is grouped into expandable Command / Performance / Intelligence / Setup sections. Native player intelligence remains on ranked-war lists. Generic war banners no longer appear on unrelated Torn pages, even with a saved everywhere preference. Faction and explicitly requested war-item controls remain available.
+
+Validated with existing regression suites, parser checks and DOM integration scenarios. Live Torn PDA visual/device validation remains separate.
+
 > **Now part of TornStaxx 4.0:** This specialist module is displayed in Torn PDA as **War-TornStaxx** (v2.1.0). The shared command centre has moved to the standalone fifth userscript, [TornStaxx](https://github.com/Tom-Peters/TornStaxx). Install its [raw hub installer](https://raw.githubusercontent.com/Tom-Peters/TornStaxx/main/TornStaxx.user.js) once, then update this module from its **unchanged** [raw userscript URL](https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js). Existing domain functions, local data and API key settings remain in the specialist script. Repository rename will be handled separately.
 
 ## v2.1.0 - One next step (9 November 2026)

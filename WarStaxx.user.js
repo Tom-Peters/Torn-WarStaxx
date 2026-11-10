@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      2.1.0
+// @version      2.2.0
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='2.1.0';
+  const id='war', version='2.2.0';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='2.1.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='2.2.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics','dashboard','scouting','archive'];
   const labels={overview:'Live war',enemy:'Players',reports:'Tools & reports',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics',dashboard:'Full dashboard',scouting:'Faction scouting',archive:'Detailed reports'};
@@ -3341,7 +3341,7 @@
     if(isNativeWarPage()&&cfg.nativeWarEnabled!==false)return 'hidden';
     if(factionRoute()||(path==='/item.php'&&itemIntent()))return 'full';
     if(cfg.warStripScope==='faction')return 'hidden';
-    return cfg.warStripScope==='everywhere'?'full':'mini';
+    return 'hidden'; // No unrelated-page war banner, including old everywhere preferences.
   }
   function handleWarScroll(e){
     // Never resize the compact war commands on page scroll.
@@ -6036,9 +6036,9 @@
         '<option value="'+value+'" '+((cfg.nativeWarSort||'availability')===value?'selected':'')+'>'+label+'</option>').join('')+
       '</select></label><p class="ws-small">Native controls appear inside Torn faction ranked-war lists, not on attack pages. If TWSE or FFScouter is sorting, WarStaxx will not override their order. Official read-only status polls every 20 seconds while the ranked-war page is visible; Torn API backoff is respected.</p>'+
       '<label>War bar visibility<select id="ws-strip-scope">'+
-      [['contextual','Compact summary outside war pages (recommended)'],
-       ['faction','Only show on faction / war pages'],
-       ['everywhere','Full bar elsewhere (never while attacking)']].map(([value,label])=>
+      [['contextual','Relevant faction and war-item controls'],
+       ['faction','Faction / war pages'],
+       ['everywhere','Legacy setting (now relevant pages only)']].map(([value,label])=>
          '<option value="'+value+'" '+((cfg.warStripScope||'contextual')===value?'selected':'')+'>'+label+'</option>').join('')+
       '</select></label><p class="ws-small">WarStaxx always hides the bar on the Torn attack screen. The TornStaxx launcher remains available.</p>'+
       '<label>Automatic refresh<select id="ws-interval">'+[90,120,180,300].map(s=>'<option value="'+s+'" '+(cfg.refreshSeconds===s?'selected':'')+'>'+s+' seconds while visible</option>').join('')+'</select></label>'+
@@ -6316,8 +6316,8 @@
       ['Quick commander','Compact member controls','commander'],['Saved assignments','Review stored orders','assignments']]]];
     return statusNote()+workspaceHeader('TOOLS & REPORTS','Everything has a place.', 'Choose a task. Your existing intelligence and controls are retained.')+
       '<div class="ws-toolbar">'+b('Find a player or tool','find')+b('Refresh reports','refresh')+'</div>'+
-      groups.map(([name,items])=>'<section class="ws-tool-group"><h2>'+name+'</h2><div class="ws-launch-grid">'+
-        items.map(([title,detail,tab])=>workspaceTile(title,detail,tab)).join('')+'</div></section>').join('');
+      groups.map(([name,items])=>'<details class="ws-tool-group" data-ws-disclosure="tools-'+name+'"><summary>'+name+' / '+items.length+' tools</summary><div class="ws-launch-grid">'+
+        items.map(([title,detail,tab])=>workspaceTile(title,detail,tab)).join('')+'</div></details>').join('');
   }
   const disclosureViews=new Map();
   let previousDisclosureView=null;
