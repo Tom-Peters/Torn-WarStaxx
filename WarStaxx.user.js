@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      2.2.0
+// @version      2.3.0
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='2.2.0';
+  const id='war', version='2.3.0';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='2.2.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='2.3.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics','dashboard','scouting','archive'];
   const labels={overview:'Live war',enemy:'Players',reports:'Tools & reports',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics',dashboard:'Full dashboard',scouting:'Faction scouting',archive:'Detailed reports'};
@@ -7303,6 +7303,28 @@
       source:estimate.source,detail:'Battle Stat Score, not total stats. '+estimate.source};
     return {short:'Stats unknown',source:'None',detail:'No usable current estimate'};
   }
+  function syncNativeProfile(){
+    let box=document.getElementById('warstaxx-profile-detail');
+    const id=positive(new URLSearchParams(location.search).get('XID'));
+    const side=state.data.enemies.some(p=>p.id===id)?'enemies':state.data.ours.some(p=>p.id===id)?'ours':null;
+    if(location.pathname!=='/profiles.php'||!id||!side||cfg.nativeWarEnabled===false){box?.remove();return;}
+    const anchor=Array.from(document.querySelectorAll('a[href]')).find(a=>{
+      try{const u=new URL(a.href,location.origin);return u.origin===location.origin&&positive(u.searchParams.get('user2ID'))===id&&
+        (u.pathname==='/attack.php'||u.searchParams.get('sid')==='attack');}catch(_){return false;}
+    });
+    if(!anchor){box?.remove();return;}
+    const p=state.data[side].find(p=>p.id===id),strength=nativeWarStrength(p),fresh=rosterFresh(side);
+    const text=(fresh?'':'Cached roster / ')+nativeWarLocation(p).country+' / '+p.status+' / '+strength.short;
+    const signature=JSON.stringify([id,text,strength.detail,side]);
+    if(box?.dataset.signature===signature&&box.previousElementSibling===anchor)return;
+    box?.remove();box=document.createElement('details');box.id='warstaxx-profile-detail';box.dataset.signature=signature;
+    box.style.cssText='display:block;clear:both;margin:8px 0;padding:8px;border:1px solid #355d7a;border-radius:6px;background:#10283f;color:#eaf6ff;font:12px/1.5 system-ui';
+    const summary=document.createElement('summary');summary.textContent='WarStaxx / '+text;
+    const evidence=document.createElement('p');evidence.textContent=strength.detail+' / '+nativeWarLastSeen(p);
+    const button=document.createElement('button');button.type='button';button.textContent='Open player intelligence';
+    button.onclick=()=>{open({section:'targets'});state.chosen=id;state.playerOpen=true;render();};
+    box.append(summary,evidence,button);anchor.insertAdjacentElement('afterend',box);
+  }
   function nativeWarHospitalTier(until,at=Date.now()){
     const remaining=positive(until)-at;
     if(!positive(until)||remaining<=0)return '';
@@ -8508,7 +8530,7 @@
   }},45000);
   const warStripTimer=setInterval(()=>{if(!document.hidden)renderWarStrip();},10000);
   const hospitalClockTimer=setInterval(()=>{if(!document.hidden)updateHospitalCountdowns();},10000);
-  const nativeWarTimer=setInterval(()=>{if(!document.hidden)syncNativeWar();},5000);
+  const nativeWarTimer=setInterval(()=>{if(!document.hidden){syncNativeWar();syncNativeProfile();}},5000);
   const nativeWarClock=setInterval(tickNativeWar,1000);
   const nativeWarPolling=setInterval(()=>{if(!document.hidden)pollNativeWar();},20000);
   // Torn can navigate to an attack without a full reload.

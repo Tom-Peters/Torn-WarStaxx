@@ -1,3 +1,7 @@
+## 2.3.0 - Native action details
+
+Known roster members receive expandable intelligence beside their exact native profile attack link. Shows location/status, strength provenance and last seen evidence, marks stale roster information cached, and opens the player dossier. Unknown profiles and unmatched anchors receive nothing. No extra API calls or automated attacks.
+
 ## 2.2.0 - Workspace and native-page separation
 
 Preserves the recently redesigned next-step workspace and player roster. The full tools directory is grouped into expandable Command / Performance / Intelligence / Setup sections. Native player intelligence remains on ranked-war lists. Generic war banners no longer appear on unrelated Torn pages, even with a saved everywhere preference. Faction and explicitly requested war-item controls remain available.
