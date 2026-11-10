@@ -102,9 +102,19 @@ test('FF is next to player names and remains distinct from team-specific matchup
 });
 test('distributed PDA source and smart-quote normalisation are parser-safe',()=>{
   assert.ok(source.startsWith('// ==UserScript==\n'));
-  assert.match(source,/\/\/ @version\s+2\.4\.0/);
+  assert.match(source,/\/\/ @version\s+2\.4\.1/);
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
   const normalised=source.replace(/[\u2018\u2019]/gu,"'").replace(/[\u201c\u201d]/gu,'"');
   assert.doesNotThrow(()=>new Script(normalised));
+});
+
+test('selected nested provider estimate fills absent fields without borrowing another source',()=>{
+ const v=ffFixture(),rows=v.parseFFRows([
+  {player_id:101,source:'bss',available_estimates:{bss:{fair_fight:2.34,bs_estimate:120000,bss_public:700,last_updated:1794300000},premium:{fair_fight:9.99,bs_estimate:999999}}},
+  {player_id:102,source:'premium',fair_fight:1.5,bs_estimate:100,available_estimates:{premium:{fair_fight:8,bs_estimate:800}}},
+  {player_id:103,source:'spies',available_estimates:{bss:{fair_fight:2,bs_estimate:123}}}
+ ],[101,102,103]);
+ assert.equal(rows[101].ff,2.34);assert.equal(rows[101].bsEstimate,120000);assert.equal(rows[101].updatedAt,1794300000000);
+ assert.equal(rows[102].ff,1.5);assert.equal(rows[102].bsEstimate,100);assert.equal(rows[103].ff,null);assert.equal(rows[103].bsEstimate,null);
 });

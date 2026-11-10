@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      2.4.0
+// @version      2.4.1
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='2.4.0';
+  const id='war', version='2.4.1';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='2.4.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='2.4.1', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics','dashboard','scouting','archive'];
   const labels={overview:'Live war',enemy:'Players',reports:'Tools & reports',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics',dashboard:'Full dashboard',scouting:'Faction scouting',archive:'Detailed reports'};
@@ -1019,13 +1019,14 @@
     for(const p of rows){
       const id=positive(p?.player_id);
       if(!allowed.has(id))continue;
-      const ff=validScouterFF(p?.fair_fight);
-      const bss=Number(p?.bss_public),estimate=Number(p?.bs_estimate);
+      const chosen=['bss','premium','spies'].includes(p?.source)?p?.available_estimates?.[p.source]:null;
+      const ff=validScouterFF(p?.fair_fight??chosen?.fair_fight);
+      const bss=Number(p?.bss_public??chosen?.bss_public),estimate=Number(p?.bs_estimate??chosen?.bs_estimate);
       out[id]={ff,bss:Number.isFinite(bss)&&bss>0?bss:null,
         bsEstimate:Number.isFinite(estimate)&&estimate>0?estimate:null,
-        bsHuman:String(p?.bs_estimate_human||'').slice(0,70),
+        bsHuman:String(p?.bs_estimate_human||chosen?.bs_estimate_human||'').slice(0,70),
         source:String(p?.source||'public estimate').slice(0,35),
-        updatedAt:ffTimestamp(p?.last_updated),
+        updatedAt:ffTimestamp(p?.last_updated??chosen?.last_updated),
         premium:Boolean(p?.premium_insights_available),
         missing:ff===null&&!(Number.isFinite(bss)&&bss>0),
         at};
@@ -7315,38 +7316,61 @@
       return /^[1-9][0-9]{0,9}$/.test(value||'')?Number(value):0;
     }catch(_){return 0;}
   }
+  function pagePlayerName(anchor){
+    // Profile-action links are not names (e.g. the PDA mini-profile footer).
+    const text=String(anchor.textContent||'').trim();
+    return /^[A-Za-z0-9_-]{1,40}(?:\s*\[\d+\])?$/.test(text)&&
+      !anchor.closest('[role="tooltip"],[role="menu"],.ws-page-bse,#warstaxx-root,#staxx-hub-root,#tch-root,#hhj-compact-panel,[contenteditable="true"]');
+  }
+  function pageLookupStatus(id){
+    if(!cfg.ffEnabled||!cfg.ffConsent)return {mark:'off',detail:'Enable FFScouter in WarStaxx Settings to look up player estimates.'};
+    if(!ffApiKey())return {mark:'!',detail:'No FFScouter key available. Check WarStaxx Settings.'};
+    if(state.data.errors.ffscouter)return {mark:'!',detail:state.data.errors.ffscouter+' / Open WarStaxx Settings to verify the registered key. Failed lookups retry with backoff.'};
+    if(!state.data.ffstats[id])return {mark:'...',detail:pageBseBusy?'Fetching player estimates...':'Waiting for a visible-player lookup. New IDs are checked in rate-limited batches.'};
+    return {mark:'?',detail:'FFScouter has no usable estimate for this value. Unknown does not mean zero.'};
+  }
   function pageBseValue(id){
     const x=ffscouter(id);
     if(x&&Number.isFinite(x.bsEstimate)&&x.bsEstimate>0)return {label:'BSE ~'+nativeCompactTotal(x.bsEstimate),
       detail:'Estimated total battle stats: '+fmt(x.bsEstimate)+' / FFScouter / '+(ffIsStale(x)?'STALE / ':'')+'estimate updated '+age(x.updatedAt||x.at),stale:ffIsStale(x)};
-    return {label:cfg.ffEnabled&&cfg.ffConsent?'BSE ?':'BSE off',detail:cfg.ffEnabled&&cfg.ffConsent?
-      (state.data.errors.ffscouter||'No total-stat estimate available. Unknown does not mean zero.'):'Enable FFScouter in WarStaxx Settings to look up player estimates.',stale:false};
+    const status=pageLookupStatus(id);
+    return {label:'BSE '+status.mark,detail:status.detail,stale:false};
   }
-  function syncPageBse(){
+  function pageFfsValue(id){
+    // Never use observed team FF as an API-key-owner matchup.
+    const x=ffscouter(id),ff=x?.ff;
+    if(!Number.isFinite(ff)||ff<1){const status=pageLookupStatus(id);return {label:'FFS '+status.mark,band:'unknown',detail:status.detail};}
+    const stale=ffIsStale(x),band=stale?'stale':ff<=2?'easy':ff<=3.5?'moderate':ff<=4.5?'hard':'extreme';
+    const names={easy:'Easier estimate',moderate:'Moderate estimate',hard:'Difficult estimate',extreme:'Very difficult estimate',stale:'Stale estimate - refresh before judging'};
+    return {label:'FFS '+ff.toFixed(2)+(stale?'*':''),band,detail:names[band]+' / FFScouter calculated Fair Fight for the API-key owner. Not a win guarantee; equipment and bonuses matter. Values above 3 are uncapped estimates, not awarded Torn FF. Updated '+age(x.updatedAt||x.at)+'. Green <=2; cyan >2 to 3.5; orange >3.5 to 4.5; red >4.5.'};
+  }
+  function syncPageBse(fetchData=true){
     if(document.hidden)return;
     const attack=['/attack.php','/attack'].includes(location.pathname.toLowerCase())||(new URLSearchParams(location.search).get('sid')||'').toLowerCase().startsWith('attack');
-    const links=attack?[]:Array.from(document.querySelectorAll('a[href*="profiles.php"]')).filter(a=>
-      a.textContent.trim()&&!a.closest('#warstaxx-root,#staxx-hub-root,#tch-root,#hhj-compact-panel,[contenteditable="true"]')&&a.getClientRects().length).slice(0,1000);
+    const links=attack?[]:Array.from(document.querySelectorAll('a[href*="profiles.php" i]')).filter(a=>
+      pagePlayerName(a)&&a.getClientRects().length).slice(0,1000);
     const live=new Set(links),ids=new Set();
     for(const [a,row] of pageBseRows)if(!a.isConnected||!live.has(a)||pagePlayerId(a)!==row.id){row.wrap.remove();pageBseRows.delete(a);}
     if(!document.getElementById('ws-page-bse-style')){const css=document.createElement('style');css.id='ws-page-bse-style';
-      css.textContent='.ws-page-bse{display:inline;margin-left:4px;font:11px/1.4 system-ui}.ws-page-bse button{display:inline-block;vertical-align:baseline;border:1px solid #416584;border-radius:4px;padding:2px 5px;background:#122e47;color:#9ce5ff;font:inherit;cursor:pointer;touch-action:manipulation}.ws-page-bse[data-stale=true] button{color:#ffcc91}.ws-page-bse small:not([hidden]){display:block;max-width:320px;white-space:normal;padding:5px;background:#10283f;color:#eaf6ff}.ws-page-bse small[hidden]{display:none}';document.head.appendChild(css);}
+      css.textContent='.ws-page-bse{display:inline-block;position:static;vertical-align:middle;margin:2px 0 2px 4px;max-width:100%;font:11px/1.4 system-ui}.ws-page-bse>button{display:inline-flex;position:static;float:none;align-items:center;gap:0;width:auto;min-width:0;height:auto;min-height:24px;margin:0;border:1px solid #416584;border-radius:4px;padding:0;background:#122e47;color:#c6eaff;font:inherit;white-space:nowrap;cursor:pointer;touch-action:manipulation}.ws-page-bse .ws-page-ffs,.ws-page-bse .ws-page-total{display:inline-block;position:static;padding:3px 4px;white-space:nowrap}.ws-page-ffs{font-weight:700;border-right:1px solid #416584}.ws-page-ffs[data-band=easy]{background:#164e3a;color:#bdffdb}.ws-page-ffs[data-band=moderate]{background:#103e5a;color:#b8eeff}.ws-page-ffs[data-band=hard]{background:#64350e;color:#ffe0bc}.ws-page-ffs[data-band=extreme]{background:#681f32;color:#ffd5dc}.ws-page-ffs[data-band=unknown],.ws-page-ffs[data-band=stale]{background:#303b49;color:#e0e5ec}.ws-page-bse[data-stale=true] .ws-page-total{color:#cbd2db}.ws-page-bse small:not([hidden]){display:block;max-width:280px;white-space:normal;padding:7px;background:#10283f;color:#eaf6ff;line-height:1.5}.ws-page-bse small[hidden]{display:none}.ws-page-bse>button:focus-visible{outline:2px solid #a8e9ff;outline-offset:2px}';document.head.appendChild(css);}
     for(const a of links){const id=pagePlayerId(a);if(!id)continue;let row=pageBseRows.get(a);
-      if(!row){const wrap=document.createElement('span');wrap.className='ws-page-bse';const button=document.createElement('button'),detail=document.createElement('small');
+      if(!row){const wrap=document.createElement('span');wrap.className='ws-page-bse';const button=document.createElement('button'),detail=document.createElement('small'),ffs=document.createElement('span'),total=document.createElement('span');
+        ffs.className='ws-page-ffs';total.className='ws-page-total';button.append(ffs,total);
         button.type='button';button.setAttribute('aria-expanded','false');detail.hidden=true;
         button.onclick=e=>{e.preventDefault();e.stopPropagation();detail.hidden=!detail.hidden;button.setAttribute('aria-expanded',String(!detail.hidden));};
-        wrap.append(button,detail);a.insertAdjacentElement('afterend',wrap);row={id,wrap,button,detail};pageBseRows.set(a,row);}
-      const value=pageBseValue(id);row.button.textContent=value.label;row.button.setAttribute('aria-label',value.label+' for '+a.textContent.trim());row.detail.textContent=value.detail;row.wrap.dataset.stale=String(value.stale);
+        wrap.append(button,detail);a.insertAdjacentElement('afterend',wrap);row={id,wrap,button,detail,ffs,total};pageBseRows.set(a,row);}
+      const value=pageBseValue(id),fair=pageFfsValue(id);row.total.textContent=value.label;row.ffs.textContent=fair.label;row.ffs.dataset.band=fair.band;
+      row.button.setAttribute('aria-label',fair.label+' / '+value.label+' for '+a.textContent.trim()+'. '+fair.band+'. Tap for details.');row.detail.textContent=fair.detail+' '+value.detail;row.wrap.dataset.stale=String(value.stale);
       if(row.wrap.previousElementSibling!==a)a.insertAdjacentElement('afterend',row.wrap);
       const r=a.getBoundingClientRect();if(r.bottom>=-300&&r.top<window.innerHeight+600)ids.add(id);
     }
-    void refreshPageBse(Array.from(ids));
+    if(fetchData)void refreshPageBse(Array.from(ids));
   }
   async function refreshPageBse(ids){
     if(document.hidden||pageBseBusy||rosterFFBusy||!cfg.ffEnabled||!cfg.ffConsent||!ffApiKey()||!canCall('ffscouter')||!canCall('fflists',MIN))return;
-    const now=Date.now(),key=ffApiKey(),needed=[...new Set(ids)].filter(id=>Number.isSafeInteger(id)&&id>0).filter(id=>{const x=state.data.ffstats[id];return !x||now-n(x.at)>(x.bsEstimate>0?24*HOUR:30*MIN);}).slice(0,205);
+    const now=Date.now(),key=ffApiKey(),needed=[...new Set(ids)].filter(id=>Number.isSafeInteger(id)&&id>0).filter(id=>{const x=state.data.ffstats[id];return !x||now-n(x.at)>(x.bsEstimate>0&&Number.isFinite(x.ff)&&x.ff>=1?24*HOUR:30*MIN);}).slice(0,205);
     if(!needed.length)return;
-    pageBseBusy=true;state.data.updated.fflists=now;
+    pageBseBusy=true;state.data.updated.fflists=now;if(pageBseRows.size)syncPageBse(false);
     try{await checkFFRegistration();if(document.hidden||!cfg.ffEnabled||!cfg.ffConsent||ffApiKey()!==key)return;
       const parsed=parseFFRows(await ffRequest('https://ffscouter.com/api/v1/get-stats?key='+encodeURIComponent(key)+'&targets='+needed.join(',')),needed);
       if(!cfg.ffEnabled||!cfg.ffConsent||ffApiKey()!==key)return;
@@ -7355,7 +7379,7 @@
       for(const id of oldest.slice(5000))delete state.data.ffstats[id];
     }catch(e){const count=Math.min(6,n(state.data.backoff.ffscouter?.count)+1);
       state.data.backoff.ffscouter={count,until:Date.now()+Math.min(HOUR,2**count*MIN)};state.data.errors.ffscouter=String(e.message||e).slice(0,150);
-    }finally{pageBseBusy=false;save();}
+    }finally{pageBseBusy=false;save();if(pageBseRows.size)syncPageBse(false);}
   }
   function syncNativeProfile(){
     let box=document.getElementById('warstaxx-profile-detail');

@@ -1,3 +1,21 @@
+## v2.4.1 - colour-coded FFS for native target hunting
+
+Player-name badges now pair **FFS** with **BSE** on bounties, people abroad and other supported native lists. The compact badge expands on tap, showing the estimate source/age and a colour legend. Profile action links such as `View profile` and `New tab` no longer receive badges.
+
+| FFS estimate | Colour | Meaning |
+|---|---|---|
+| 1 to 2 | Green | Easier estimate |
+| Over 2 to 3.5 | Cyan | Moderate estimate |
+| Over 3.5 to 4.5 | Orange | Difficult estimate |
+| Over 4.5 | Red | Very difficult estimate |
+| Stale or missing | Grey | No current difficulty colour |
+
+Bands follow [FFScouter's published guide](https://ffscouter.com/guides/fair-fight-explained). FFS is calculated for the API-key owner, remains uncapped above 3 and is not a win guarantee. Observed faction attack FF is never substituted into a personal hunting badge. Numeric values remain visible, so the colours are not the only cue.
+
+Waiting (`...`), provider errors (`!`), unavailable estimates (`?`) and disabled lookups (`off`) are distinct. Tap an error badge for the reason; existing permission and registration settings are respected. Badges repaint as soon as a lookup completes. Partial records are retried after 30 minutes, while complete records use the existing 24-hour cache. The parser supports fields from the provider's selected nested estimate when the top-level equivalent is absent; it never borrows an unrelated model.
+
+Validation: automated colour-boundary, uncapped/stale/unknown, parser and cache checks plus DOM fixtures for combined badges, popup-action exclusion, toggling, recycled rows and route cleanup. No live Torn PDA account test is claimed.
+
 ## v2.4.0 - BSE beside player names throughout Torn
 
 - Compact BSE badges attach to visible standard Torn profile-name links, including bounties, people abroad, searches and other player lists. This works without loading a faction roster or being in a war.

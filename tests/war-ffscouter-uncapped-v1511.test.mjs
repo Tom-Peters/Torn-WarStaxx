@@ -39,7 +39,7 @@ test('confirmed uncapped FF is visibly marked as high risk not an easy win',()=>
   assert.match(native,/ff\.ff>4\.5\?\(expanded\?' RISK':' !'\)/);
   assert.match(native,/ff\.ff>3\?\(expanded\?' HARD':' !'\)/);
   assert.match(source,/const validScouterFF=/);
-  assert.match(source,/validScouterFF\(p\?\.fair_fight\)/);
+  assert.match(source,/validScouterFF\(p\?\.fair_fight\?\?chosen\?\.fair_fight\)/);
   assert.match(source,/if\(!canCall\('ffscouter',force\?0:10\*MIN\)\)return/);
   assert.match(source,/ffEstimateParserVersion!==2/);
   assert.doesNotThrow(()=>new Script(source));

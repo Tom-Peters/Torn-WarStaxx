@@ -76,10 +76,10 @@ test('manual faction identity change invalidates live rosters, score and chain, 
 });
 test('public script preserves pinned installer, suite ownership and read-only Torn API',()=>{
   assert.ok(source.startsWith('// ==UserScript==\n'));
-  assert.match(source,/^\/\/ @version\s+2\.4\.0$/m);
+  assert.match(source,/^\/\/ @version\s+2\.4\.1$/m);
   assert.match(source,/^\/\/ @author\s+IamEEKY$/m);
   assert.match(source,/^\/\/ @downloadURL\s+https:\/\/raw\.githubusercontent\.com\/Tom-Peters\/Torn-WarStaxx\/main\/WarStaxx\.user\.js/m);
-  assert.match(source,/const ID='war', VER='2\.4\.0'/);
+  assert.match(source,/const ID='war', VER='2\.4\.1'/);
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
 });
