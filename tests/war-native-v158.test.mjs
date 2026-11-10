@@ -44,9 +44,9 @@ function fakeList(rows){
     appendChild(fragment){this.children=fragment.nodes.slice();}};
 }
 test('all userscript registration version surfaces agree and code parses',()=>{
-  assert.match(source,/^\/\/ @version\s+2\.4\.1$/m);
-  assert.match(source,/const id='war', version='2\.4\.1'/);
-  assert.match(source,/const ID='war', VER='2\.4\.1'/);
+  assert.match(source,/^\/\/ @version\s+2\.5\.0$/m);
+  assert.match(source,/const id='war', version='2\.5\.0'/);
+  assert.match(source,/const ID='war', VER='2\.5\.0'/);
   assert.doesNotThrow(()=>new Script(source));
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
 });

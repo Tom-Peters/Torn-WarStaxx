@@ -1,3 +1,16 @@
+## v2.5.0 - bounty hunting controls
+
+The main Torn bounty list now gets compact controls above the list:
+
+- **Payout: highest first**, with a button to switch to lowest first. Sorts the advertised reward on the loaded page; never sorts by FFS or claims to reorder unseen pages.
+- **Max FFS:** Any, up to 2, 3.5 or 4.5, plus a custom limit. Fresh scores above the limit are hidden. Missing/stale scores remain visible and are counted explicitly.
+- **Hide unavailable** and **Hide travelling**, both enabled by default, with independent show/hide buttons. Reads Torn's own status field, including collapsed mobile rows. Being abroad alone is not treated as travelling or proof of being unreachable.
+- Preferences survive navigation. Reset restores highest payout, any FFS, and both status filters enabled.
+
+Controls apply only to the main bounty-list route. They handle pagination and refreshed rows, leave Torn claim/expand controls intact, and remove their own hiding/reordering when leaving the list. No extra status API requests or automatic attacks are introduced.
+
+Validation includes filter boundaries, payout parsing, route scope and DOM fixtures for mobile statuses, sort direction, custom limits, missing estimates, native handlers, refreshed rows, focus preservation and route cleanup. Live Torn PDA rendering remains a separate device check.
+
 ## v2.4.1 - colour-coded FFS for native target hunting
 
 Player-name badges now pair **FFS** with **BSE** on bounties, people abroad and other supported native lists. The compact badge expands on tap, showing the estimate source/age and a colour legend. Profile action links such as `View profile` and `New tab` no longer receive badges.

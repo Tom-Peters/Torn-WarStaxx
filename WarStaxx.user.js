@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      2.4.1
+// @version      2.5.0
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='2.4.1';
+  const id='war', version='2.5.0';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='2.4.1', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='2.5.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics','dashboard','scouting','archive'];
   const labels={overview:'Live war',enemy:'Players',reports:'Tools & reports',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics',dashboard:'Full dashboard',scouting:'Faction scouting',archive:'Detailed reports'};
@@ -7364,6 +7364,7 @@
       if(row.wrap.previousElementSibling!==a)a.insertAdjacentElement('afterend',row.wrap);
       const r=a.getBoundingClientRect();if(r.bottom>=-300&&r.top<window.innerHeight+600)ids.add(id);
     }
+    syncBountyControls();
     if(fetchData)void refreshPageBse(Array.from(ids));
   }
   async function refreshPageBse(ids){
@@ -7380,6 +7381,93 @@
     }catch(e){const count=Math.min(6,n(state.data.backoff.ffscouter?.count)+1);
       state.data.backoff.ffscouter={count,until:Date.now()+Math.min(HOUR,2**count*MIN)};state.data.errors.ffscouter=String(e.message||e).slice(0,150);
     }finally{pageBseBusy=false;save();if(pageBseRows.size)syncPageBse(false);}
+  }
+  // Native bounty controls act only on the loaded main-list rows, never game actions.
+  const bountyPrefsKey='warstaxx-bounty-view-v1';
+  const bountyPrefs=(()=>{let saved={};try{saved=JSON.parse(localStorage.getItem(bountyPrefsKey)||'{}')||{};}catch(_){}
+    return {max:Number.isFinite(saved.max)&&saved.max>=1&&saved.max<=1e6?saved.max:0,ascending:saved.ascending===true,
+      hideUnavailable:saved.hideUnavailable!==false,hideTravelling:saved.hideTravelling!==false};})();
+  const bountyLists=new Map();
+  function isBountyMain(){
+    if(location.pathname.toLowerCase()!=='/bounties.php')return false;
+    const route=new URLSearchParams(String(location.hash||'').replace(/^#\/?!?/, '')).get('p');
+    return !route||route==='main';
+  }
+  function bountyMoney(text){
+    const match=String(text||'').replace(/\s/g,'').match(/^\$([\d,]+(?:\.\d+)?)([kmb])?$/i);
+    if(!match)return null;const value=Number(match[1].replace(/,/g,''))*({k:1e3,m:1e6,b:1e9}[match[2]?.toLowerCase()]||1);
+    return Number.isFinite(value)&&value>=0?value:null;
+  }
+  function bountyStatus(text){
+    const value=String(text||'').replace(/^\s*Status\s*:\s*/i,'').trim();
+    return {unavailable:/\b(hospital|jail|federal|fallen|unavailable|deceased)\b/i.test(value),
+      travelling:/\b(travel(?:l)?ing|flying|returning|in transit)\b/i.test(value)};
+  }
+  function bountyFacts(row){
+    const anchor=row.querySelector('.target a[href*="profiles.php" i]'),id=anchor?pagePlayerId(anchor):0;
+    if(!id)return null;
+    const amount=bountyMoney(row.querySelector('.reward')?.textContent),status=bountyStatus(row.querySelector('.status')?.textContent);
+    const cached=ffscouter(id),ff=cached&&!ffIsStale(cached)&&Number.isFinite(cached.ff)&&cached.ff>=1?cached.ff:null;
+    return {id,amount,ff,...status};
+  }
+  function bountyHidden(facts,prefs=bountyPrefs){return Boolean(facts&&(
+    prefs.hideUnavailable&&facts.unavailable||prefs.hideTravelling&&facts.travelling||
+    prefs.max>0&&facts.ff!==null&&facts.ff>prefs.max));}
+  function orderBountyRows(list,ordered){
+    const rows=Array.from(list.children).filter(row=>ordered.includes(row));
+    if(rows.every((row,i)=>row===ordered[i]))return;
+    // Move existing nodes into their original row slots; preserve native handlers and extra rows.
+    const slots=rows.map(row=>{const slot=document.createComment('ws-bounty-slot');list.insertBefore(slot,row);return slot;});
+    slots.forEach((slot,i)=>slot.replaceWith(ordered[i]));
+  }
+  function clearBountyControls(){
+    document.getElementById('ws-bounty-controls')?.remove();
+    for(const [list,original] of bountyLists){
+      const rows=Array.from(list.children).filter(row=>original.has(row));
+      for(const row of rows)row.classList.remove('ws-bounty-hidden');
+      orderBountyRows(list,rows.sort((a,b)=>original.get(a)-original.get(b)));
+    }
+    bountyLists.clear();
+  }
+  function syncBountyControls(){
+    const template=isBountyMain()?document.querySelector('.page-template-cont'):null;
+    const lists=template?Array.from(template.querySelectorAll('.bounties-list')):[];
+    if(!lists.length){clearBountyControls();return;}
+    for(const [list] of bountyLists)if(!lists.includes(list)){for(const row of list.children)row.classList.remove('ws-bounty-hidden');bountyLists.delete(list);}
+    if(!document.getElementById('ws-bounty-css')){const css=document.createElement('style');css.id='ws-bounty-css';css.textContent=
+      '.bounties-list>li.ws-bounty-hidden{display:none!important}#ws-bounty-controls{position:static;clear:both;padding:9px;margin:8px 0;background:#10283d;color:#edf7ff;border:1px solid #385d76;border-radius:7px;font:12px/1.4 system-ui}#ws-bounty-controls .ws-bounty-buttons{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:6px}#ws-bounty-controls button{position:static;float:none;background:#173950;color:#e5f5ff;border:1px solid #4c718b;border-radius:5px;font:inherit;padding:6px 8px;min-height:32px;touch-action:manipulation}#ws-bounty-controls button[aria-pressed=true]{background:#125878;border-color:#6bdaff}#ws-bounty-controls input{width:64px;min-width:0;background:#102337;color:white;padding:5px;border:1px solid #527891;border-radius:4px;font:inherit}#ws-bounty-controls p{font-size:11px;line-height:1.4;margin:5px 0 0;color:#b5d0e1}';document.head.appendChild(css);}
+    let bar=document.getElementById('ws-bounty-controls');
+    if(!bar){bar=document.createElement('section');bar.id='ws-bounty-controls';bar.setAttribute('aria-label','WarStaxx bounty filters');
+      bar.innerHTML='<div class="ws-bounty-buttons"><strong>Max FFS</strong>'+[0,2,3.5,4.5].map(value=>'<button type="button" data-max="'+value+'">'+(value?'Up to '+value:'Any')+'</button>').join('')+
+        '<label>Custom <input type="number" min="1" max="1000000" step="0.01" inputmode="decimal" aria-label="Custom maximum FFS" placeholder="Any"></label></div>'+
+        '<div class="ws-bounty-buttons"><button type="button" data-toggle="ascending"></button><button type="button" data-toggle="hideUnavailable"></button><button type="button" data-toggle="hideTravelling"></button><button type="button" data-reset>Reset</button></div><p role="status"></p>';
+      const changed=()=>{try{localStorage.setItem(bountyPrefsKey,JSON.stringify(bountyPrefs));}catch(_){}syncBountyControls();syncPageBse();};
+      bar.addEventListener('click',e=>{const button=e.target.closest('button');if(!button||!bar.contains(button))return;e.preventDefault();e.stopPropagation();
+        if(button.hasAttribute('data-max'))bountyPrefs.max=Number(button.dataset.max);
+        else if(['ascending','hideUnavailable','hideTravelling'].includes(button.dataset.toggle))bountyPrefs[button.dataset.toggle]=!bountyPrefs[button.dataset.toggle];
+        else if(button.hasAttribute('data-reset'))Object.assign(bountyPrefs,{max:0,ascending:false,hideUnavailable:true,hideTravelling:true});else return;
+        changed();});
+      bar.querySelector('input').addEventListener('change',e=>{const value=Number(e.target.value);if(e.target.value!==''&&(!Number.isFinite(value)||value<1||value>1e6)){e.target.setCustomValidity('Enter a maximum FFS of at least 1, or clear for Any.');e.target.reportValidity();return;}e.target.setCustomValidity('');bountyPrefs.max=value||0;changed();});
+    }
+    if(bar.parentElement!==template||template.firstElementChild!==bar)template.prepend(bar);
+    for(const button of bar.querySelectorAll('[data-max]'))button.setAttribute('aria-pressed',String(Number(button.dataset.max)===bountyPrefs.max));
+    const input=bar.querySelector('input');if(document.activeElement!==input){input.value=bountyPrefs.max?String(bountyPrefs.max):'';input.setCustomValidity('');}
+    for(const [key,label] of [['ascending',bountyPrefs.ascending?'Payout: lowest first':'Payout: highest first'],['hideUnavailable','Hide unavailable'],['hideTravelling','Hide travelling']]){
+      const button=bar.querySelector('[data-toggle="'+key+'"]');button.textContent=label;button.setAttribute('aria-pressed',String(bountyPrefs[key]));}
+    let total=0,shown=0,unknown=0;
+    for(const list of lists){
+      const original=bountyLists.get(list)||new Map();bountyLists.set(list,original);
+      for(const [row] of original)if(row.parentElement!==list){row.classList.remove('ws-bounty-hidden');original.delete(row);}
+      let next=Math.max(-1,...original.values())+1;
+      const entries=Array.from(list.children).map(row=>{const facts=bountyFacts(row);if(!facts)row.classList.remove('ws-bounty-hidden');return {row,facts};}).filter(x=>x.facts);
+      for(const {row,facts} of entries){if(!original.has(row))original.set(row,next++);total++;
+        const hide=bountyHidden(facts);row.classList.toggle('ws-bounty-hidden',hide);if(!hide){shown++;if(facts.ff===null)unknown++;}}
+      const sorted=entries.slice().sort((a,b)=>a.facts.amount===null?(b.facts.amount===null?0:1):b.facts.amount===null?-1:
+        (bountyPrefs.ascending?1:-1)*(a.facts.amount-b.facts.amount)).map(x=>x.row);
+      orderBountyRows(list,sorted);
+    }
+    bar.querySelector('p').textContent=shown+' / '+total+' loaded bounties match. Payout sorts this page only.'+
+      (unknown?' '+unknown+' have no current FFS and stay visible.':'')+' Filters use Torn status; expand a row to inspect before attacking.';
   }
   function syncNativeProfile(){
     let box=document.getElementById('warstaxx-profile-detail');
