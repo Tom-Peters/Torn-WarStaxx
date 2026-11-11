@@ -1,3 +1,7 @@
+## 2.6.0
+
+Filter Players to your current country or hospital releases within 15 minutes. Sort within each country by total stats, with missing totals last.
+
 ## v2.5.0 - bounty hunting controls
 
 The main Torn bounty list now gets compact controls above the list:

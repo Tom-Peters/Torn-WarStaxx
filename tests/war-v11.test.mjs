@@ -112,7 +112,7 @@ test('automatic sync has scoped path, revision conflicts, foreground-only pollin
     "data-skull-risk","if(!document.hidden&&sharedEndpoint()&&sharedScope())"])
     assert.ok(source.includes(token),'Missing sync wiring '+token);
   assert.ok(!source.includes('GM_xmlhttpRequest({method:"POST"'));
-  assert.match(source,/\/\/ @version\s+2\.5\.0/);
+  assert.match(source,/\/\/ @version\s+2\.6\.0/);
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
 });

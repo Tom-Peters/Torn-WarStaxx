@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      2.5.0
+// @version      2.6.0
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='2.5.0';
+  const id='war', version='2.6.0';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='2.5.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='2.6.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics','dashboard','scouting','archive'];
   const labels={overview:'Live war',enemy:'Players',reports:'Tools & reports',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics',dashboard:'Full dashboard',scouting:'Faction scouting',archive:'Detailed reports'};
@@ -6225,6 +6225,8 @@
   }
   function workspacePlayers(at=Date.now()){
     const side=workspace.side,fresh=rosterFresh(side,at),bands=enemyRoleBands(),q=workspace.query.trim().toLowerCase();
+    const own=nativeWarOwnLocation();
+    const localKnown=own.known&&rosterFresh('ours',at);
     const rows=state.data[side].map(player=>({player,location:nativeWarLocation(player),kind:memberState(player),
       skull:side==='ours'?Boolean(cfg.blackSkulls[player.id]):bands.heavy.has(player.id),
       impact:side==='ours'?liveWarMemberImpact(player.id):liveEnemyWarImpact(player.id)}));
@@ -6235,17 +6237,26 @@
       if(workspace.country!=='all'&&x.location.country!==workspace.country)return false;
       if(workspace.filter==='skulls'&&!x.skull)return false;
       if(workspace.filter==='watched'&&!cfg.watchlist[p.id])return false;
+      if(workspace.filter==='here'&&(!fresh||!localKnown||x.location.country!==own.country||
+        !['present','abroad'].includes(x.location.phase)))return false;
+      if(workspace.filter==='releasing'&&(!fresh||x.kind!=='hospital'||!Number.isFinite(p.until)||p.until<=at||p.until>at+15*MIN))return false;
       if(['okay','hospital','away'].includes(workspace.filter)&&(!fresh||x.kind!==workspace.filter))return false;
       return true;
     });
-    const own=nativeWarOwnLocation(),countryOrder=(a,b)=>
+    const countryOrder=(a,b)=>
       own.known&&(a===own.country||b===own.country)?(a===b?0:a===own.country?-1:1):
       a==='Unknown'?1:b==='Unknown'?-1:a.localeCompare(b);
     const rank={okay:0,hospital:1,away:2,jail:3,fallen:4,unknown:5};
+    const strengthOrder=workspace.sort==='lowest'||workspace.sort==='highest';
+    if(strengthOrder)for(const row of selected)row.total=nativeWarStrength(row.player).total;
     selected.sort((a,b)=>{
       const group=countryOrder(a.location.country,b.location.country);if(a.location.country!==b.location.country)return group;
       let order=0;
-      if(workspace.sort==='name')order=a.player.name.localeCompare(b.player.name);
+      if(strengthOrder){
+        const aKnown=Number.isFinite(a.total),bKnown=Number.isFinite(b.total);
+        order=Number(bKnown)-Number(aKnown);
+        if(aKnown&&bKnown)order=(workspace.sort==='lowest'?1:-1)*(a.total-b.total);
+      }else if(workspace.sort==='name')order=a.player.name.localeCompare(b.player.name);
       else if(workspace.sort==='recent')order=n(b.player.lastAt)-n(a.player.lastAt);
       else if(workspace.sort==='points')order=(b.impact.given??b.impact.scored??-1)-(a.impact.given??a.impact.scored??-1);
       else if(workspace.sort==='net')order=(b.impact.net??-Infinity)-(a.impact.net??-Infinity);
@@ -6253,7 +6264,7 @@
       else order=(rank[a.kind]??5)-(rank[b.kind]??5);
       return (Number.isNaN(order)?0:order)||a.player.name.localeCompare(b.player.name)||a.player.id-b.player.id;
     });
-    return {side,fresh,rows:selected,total:rows.length,countries};
+    return {side,fresh,localKnown,rows:selected,total:rows.length,countries};
   }
   function workspacePlayerRow(row,side,fresh){
     const p=row.player,own=side==='ours',impact=row.impact,
@@ -6284,8 +6295,8 @@
       workspaceTabs([['enemies','Opponents'],['ours','Our faction']],data.side,'workspace-side:')+
       '<div class="ws-roster-controls"><input id="ws-roster-query" type="search" value="'+esc(workspace.query)+'" placeholder="Find name or ID" aria-label="Search roster">'+
       options('ws-roster-country',[['all','All countries'],...data.countries.map(x=>[x,x])],workspace.country)+
-      options('ws-roster-sort',[['status','Okay first'],['hospital','Hospital expiry'],['name','Name A-Z'],['recent','Recent activity'],['points',own?'Most points given':'Most points scored'],...(own?[['net','Best net']]:[])],workspace.sort)+'</div>'+
-      workspaceTabs([['all','All'],['okay','Okay'],['hospital','Hospital'],['away','Away'],['skulls','Skulls'],['watched','Watched']],workspace.filter,'workspace-filter:')+
+      options('ws-roster-sort',[['status','Okay first'],['hospital','Hospital expiry'],['name','Name A-Z'],['recent','Recent activity'],['lowest','Lowest total stats'],['highest','Highest total stats'],['points',own?'Most points given':'Most points scored'],...(own?[['net','Best net']]:[])],workspace.sort)+'</div>'+
+      workspaceTabs([['all','All'],['okay','Okay'],['hospital','Hospital'],['away','Away'],['here','Here'],['releasing','Hospital within 15m'],['skulls','Skulls'],['watched','Watched']],workspace.filter,'workspace-filter:')+
       '<div class="ws-live-meta"><span>'+data.rows.length+' / '+data.total+' players | '+(data.fresh?'Roster '+esc(age(state.data.updated[data.side])):'STALE ROSTER')+'</span>'+b('Reset filters','workspace-reset')+'</div>'+
       '<p class="ws-small">Points are captured ranked-war attack respect, not official member scores. Partial values are minimums; net* is uncertain when either side is incomplete.</p>';
     let country=null;
@@ -6295,7 +6306,7 @@
       h+=workspacePlayerRow(row,data.side,data.fresh);
     }
     if(country!==null)h+='</div>';
-    return h+(data.rows.length?'':empty(data.total?'No players match. Reset filters to see the full roster.':'No roster loaded. Refresh or check Settings.'));
+    return h+(data.rows.length?'':empty(data.total?(!data.fresh?'Refresh the roster for live filters.':workspace.filter==='here'&&!data.localKnown?'Refresh your faction roster to verify your location.':'No players match. Reset filters to see the full roster.'):'No roster loaded. Refresh or check Settings.'));
   }
   function workspaceTile(title,detail,tab){
     return '<button type="button" class="ws-tool-tile" data-action="tab:'+esc(tab)+'"><strong>'+esc(title)+'</strong><span>'+esc(detail)+'</span></button>';
@@ -6472,7 +6483,7 @@
       const value=action.slice(15);if(['ours','enemies'].includes(value)){workspace.side=value;workspace.country='all';if(value==='enemies'&&workspace.sort==='net')workspace.sort='points';render();}return;
     }
     if(action.startsWith('workspace-filter:')){
-      const value=action.slice(17);if(['all','okay','hospital','away','skulls','watched'].includes(value)){workspace.filter=value;render();}return;
+      const value=action.slice(17);if(['all','okay','hospital','away','here','releasing','skulls','watched'].includes(value)){workspace.filter=value;render();}return;
     }
     if(action==='workspace-reset'){Object.assign(workspace,{query:'',filter:'all',country:'all',sort:'status'});render();return;}
     if(action==='refresh'){refresh(true);return;}
@@ -7290,14 +7301,14 @@
     const estimate=enemyBattleEstimate(p),report=spy(p.id);
     if(estimate.verified&&bsScore(report)!==null){
       const total=['strength','speed','defense','dexterity'].reduce((sum,k)=>sum+Number(report[k]),0);
-      return {short:'Spy '+nativeCompactTotal(total),source:estimate.source,
+      return {short:'Spy '+nativeCompactTotal(total),total,source:estimate.source,
         detail:'Torn spy total '+fmt(total)+' | BSS '+fmt(bsScore(report))+
           ' | observed '+age(report.observedAt)+' ago'};
     }
     const f=ffscouter(p.id);
     if(f&&!ffIsStale(f)&&Number.isFinite(f.bsEstimate)&&f.bsEstimate>0){
       const when=positive(f.updatedAt)||positive(f.at);
-      return {short:'FFS ~'+nativeCompactTotal(f.bsEstimate),source:'FFScouter model',
+      return {short:'FFS ~'+nativeCompactTotal(f.bsEstimate),total:f.bsEstimate,source:'FFScouter model',
         detail:'FFScouter modelled total '+fmt(f.bsEstimate)+
           ' | public BSS '+(Number.isFinite(f.bss)?fmt(f.bss):'unknown')+
           ' | updated '+age(when)+' | YATA uses another model'};
