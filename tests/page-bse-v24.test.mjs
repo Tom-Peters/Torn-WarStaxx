@@ -28,7 +28,7 @@ test('consent, hidden tabs and roster requests block generic lookup',async()=>{
  const v=fixture();v.cfg.ffConsent=false;await v.refreshPageBse([12]);v.cfg.ffConsent=true;v.document.hidden=true;await v.refreshPageBse([12]);v.document.hidden=false;v.setBusy(true);await v.refreshPageBse([12]);assert.equal(v.calls.length,0);
 });
 test('positive and missing caches prevent repeated page-navigation requests',async()=>{
- const v=fixture();v.state.data.ffstats[12]={at:Date.now()-3600000,bsEstimate:123,ff:2};v.state.data.ffstats[13]={at:Date.now()-60000,bsEstimate:null};await v.refreshPageBse([12,13]);assert.equal(v.calls.length,0);
+ const v=fixture();v.state.data.ffstats[12]={at:Date.now()-60000,bsEstimate:123,ff:2};v.state.data.ffstats[13]={at:Date.now()-60000,bsEstimate:null};await v.refreshPageBse([12,13]);assert.equal(v.calls.length,0);
  v.state.data.ffstats[13].at=Date.now()-31*60000;await v.refreshPageBse([12,13]);assert.equal(v.calls.length,1);assert.equal(new URL(v.calls[0]).searchParams.get('targets'),'13');
  await v.refreshPageBse([14]);assert.equal(v.calls.length,1);
 });

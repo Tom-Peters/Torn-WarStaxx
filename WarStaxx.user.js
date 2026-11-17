@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      2.6.0
+// @version      2.7.0
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='2.6.0';
+  const id='war', version='2.7.0';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,10 +183,10 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='2.6.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='2.7.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
-  const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics','dashboard','scouting','archive'];
-  const labels={overview:'Live war',enemy:'Players',reports:'Tools & reports',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics',dashboard:'Full dashboard',scouting:'Faction scouting',archive:'Detailed reports'};
+  const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics','dashboard','scouting','archive','scouter'];
+  const labels={scouter:'FFScouter Premium',overview:'Live war',enemy:'Players',reports:'Tools & reports',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics',dashboard:'Full dashboard',scouting:'Faction scouting',archive:'Detailed reports'};
   const $=(s,root=document)=>root.querySelector(s);
   const $$=(s,root=document)=>Array.from(root.querySelectorAll(s));
   const n=v=>Number.isFinite(Number(v))?Number(v):0;
@@ -999,6 +999,132 @@
     for(const id of ordered.slice(300))delete state.data.autoSpies[id];
     return count;
   }
+  // FFScouter OpenAPI 1.20.0. Additional intelligence stays local and read-only.
+  const scouterExtra={context:'',busy:false,error:'',selected:0,flights:{},activity:{},history:{},targets:[],targetsAt:0,attempts:{}};
+  function scouterContext(){
+    const key=ffApiKey();
+    if(scouterExtra.context!==key||!cfg.ffEnabled||!cfg.ffConsent){
+      Object.assign(scouterExtra,{context:key,error:'',flights:{},activity:{},history:{},targets:[],targetsAt:0,attempts:{}});
+    }
+    return key;
+  }
+  function parseScouterFlights(body,ids,at=Date.now()){
+    if(!Array.isArray(body?.flights))throw Error('Flight response is missing its list');
+    const allowed=new Set(ids.map(Number)),out={};
+    for(const row of body.flights){
+      const id=positive(row?.player_id);if(!allowed.has(id))continue;
+      const x=row.current;
+      if(x===null){out[id]={at,current:null};continue;}
+      if(!x||typeof x.status_description!=='string')continue;
+      const early=ffTimestamp(x.earliest_arrival_time),late=ffTimestamp(x.latest_arrival_time);
+      out[id]={at,current:{description:x.status_description.slice(0,100),method:String(x.travel_method||'Unknown').slice(0,40),
+        earliest:early>0&&late>=early?early:null,latest:early>0&&late>=early?late:null,takeoff:ffTimestamp(x.takeoff_time)}};
+    }
+    for(const id of allowed)if(!out[id])out[id]={at,unknown:true,current:null};
+    return out;
+  }
+  function parseScouterActivity(body,id,at=Date.now()){
+    if(body?.meta?.subject_type!=='player'||Number(body.meta.subject_id)!==id||!Array.isArray(body.buckets))throw Error('Activity response does not match this player');
+    const start=Number(body.meta.start),end=Number(body.meta.end),seen=new Set();
+    const rows=body.buckets.filter(x=>Number.isFinite(x?.ts)&&x.ts>=start&&x.ts<end&&Number.isFinite(x.activity_score)&&x.activity_score>=0)
+      .filter(x=>{if(seen.has(x.ts))return false;seen.add(x.ts);return true;}).slice(0,168).sort((a,b)=>a.ts-b.ts)
+      .map(x=>({ts:x.ts*1000,score:x.activity_score}));
+    return {at,rows,truncated:body.meta.truncated===true};
+  }
+  async function scouterRead(kind,id=0){
+    const key=scouterContext();id=positive(id);
+    if(scouterExtra.busy||document.hidden)return;
+    if(!cfg.ffEnabled||!cfg.ffConsent||!key){scouterExtra.error='Enable FFScouter and save your registered key in WarStaxx Settings.';render();return;}
+    const token=kind+':'+id,ttl=kind==='flights'?MIN:kind==='targets'?5*MIN:kind==='stats'?HOUR:15*MIN;
+    if(Date.now()-n(scouterExtra.attempts[token])<ttl){scouterExtra.error='Recent check cached. Try again after '+Math.ceil((ttl-(Date.now()-scouterExtra.attempts[token]))/MIN)+' minute(s).';render();return;}
+    if(!['flights','targets','stats','activity','history'].includes(kind)||(!id&&!['flights','targets'].includes(kind)))return;
+    scouterExtra.busy=true;scouterExtra.error='';scouterExtra.attempts[token]=Date.now();render();
+    const current=()=>cfg.ffConsent&&cfg.ffEnabled&&ffApiKey()===key&&!document.hidden;
+    try{
+      await checkFFRegistration();if(!current())return;
+      if(!scouterPremiumActive())throw Error('Premium is not active for this key. Verify the key linked to your subscription in Settings.');
+      const query=new URLSearchParams({key});let path,ids=[];
+      if(kind==='flights'){
+        ids=id?[id]:[...new Set([...state.data.enemies,...state.data.ours].map(p=>positive(p.id)).filter(Boolean))].slice(0,100);
+        if(!ids.length)throw Error('Load a war roster or choose a player first.');
+        path='player-flights/batch';query.set('targets',ids.join(','));
+      }else if(kind==='targets'){
+        path='get-targets';query.set('preset','respect');query.set('limit','20');
+      }else if(kind==='stats'){
+        path='get-stats';query.set('targets',String(id));
+      }else if(kind==='history'){
+        path='get-stats-history';query.set('target',String(id));query.set('limit','28');query.set('sort','asc');
+        query.set('from',String(Math.floor(Date.now()/1000)-7*86400));
+      }else{
+        path='activity/player';query.set('target',String(id));query.set('bucket','3600');
+        const end=Math.floor(Date.now()/HOUR)*3600;query.set('end',String(end));query.set('start',String(end-86400));
+      }
+      const body=await ffRequest('https://ffscouter.com/api/v1/'+path+'?'+query);if(!current())return;
+      const at=Date.now();
+      if(kind==='flights')Object.assign(scouterExtra.flights,parseScouterFlights(body,ids,at));
+      else if(kind==='activity')scouterExtra.activity[id]=parseScouterActivity(body,id,at);
+      else if(kind==='history'){
+        if(Number(body?.player_id)!==id||!Array.isArray(body.history))throw Error('History response does not match this player');
+        scouterExtra.history[id]={at,rows:body.history.filter(x=>Number.isFinite(x.bs_estimate)&&x.bs_estimate>0&&ffTimestamp(x.timestamp)>0).slice(0,28)
+          .map(x=>({total:x.bs_estimate,at:ffTimestamp(x.timestamp),source:String(x.source||'Unknown').slice(0,30)})).sort((a,b)=>a.at-b.at)};
+      }else if(kind==='stats')Object.assign(state.data.ffstats,parseFFRows(body,[id],at));
+      else{
+        if(!Array.isArray(body?.targets))throw Error('Target response is missing its list');
+        // The API echoes the key in parameters. Never retain that object.
+        scouterExtra.targets=body.targets.filter(x=>positive(x.player_id)).slice(0,20).map(x=>({id:positive(x.player_id),name:String(x.name||'Player').slice(0,60),
+          level:positive(x.level),ff:validScouterFF(x.fair_fight),total:Number.isFinite(Number(x.bs_estimate))&&Number(x.bs_estimate)>0?Number(x.bs_estimate):null,
+          last:ffTimestamp(x.last_action),source:String(x.source||'Unknown').slice(0,30),hospital:ffTimestamp(x.hospital_until)}));
+        scouterExtra.targetsAt=at;
+      }
+    }catch(e){scouterExtra.error=String(e.message||e).split(key).join('[redacted]').slice(0,180);
+      if(/premium.*required|subscription.*required/i.test(scouterExtra.error)&&state.data.meta.ffRegistration)state.data.meta.ffRegistration.premium=false;}
+    finally{scouterExtra.busy=false;render();syncPageBse(false);}
+  }
+  function scouterFlightText(id){
+    const f=scouterExtra.flights[id];if(!f)return '';
+    const old=Date.now()-f.at>5*MIN?'STALE / ':'';
+    if(f.unknown)return old+'FFScouter flight not reported; location unknown.';
+    if(!f.current)return old+'FFScouter reports no current trip; this does not establish location.';
+    const x=f.current;
+    return old+'FFScouter: '+x.description+' / '+x.method+(x.earliest?' / estimated arrival window '+stamp(x.earliest)+' to '+stamp(x.latest):' / arrival window unknown')+' / checked '+age(f.at);
+  }
+  function scouterStrengthHTML(id){
+    const x=ffscouter(id);if(!x)return '<p>No cached strength estimate. Check stats to load this player.</p>';
+    const parts={strength:'STR',speed:'SPD',defense:'DEF',dexterity:'DEX'};
+    return '<p>Selected by FFScouter: <b>'+esc(x.source)+'</b> / '+(x.bsEstimate?'~'+fmt(x.bsEstimate):'Unknown')+' total / '+(x.ff!==null?x.ff.toFixed(2)+' FFS':'FFS unknown')+' / '+esc(age(x.updatedAt||x.at))+(ffIsStale(x)?' / STALE':'')+'</p>'+
+      (x.distribution?'<p>Estimated distribution: '+Object.entries(x.distribution.percentages).map(([k,v])=>parts[k]+' '+v+'%').join(' / ')+' / '+esc(age(x.distribution.at))+'. Omitted stats are unknown.</p>':'<p>Stat distribution not supplied.</p>')+
+      '<details data-ws-disclosure="scouter-sources-'+id+'"><summary>Compare sources and spy snapshots</summary>'+
+      Object.entries(x.estimates||{}).map(([source,v])=>'<p>'+esc(source)+': ~'+fmt(v.total)+' total / '+(v.ff===null?'FFS unknown':v.ff.toFixed(2)+' FFS')+' / '+esc(age(v.at))+'</p>').join('')+
+      (x.spies||[]).map(v=>'<p>Spy snapshot / '+esc(v.source)+' / '+esc(stamp(v.at))+': '+fmt(v.total)+' total. '+Object.keys(parts).map(k=>parts[k]+' '+(v[k]===null?'?':fmt(v[k]))).join(' / ')+'</p>').join('')+
+      '<p>Spy snapshots can age. Estimates and distribution are models, not exact current stats or win guarantees. FFS belongs to the key owner.</p></details>';
+  }
+  function scouterScreen(){
+    scouterContext();const id=positive(scouterExtra.selected),active=scouterPremiumActive(),reg=state.data.meta.ffRegistration;
+    const policy='<p class="ws-small">Source: FFScouter. Uses your own registered key only. <a href="https://ffscouter.com/#data-policy" target="_blank" rel="noopener noreferrer">Data policy</a> / <a href="https://ffscouter.com/volunteer" target="_blank" rel="noopener noreferrer">Scanner data policy</a>. Checks are requested here; no attacks or claims are submitted.</p>';
+    let html=card('FFScouter Premium',policy+'<p>'+(!cfg.ffEnabled||!cfg.ffConsent?'Enable FFScouter in Settings.':active?'Premium verified':reg?.premium?'Premium verification needs refreshing':'Premium not verified for the configured key')+'</p>'+
+      '<div class="ws-toolbar">'+b('Settings','tab:settings')+b('Verify key','check-ff-key')+b('Check roster flights (up to 100)','scouter:flights:0')+b('Find respect targets','scouter:targets:0')+'</div>'+
+      '<label>Player Torn ID <input id="ws-scouter-id" inputmode="numeric" type="number" min="1" value="'+(id||'')+'"></label>'+b('Open player','scouter-open')+
+      (scouterExtra.busy?'<p role="status">Checking FFScouter...</p>':'')+(scouterExtra.error?'<p class="ws-note ws-warn">'+esc(scouterExtra.error)+'</p>':''));
+    if(!active)return html;
+    if(id){
+      html+=card('Player #'+id,a('Torn profile',link(id))+'<div class="ws-toolbar">'+b('Check stats','scouter:stats:'+id)+b('Check flight','scouter:flights:'+id)+b('Activity / 24h','scouter:activity:'+id)+b('Estimate history / 7d','scouter:history:'+id)+'</div>'+scouterStrengthHTML(id)+'<p>'+esc(scouterFlightText(id))+'</p>');
+      const activity=scouterExtra.activity[id],history=scouterExtra.history[id];
+      if(activity){const rows=activity.rows,signals=rows.filter(x=>x.score>0);html+=card('Scanner activity / completed hours',
+        '<p>'+signals.length+' of '+rows.length+' returned hourly buckets contain an activity signal. This is not time online; no signal does not prove inactivity. '+(activity.truncated?'Response truncated. ':'')+'Checked '+esc(age(activity.at))+'.</p>'+
+        '<div style="display:flex;gap:2px;align-items:end;height:70px" aria-label="Hourly scanner activity">'+rows.map(x=>'<span title="'+esc(stamp(x.ts)+' / score '+x.score)+'" style="flex:1;min-width:2px;background:#49bbef;height:'+Math.max(4,60*x.score/Math.max(1,...rows.map(r=>r.score)))+'px"></span>').join('')+'</div>'+
+        '<details data-ws-disclosure="scouter-hours"><summary>Hourly observations (Torn time / UTC)</summary>'+rows.map(x=>'<p>'+esc(stamp(x.ts))+' / score '+x.score+'</p>').join('')+'</details>');}
+      if(history)html+=card('Estimate history / not gym gains','<p>'+history.rows.length+' six-hour buckets returned / checked '+esc(age(history.at))+'. Source changes can move the estimate.</p>'+history.rows.map(x=>'<p>'+esc(stamp(x.at))+' / ~'+fmt(x.total)+' / '+esc(x.source)+'</p>').join(''));
+    }
+    const flights=Object.keys(scouterExtra.flights);
+    if(flights.length)html+=card('Flight checks / separate from Torn status',flights.map(key=>'<p><b>'+esc([...state.data.enemies,...state.data.ours].find(p=>p.id===Number(key))?.name||'#'+key)+'</b> '+esc(scouterFlightText(key))+'</p>').join(''));
+    if(scouterExtra.targetsAt)html+=card('Respect candidates / not bounty payouts','<p>FFScouter respect preset. Last check '+esc(age(scouterExtra.targetsAt))+'. Recheck current status, faction and matchup in Torn. No payout or victory is implied.</p>'+
+      (scouterExtra.targets.length?scouterExtra.targets.map(x=>'<div class="ws-note"><strong>'+esc(x.name)+' ['+x.id+']</strong><p>Level '+x.level+' / '+(x.ff===null?'FFS unknown':x.ff.toFixed(2)+' FFS')+' / '+(x.total?'~'+fmt(x.total):'BSE unknown')+' / '+esc(x.source)+' / last action '+esc(age(x.last))+(x.hospital>Date.now()?' / reported hospital until '+esc(stamp(x.hospital)):' / availability unverified')+'</p>'+b('Player intelligence','scouter-player:'+x.id)+' '+a('Profile',link(x.id))+'</div>').join(''):empty('No candidates returned.')));
+    return html;
+  }
+  function openScouterPlayer(id){
+    scouterExtra.selected=positive(id);state.open=true;navigate('scouter');
+  }
+
   // Fair Fight from FFScouter uses the API-key owner's battle stats, not a
   // selected teammate's. A true per-hitter figure needs both BSS inputs.
   const ffApiKey=()=>String(cfg.ffKey||'').trim()||effectiveKey();
@@ -1013,6 +1139,27 @@
     if(typeof v==='string'&&/^\d+$/.test(v))return ffTimestamp(Number(v));
     const parsed=Date.parse(String(v||''));return Number.isFinite(parsed)?parsed:0;
   };
+  function scouterPremiumActive(){
+    const reg=state.data.meta?.ffRegistration;
+    return cfg.ffEnabled&&cfg.ffConsent&&reg?.premium===true&&Date.now()-n(reg.at)<HOUR&&
+      (!reg.expires||reg.expires>Date.now());
+  }
+  function parseScouterExtras(p){
+    const value=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))&&Number(v)>=0?Number(v):null;
+    const parts=['strength','speed','defense','dexterity'];
+    const percentages={};
+    for(const k of parts){const v=value(p?.distribution?.stats_percentage?.[k]);if(v!==null&&v<=100)percentages[k]=v;}
+    const distribution=Object.keys(percentages).length&&Object.values(percentages).reduce((a,b)=>a+b,0)<=100.01?
+      {percentages,at:ffTimestamp(p.distribution.last_updated)}:null;
+    const estimates={};
+    for(const k of ['bss','premium','spies']){
+      const x=p?.available_estimates?.[k],total=value(x?.bs_estimate);
+      if(total!==null&&total>0)estimates[k]={total,ff:validScouterFF(x.fair_fight),at:ffTimestamp(x.last_updated)};
+    }
+    const spies=(Array.isArray(p?.spies)?p.spies:[]).slice(0,5).map(x=>({total:value(x.total),at:ffTimestamp(x.last_updated),source:String(x.source||'Unknown').slice(0,40),
+      ...Object.fromEntries(parts.map(k=>[k,value(x[k])]))})).filter(x=>x.total>0&&x.at>0);
+    return {distribution,estimates,spies};
+  }
   function parseFFRows(rows,ids,at=Date.now()){
     if(!Array.isArray(rows))throw new Error('FFScouter response is not a list');
     const allowed=new Set(ids.map(positive)),out={};
@@ -1027,7 +1174,7 @@
         bsHuman:String(p?.bs_estimate_human||chosen?.bs_estimate_human||'').slice(0,70),
         source:String(p?.source||'public estimate').slice(0,35),
         updatedAt:ffTimestamp(p?.last_updated??chosen?.last_updated),
-        premium:Boolean(p?.premium_insights_available),
+        premium:Boolean(p?.premium_insights_available),...parseScouterExtras(p),
         missing:ff===null&&!(Number.isFinite(bss)&&bss>0),
         at};
     }
@@ -1038,7 +1185,14 @@
   function ffscouter(id){
     if(!cfg.ffEnabled||!cfg.ffConsent)return null;
     const x=state.data.ffstats[String(id)];
-    return x&&x.at&&Date.now()-n(x.at)<7*24*HOUR?x:null;
+    if(!x||!x.at||Date.now()-n(x.at)>=7*24*HOUR)return null;
+    if(!scouterPremiumActive()){
+      const base=x.estimates?.bss;
+      if(x.source==='premium'||x.source==='spies')return base?
+        {...x,ff:base.ff,bsEstimate:base.total,updatedAt:base.at,source:'bss',premium:false,distribution:null,spies:[],estimates:{bss:base}}:null;
+      return {...x,distribution:null,spies:[],estimates:base?{bss:base}:{}};
+    }
+    return x;
   }
   function ffIsStale(x){return !x||Date.now()-n(x.at)>=24*HOUR||
     Boolean(x.updatedAt&&Date.now()-n(x.updatedAt)>28*24*HOUR);}
@@ -2180,7 +2334,7 @@
       try{json=typeof raw==='string'?JSON.parse(raw):raw;}
       catch(_){throw new Error('FFScouter returned invalid JSON');}
       if(status>=400)throw new Error('FFScouter HTTP '+status+(json?.error?' - '+String(json.error).slice(0,90):''));
-      if(json?.code!==undefined||json?.error)throw new Error('FFScouter '+String(json.error||json.code).slice(0,100));
+      if((json?.code!==undefined&&Number(json.code)!==0)||json?.error)throw new Error('FFScouter '+String(json.error||json.code).slice(0,100));
       return json;
     };
     if(typeof PDA_httpGet==='function'){
@@ -2199,29 +2353,34 @@
   }
   async function checkFFRegistration(force=false){
     const old=state.data.meta.ffRegistration||{};
-    if(!force&&old.at&&Date.now()-n(old.at)<6*HOUR){
+    if(!force&&old.at&&Date.now()-n(old.at)<HOUR&&(!old.expires||old.expires>Date.now())){
       if(old.registered===false)throw new Error('FFScouter key is not registered. Use Check registered key after signing up.');
       return old;
     }
-    const data=await ffRequest('https://ffscouter.com/api/v1/check-key?key='+encodeURIComponent(ffApiKey()));
+    const key=ffApiKey();
+    const data=await ffRequest('https://ffscouter.com/api/v1/check-key?key='+encodeURIComponent(key));
+    if(ffApiKey()!==key||!cfg.ffEnabled||!cfg.ffConsent)throw Error('FFScouter settings changed; retry with the current key.');
     const registered=data?.is_registered===true||data?.registered===true;
-    const result={registered,premium:Boolean(data?.is_premium),at:Date.now()};
+    const result={registered,premium:Boolean(data?.is_premium),expires:Math.max(ffTimestamp(data?.premium_expires_at),ffTimestamp(data?.faction_premium_expires_at)),at:Date.now()};
     state.data.meta.ffRegistration=result;
+    if(!result.premium){scouterExtra.flights={};scouterExtra.activity={};scouterExtra.history={};scouterExtra.targets=[];scouterExtra.targetsAt=0;}
     if(!registered)throw new Error('Your Torn key is not registered with FFScouter. Register it on ffscouter.com or use another registered key.');
     return result;
   }
   async function refreshFF(force=false){
     if(pageBseBusy||rosterFFBusy)return;
     if(!cfg.ffEnabled||!cfg.ffConsent||!ffApiKey()||!state.data.enemies.length)return;
-    if(!canCall('ffscouter',force?0:10*MIN))return;
+    if(!canCall('ffscouter',force?MIN:HOUR))return;
     const ids=[...new Set([...state.data.enemies,...state.data.ours].map(p=>p.id).concat(positive(state.data.meta?.ownerId)).filter(Boolean))].slice(0,205);
     if(!ids.length)return;
-    const url='https://ffscouter.com/api/v1/get-stats?key='+encodeURIComponent(ffApiKey())+
+    const key=ffApiKey();
+    const url='https://ffscouter.com/api/v1/get-stats?key='+encodeURIComponent(key)+
       '&targets='+ids.join(',');
     rosterFFBusy=true;
     try{
       await checkFFRegistration();
       const results=await ffRequest(url);
+      if(key!==ffApiKey()||!cfg.ffEnabled||!cfg.ffConsent)return;
       const now=Date.now();
       const parsed=parseFFRows(results,ids,now);
       for(const [id,data] of Object.entries(parsed))state.data.ffstats[id]=data;
@@ -2832,7 +2991,7 @@
       '. Estimates are for the registered API-key owner. Individual Black Skulls FF values are calculated separately when you have comparable spy/BSS data for both players.</p>'+
       (state.data.errors.ffscouter?'<div class="ws-note ws-warn">FFScouter: '+esc(state.data.errors.ffscouter)+'</div>':'')+
       '<div class="ws-toolbar">'+b('Refresh FF','refresh-ff')+b('Check registered key','check-ff-key')+
-      b('FF settings','tab:settings')+'</div>'+
+      b('FF settings','tab:settings')+b('Premium intelligence','tab:scouter')+'</div>'+
       '<p class="ws-small">FFScouter calculated FF can exceed 3.00: that means an increasingly tough opponent, NOT bonus respect above 3.00. Torn awarded FF stays between 1.00 and 3.00; logged attacks are labelled observed.</p>');
   }
   async function manualFFCheck(onlyCheck=false){
@@ -5749,7 +5908,7 @@
         state.tab==='targets'&&positive(state.chosen)===positive(id))
         loadPublicIntel(id);},100);
     }
-    let html=statusNote()+
+    let html=statusNote()+b('FFScouter Premium details','scouter-player:'+id)+
       '<div class="ws-toolbar">'+b('Back to enemy players','tab:targets')+b('Opponent dossier','tab:intel')+
       a('Torn profile',link(id))+(side==='enemies'?a('Attack page',attackLink(id)):'')+'</div>'+
       '<div class="ws-lead"><span class="ws-data-label">PLAYER INTELLIGENCE | '+(side==='ours'?'OUR MEMBER':'OPPONENT')+'</span>'+
@@ -6054,7 +6213,8 @@
       '<h3>FFScouter \u00b7 optional, independent service</h3><p>When enabled with explicit consent, WarStaxx uses your registered FFScouter key or your existing Torn PDA key if the separate field is empty. It sends that key and target player IDs to FFScouter, not to TornStaxx hub. You must first register the key with FFScouter. Read the <a href="https://ffscouter.com/#data-policy" target="_blank" rel="noopener noreferrer">FFScouter data policy</a>; free and premium plans may offer different data.</p>'+ 
       '<label>Optional FFScouter-specific API key<input id="ws-ffkey" type="password" autocomplete="off" placeholder="'+(cfg.ffKey?'Separate key saved; blank keeps it':effectiveKey()?'Uses your Torn PDA key when opted in':'Enter a registered key or connect Torn PDA key')+'"></label>'+ 
       '<label><input type="checkbox" id="ws-ff-consent" '+(cfg.ffConsent?'checked':'')+'> I have read the FFScouter data policy and knowingly enable this third-party lookup.</label>'+ 
-      '<label><input type="checkbox" id="ws-ff-enable" '+(cfg.ffEnabled?'checked':'')+'> Show FF and BSE estimates. Roster checks every 10 minutes; new visible player IDs in batches at most once per minute, with estimates cached for 24 hours.</label>'+
+      '<label><input type="checkbox" id="ws-ff-enable" '+(cfg.ffEnabled?'checked':'')+'> Show FF and BSE estimates. Roster estimates refresh hourly; new visible players are checked in batches at most once per minute and cached for one hour.</label>'+
+      '<p class="ws-small">Premium intelligence includes supplied stat distributions and spy snapshots. Open Premium intelligence for on-demand flight checks, scanner activity, estimate history and target search. '+a('API guidance','https://ffscouter.com/api-docs/guidance')+' / '+a('Scanner data policy','https://ffscouter.com/volunteer')+'</p>'+b('Premium intelligence','tab:scouter')+
       '<div class="ws-toolbar">'+b('Save settings','save-settings')+b('Verify FF key','check-ff-key')+b('Refresh FF','refresh-ff')+b('Use PDA key for FF','clear-ff-key')+b('Detect my faction now','detect-faction')+b('Refresh all now','refresh')+b('Clear stored API key','clear-key')+'</div>'+
       '<p class="ws-small">API access depends on your custom key scope. Opponent member lists and ranked-war history use public selections; your own detailed attacks require faction access.</p>')+
       card('Local intelligence controls','<p>War histories, observations and spy reports stay in this device browser storage. Only selected role/order fields sync to an explicitly configured Worker.</p>'+
@@ -6321,7 +6481,7 @@
       ['Hit ledger','Captured attacks and outcomes','ledger'],['Score pace','Momentum and observed scoring','pace'],
       ['War history','Official reports and scorecards','history'],['Timelines','Observed war progress','timeline']]],
       ['Intelligence',[
-      ['Faction scouting','Opponent history and strength','scouting'],['Player dossiers','Detailed enemy analysis','targets'],
+      ['FFScouter Premium','Stat distribution, flights, activity and target search','scouter'],['Faction scouting','Opponent history and strength','scouting'],['Player dossiers','Detailed enemy analysis','targets'],
       ['Activity','Sampled online and travel patterns','activity'],['Threats','Enemy impact and priorities','threats'],
       ['Strategy','Member-by-member planning','strategy'],['Full dashboard','All legacy metrics','dashboard']]],
       ['Setup',[
@@ -6351,7 +6511,7 @@
       '<button type="button" class="'+((state.tab===tab||
         !primary.includes(state.tab)&&tab===detailGroup)?'on':'')+
       '" data-tab="'+tab+'">'+esc(labels[tab])+'</button>').join('');
-    const pages={overview:warWorkspace,enemy:rosterWorkspace,reports:archiveWorkspace,dashboard:overview,scouting:enemyScreen,archive:reportsScreen,leader:leaderScreen,skulls:blackSkullsRoom,commander,operations,ledger,threats,control,turtle,command,pace,afteraction,intel,targets,matchups,timeline,strategy,activity,history,assignments:orders,alerts:alertView,settings,diagnostics};
+    const pages={scouter:scouterScreen,overview:warWorkspace,enemy:rosterWorkspace,reports:archiveWorkspace,dashboard:overview,scouting:enemyScreen,archive:reportsScreen,leader:leaderScreen,skulls:blackSkullsRoom,commander,operations,ledger,threats,control,turtle,command,pace,afteraction,intel,targets,matchups,timeline,strategy,activity,history,assignments:orders,alerts:alertView,settings,diagnostics};
     const content=$('.ws-content',root);
     const scroll=content.scrollTop;
     if(previousDisclosureView){
@@ -6698,6 +6858,9 @@
     }
     if(action==='refresh-ff'){manualFFCheck(false);return;}
     if(action==='watched-list'){state.filter='watched';navigate('targets');return;}
+    if(action==='scouter-open'){openScouterPlayer($('#ws-scouter-id',root)?.value);return;}
+    if(action.startsWith('scouter-player:')){openScouterPlayer(action.split(':')[1]);return;}
+    if(action.startsWith('scouter:')){const [,kind,id]=action.split(':');void scouterRead(kind,Number(id));return;}
     if(action==='check-ff-key'){manualFFCheck(true);return;}
     if(action.startsWith('watch:')){const id=positive(action.slice(6));if(id){if(cfg.watchlist[id])delete cfg.watchlist[id];else cfg.watchlist[id]=true;saveCfg();render();}return;}
     if(action==='war-list'){state.selectedWar=0;navigate('history');return;}
@@ -7343,7 +7506,7 @@
   function pageBseValue(id){
     const x=ffscouter(id);
     if(x&&Number.isFinite(x.bsEstimate)&&x.bsEstimate>0)return {label:'BSE ~'+nativeCompactTotal(x.bsEstimate),
-      detail:'Estimated total battle stats: '+fmt(x.bsEstimate)+' / FFScouter / '+(ffIsStale(x)?'STALE / ':'')+'estimate updated '+age(x.updatedAt||x.at),stale:ffIsStale(x)};
+      detail:'Estimated total battle stats: '+fmt(x.bsEstimate)+' / FFScouter '+x.source+' / '+(ffIsStale(x)?'STALE / ':'')+'estimate updated '+age(x.updatedAt||x.at),stale:ffIsStale(x)};
     const status=pageLookupStatus(id);
     return {label:'BSE '+status.mark,detail:status.detail,stale:false};
   }
@@ -7371,7 +7534,10 @@
         button.onclick=e=>{e.preventDefault();e.stopPropagation();detail.hidden=!detail.hidden;button.setAttribute('aria-expanded',String(!detail.hidden));};
         wrap.append(button,detail);a.insertAdjacentElement('afterend',wrap);row={id,wrap,button,detail,ffs,total};pageBseRows.set(a,row);}
       const value=pageBseValue(id),fair=pageFfsValue(id);row.total.textContent=value.label;row.ffs.textContent=fair.label;row.ffs.dataset.band=fair.band;
-      row.button.setAttribute('aria-label',fair.label+' / '+value.label+' for '+a.textContent.trim()+'. '+fair.band+'. Tap for details.');row.detail.textContent=fair.detail+' '+value.detail;row.wrap.dataset.stale=String(value.stale);
+      row.button.setAttribute('aria-label',fair.label+' / '+value.label+' for '+a.textContent.trim()+'. '+fair.band+'. Tap for details.');row.detail.textContent=fair.detail+' '+value.detail;
+      const intelligence=ffscouter(id);
+      if(scouterPremiumActive()&&intelligence?.distribution)row.detail.append(' Estimated distribution: '+Object.entries(intelligence.distribution.percentages).map(([k,v])=>k+' '+v+'%').join(' / ')+'.');
+      if(scouterPremiumActive()){if(scouterFlightText(id))row.detail.append(' '+scouterFlightText(id));const more=document.createElement('button');more.type='button';more.textContent='Premium player details';more.onclick=e=>{e.preventDefault();e.stopPropagation();openScouterPlayer(id);};row.detail.append(more);}row.wrap.dataset.stale=String(value.stale);
       if(row.wrap.previousElementSibling!==a)a.insertAdjacentElement('afterend',row.wrap);
       const r=a.getBoundingClientRect();if(r.bottom>=-300&&r.top<window.innerHeight+600)ids.add(id);
     }
@@ -7380,7 +7546,7 @@
   }
   async function refreshPageBse(ids){
     if(document.hidden||pageBseBusy||rosterFFBusy||!cfg.ffEnabled||!cfg.ffConsent||!ffApiKey()||!canCall('ffscouter')||!canCall('fflists',MIN))return;
-    const now=Date.now(),key=ffApiKey(),needed=[...new Set(ids)].filter(id=>Number.isSafeInteger(id)&&id>0).filter(id=>{const x=state.data.ffstats[id];return !x||now-n(x.at)>(x.bsEstimate>0&&Number.isFinite(x.ff)&&x.ff>=1?24*HOUR:30*MIN);}).slice(0,205);
+    const now=Date.now(),key=ffApiKey(),needed=[...new Set(ids)].filter(id=>Number.isSafeInteger(id)&&id>0).filter(id=>{const x=state.data.ffstats[id];return !x||now-n(x.at)>(x.bsEstimate>0&&Number.isFinite(x.ff)&&x.ff>=1?HOUR:30*MIN);}).slice(0,205);
     if(!needed.length)return;
     pageBseBusy=true;state.data.updated.fflists=now;if(pageBseRows.size)syncPageBse(false);
     try{await checkFFRegistration();if(document.hidden||!cfg.ffEnabled||!cfg.ffConsent||ffApiKey()!==key)return;

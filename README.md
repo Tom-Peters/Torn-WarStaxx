@@ -1,3 +1,15 @@
+## 2.7.0 - FFScouter Premium intelligence
+
+WarStaxx now retains Premium stat distributions, alternative estimates and dated spy snapshots, preserving the provider-selected BSE and personal FFS. Open **Tools & reports → FFScouter Premium**, or expand a native player badge and choose **Premium player details**.
+
+- Verify your existing registered key in Settings; Premium is detected from the provider, including faction entitlement. No second key is needed in ProfitStaxx.
+- Check a player’s flight arrival window, hourly scanner observations over 24 hours, or seven days of estimate history. Roster flight checks cover up to 100 loaded players. Missing flights do not establish location; scanner scores are observations, not time online.
+- Find up to 20 respect candidates, then inspect their intelligence or open their Torn profile. These are not bounty payout predictions.
+- Flight/activity responses stay in memory, requests are throttled, and stale/unknown data is labelled. Disabling consent or changing keys clears extra caches; unverified Premium estimates cannot drive targeting.
+- Native badges stay compact. Premium detail is available where existing player badges appear, including bounty and abroad lists. No generic page bar or automated game actions.
+
+Based on [FFScouter OpenAPI 1.20.0](https://ffscouter.com/openapi). Activity responses with success code `0` are now accepted. Live subscriber-account and Torn PDA checks remain to be performed on the user’s device.
+
 ## 2.6.0
 
 Filter Players to your current country or hospital releases within 15 minutes. Sort within each country by total stats, with missing totals last.
