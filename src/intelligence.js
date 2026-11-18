@@ -36,6 +36,15 @@
     for(const k of archiveNumbers)if(typeof raw[k]==='number'&&Number.isFinite(raw[k])&&raw[k]>=0&&(!['attackerFaction','defenderFaction','warId','startedAt','endedAt'].includes(k)||raw[k]>0))row[k]=raw[k];
     for(const k of ['result','attackerName','defenderName'])if(typeof raw[k]==='string'&&raw[k])row[k]=raw[k].slice(0,80);
     if(typeof raw.ranked==='boolean')row.ranked=raw.ranked;
+    const dated={};
+    for(const [side,who] of [['attacker',row.attacker],['defender',row.defender]]){
+      const prior=raw.spyEvidence?.[side],live=spy(who);
+      const valid=v=>v?.observedAt>0&&v.observedAt<=row.at&&bsScore(v)!==null;
+      const evidence=valid(prior)?prior:valid(live)?live:null;
+      if(evidence)dated[side]={observedAt:evidence.observedAt,source:String(evidence.source||'Local dated spy').slice(0,60),
+        ...Object.fromEntries(['strength','speed','defense','dexterity'].map(k=>[k,Number(evidence[k])]))};
+    }
+    if(Object.keys(dated).length)row.spyEvidence=dated;
     return row;
   }
   function transact(store,callback){
@@ -50,7 +59,7 @@
   async function keepFights(rows,source){
     await archiveReady;
     if(!combatArchive.db||!rows.length)return;
-    const staged=new Map();
+    const staged=new Map();let newCount=0;
     await transact('fights',store=>{
       for(const raw of rows){
         const row=cleanFight(raw);if(!row||staged.has(row.id))continue;
@@ -59,11 +68,13 @@
         req.onsuccess=()=>{
           const old=req.result;
           if(old&&(old.attacker!==row.attacker||old.defender!==row.defender))return;
-          if(!old&&combatArchive.fights.size+staged.size>40000){combatArchive.error='Combat archive capacity reached. Export your archive before collecting more.';return;}
+          if(!old&&combatArchive.fights.size+newCount>=40000){combatArchive.error='Combat archive capacity reached. Export your archive before collecting more.';return;}
+          if(!old)newCount++;
           const sources=[...new Set([...(old?.sources||[]),...(source==='Local import'?(raw.sources||[]).filter(x=>permittedSources.includes(x)):[]),source])];
           const merged={...row,...old,sources,capturedAt:old?.capturedAt||(source==='Local import'&&Number.isSafeInteger(raw.capturedAt)?Math.min(Date.now(),raw.capturedAt):Date.now())};
           // Prefer detailed live fields over a partial or legacy record.
           if(source==='Torn faction'||source==='Torn ranked attacks')Object.assign(merged,row);
+          if(old?.spyEvidence||row.spyEvidence)merged.spyEvidence={...row.spyEvidence,...old?.spyEvidence};
           merged.quality=merged.ff!==undefined&&merged.startedAt&&merged.endedAt?'detailed':'partial';
           if(JSON.stringify(old)!==JSON.stringify(merged))store.put(merged);
           staged.set(row.id,merged);

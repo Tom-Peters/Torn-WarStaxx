@@ -69,7 +69,7 @@
       (member?commandOption('roll',choiceItems(['at start','later','unavailable']),roll[member]?.choice,'My availability')+
         '<label>From (UTC)<input type="datetime-local" id="ws-cmd-from"></label><label>Until (UTC)<input type="datetime-local" id="ws-cmd-until"></label>'+b('Submit my availability','cmd-roll'):
         '<p>A member-bound credential is required to respond.</p>'))+
-      forecastCard()+card('Defensive priorities',losses||empty('No fresh, captured scoring losses and exposure to report.'))+
+      openingEvidence()+forecastCard()+card('Defensive priorities',losses||empty('No fresh, captured scoring losses and exposure to report.'))+
       foldCommand('rules','Weekly war rules', '<p>Torn reports a target and scores. Enter any additional conditions shown on this war\'s enlistment panel.</p>'+
       '<label>Winning condition<input maxlength="100" id="ws-cmd-condition" value="'+esc(rules.condition||'')+'"></label>'+
       '<label>Threshold reduction per hour (%)<input type="number" min="0" max="100" id="ws-cmd-decay" value="'+esc(rules.decay??'')+'"></label>'+
@@ -141,4 +141,27 @@
       }else if(kind==='dossier'){const id=Number(cmdValue('archive-player'));if(id)handle('player:'+id);}
       render();
     }catch(e){state.error='WarStaxx: '+String(e.message||'Request failed').slice(0,160);render();}
+  }
+  function playerActivityDetail(p){
+    const places=new Map(),weekday=Array(7).fill(0);
+    let recent=0,away=0,samples=0;
+    for(const r of combatArchive.hours.values())if(r.player===p.id&&r.source==='roster'){
+      recent=Math.max(recent,r.at);samples+=r.samples;away+=r.away;
+      if(r.country&&r.country!=='Unknown')places.set(r.country,(places.get(r.country)||0)+1);
+    }
+    for(const row of combatArchive.fights.values())if(row.attacker===p.id)weekday[new Date(row.at).getUTCDay()]++;
+    const visits=[...places.entries()].sort((a,b)=>b[1]-a[1]).map(([c,h])=>c+' ('+h+' sampled hours)').join(', ');
+    return foldCommand('player-patterns-'+p.id,'Activity, travel and attack timing','<p>'+samples+' roster samples / '+away+' away observations / last '+esc(stamp(recent))+
+      '.</p><p>'+esc(visits||'No reliable country observations')+'</p><p>Captured attacks by UTC weekday: '+weekday.map((n,i)=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][i]+' '+n).join(', ')+'.</p>'+
+      b('Hourly activity and weekday averages','cmd-player:'+p.id));
+  }
+  function openingEvidence(){
+    const sides=[['ours','Our faction'],['enemies','Opponent']];
+    return foldCommand('opening-evidence','Previous wars and opening threats',sides.map(([side,label])=>{
+      const m=factionWarMetrics(side);
+      const seen=state.data[side].map(p=>({p,pat:pattern(side,p.id)})).filter(x=>x.pat.count>=3).sort((a,b)=>b.pat.travel-a.pat.travel);
+      const top=side==='enemies'?[...enemyRoleBands().heavy].slice(0,5).map(playerName):state.data.ours.filter(p=>cfg.blackSkulls[p.id]).map(p=>p.name);
+      return '<p><b>'+label+'</b> / '+m.wars+' previous wars / '+m.wins+' recorded wins / mean score '+fmt(m.scoreAvg)+'.</p><p>'+esc(top.join(', ')||'Heavy roster unknown')+
+        '</p><p>Most often observed away: '+esc(seen.slice(0,3).map(x=>x.p.name+' ('+x.pat.travel+'% of '+x.pat.count+' samples)').join(', ')||'Insufficient observations')+'</p>';
+    }).join(''));
   }

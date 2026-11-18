@@ -26,14 +26,23 @@
       }
     });
     rows.forEach(x=>combatArchive.hours.set(x.id,x));
+    const observedIds=new Set(players.map(p=>p.id));
     const people=[];
     await transact('people',store=>{
+      for(const entry of combatArchive.people.values()){
+        const last=entry.memberships.at(-1);
+        if(last?.faction!==faction||last.departed||entry.at>=at||observedIds.has(entry.id))continue;
+        const read=store.get(entry.id);read.onsuccess=()=>{
+          const stored=read.result,h=stored?.memberships.at(-1);
+          if(h?.faction===faction&&!h.departed&&stored.at<at){h.departed=at;stored.at=at;store.put(stored);people.push(stored);}
+        };
+      }
       for(const p of players){
         const req=store.get(p.id);
         req.onsuccess=()=>{
           const r=req.result||{id:p.id,memberships:[]};
           if(r.at>=at)return;
-          if(r.memberships.at(-1)?.faction!==faction)r.memberships.push({faction,first:at});
+          if(r.memberships.at(-1)?.faction!==faction||r.memberships.at(-1)?.departed)r.memberships.push({faction,first:at});
           r.name=p.name.slice(0,80);r.at=at;r.memberships.at(-1).last=at;
           store.put(r);people.push(r);
         };
@@ -55,7 +64,7 @@
       const hour=b.ts*1000;
       if(!Number.isInteger(b.ts)||b.ts<meta.start||b.ts>=meta.end||hour>at||hour<at-31*24*HOUR||!Number.isFinite(b.activity_score)||b.activity_score<0)continue;
       rows.push({id:[hour,faction,player,'scanner'].join('/'),hour,faction,player,war:warAt(faction,hour),
-        source:'scanner',score:b.activity_score,active:officialNumber(b.active_players),roster:officialNumber(meta.member_count),
+        owner:positive(state.data.meta.ownerId),source:'scanner',score:b.activity_score,active:officialNumber(b.active_players),roster:officialNumber(meta.member_count),
         ratio:officialNumber(b.active_ratio),partial:meta.truncated===true,at});
     }
     await transact('hours',s=>rows.forEach(r=>s.put(r)));rows.forEach(r=>combatArchive.hours.set(r.id,r));
@@ -78,7 +87,9 @@
     finally{scannerBusy=false;if(state.open)render();}
   }
   function activityCells(faction,options=activityPrefs,at=Date.now()){
-    const cells=new Map(),today=Math.floor(at/(24*HOUR))*24*HOUR,cut=today-(options.days-1)*24*HOUR;
+    const cells=new Map();
+    if(options.source==='scanner'&&!scouterPremiumActive())return cells;
+    const today=Math.floor(at/(24*HOUR))*24*HOUR,cut=today-(options.days-1)*24*HOUR;
     const allowed=(war)=>options.period==='all'||(options.period==='war'?war>0:war===0);
     function bucket(hour){
       if(!cells.has(hour))cells.set(hour,{sum:0,count:0,players:new Set(),roster:0,at:0,received:0,missing:0});
@@ -91,10 +102,15 @@
       }
     }else for(const r of combatArchive.hours.values()){
       if(r.hour<cut||r.hour>at||r.faction!==faction||!allowed(r.war)||r.source!==(options.source==='recent'?'roster':options.source))continue;
+      if(r.source==='scanner'&&r.owner!==positive(state.data.meta.ownerId))continue;
       if(options.player?r.player!==options.player:r.source==='scanner'&&r.player)continue;
       const c=bucket(r.hour);c.at=Math.max(c.at,r.at);c.roster=Math.max(c.roster,r.roster||0);c.received++;
       if(r.source==='scanner'){c.sum+=r.score;c.count++;if(r.partial)c.missing++;}
       else{c.players.add(r.player);c.sum+=options.source==='recent'?r.recent:r.online;c.count+=options.source==='recent'?r.samples:r.samples-r.unknown;c.missing+=r.unknown;}
+    }
+    if(options.source==='roster'&&!options.player)for(const r of combatArchive.hours.values()){
+      if(r.source!=='legacy'||r.hour<cut||r.faction!==faction||!allowed(r.war)||cells.has(r.hour))continue;
+      const c=bucket(r.hour);c.sum=r.online;c.count=r.samples;c.at=r.at;c.received=1;
     }
     return cells;
   }
@@ -107,20 +123,30 @@
     const results=[];
     for(const minutes of [30,60,120]){
       let best=null;
+      const byHour=new Map();
       for(let step=0;step<48;step++){
         const start=Math.ceil(at/(30*MIN))*30*MIN+step*30*MIN,end=start+minutes*MIN;
         let score=0,coverage=Infinity;
         for(let t=start;t<end;t+=30*MIN){
-          const h=new Date(t).getUTCHours(),a=weightedCells(own,d=>d.getUTCHours()===h),b=weightedCells(enemy,d=>d.getUTCHours()===h);
+          const h=new Date(t).getUTCHours();
+          if(!byHour.has(h))byHour.set(h,[weightedCells(own,d=>d.getUTCHours()===h),weightedCells(enemy,d=>d.getUTCHours()===h)]);
+          const [a,b]=byHour.get(h);
           if(a.days<2||b.days<2){coverage=0;break;}
           coverage=Math.min(coverage,a.days,b.days);
-          score+=2*a.mean-b.mean;
+          const heavy=conditions.heavyHours?.[h],skulls=conditions.skullHours?.[h];
+          score+=2*a.mean-b.mean+(skulls?.count?0.4*skulls.sum/skulls.count:0)-(heavy?.count?0.5*heavy.sum/heavy.count:0);
         }
         if(!coverage||!conditions.hitterCount||!conditions.targetCount)continue;
         score/=minutes/30;
         const release=conditions.releases.filter(t=>t>=start&&t<end).length;
         const arrivals=conditions.arrivals.filter(t=>t>=start&&t<end).length;
         score+=0.05*Math.min(3,release)-0.05*Math.min(3,arrivals);
+        if(start-at<HOUR){
+          score+=Math.min(0.3,conditions.targetCount*0.03)+Math.min(0.2,conditions.hitterCount*0.02);
+          if(conditions.heavy)score-=0.15*Math.max(0,conditions.heavy-conditions.covered)/conditions.heavy;
+          if(conditions.netRate!=null)score+=Math.max(-0.15,Math.min(0.15,conditions.netRate/1000));
+          if(conditions.activeHeavy)score-=Math.min(0.2,conditions.activeHeavy*0.025);
+        }
         if(!best||score>best.score)best={minutes,start,end,score,coverage,release,arrivals,confidence:coverage>=5?'Moderate':'Limited'};
       }
       results.push(best||{minutes,confidence:'Insufficient coverage'});
@@ -150,4 +176,20 @@
     for(let d=0;d<7;d++)rows+=tr(['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d],means(x=>x.getUTCDay()===d));
     const last=Math.max(0,...[...cells.values()].map(c=>c.at)),coverage=[...cells.values()].filter(c=>c.count).length;
     return card(title,'<p>'+coverage+' sampled hour(s) / '+opts.days+' UTC dates. Latest '+esc(stamp(last))+'. Dash = missing.</p><div class="ws-hour-scroll" tabindex="0"><table><thead><tr><th>TCT</th>'+headers+'</tr></thead><tbody>'+rows+'</tbody></table></div>');
+  }
+  async function migrateLegacyActivity(){
+    if(!combatArchive.db||state.data.meta.hourMigration)return;
+    const oldest=Date.now()-30*24*HOUR,rows=[];
+    for(const r of Object.values(state.data.warTimelines||{})){
+      for(const side of ['ours','enemies']){
+        const faction=side==='ours'?r.ourId:r.enemyId;if(!idKey(faction))continue;
+        for(const [index,h] of Object.entries(r.sides?.[side]?.hours||{})){
+          const hour=Number(index)*HOUR;if(hour<oldest||!h.samples)continue;
+          const war=hour>=r.start?r.id:hour+HOUR<=r.start?0:null;
+          rows.push({id:[hour,faction,0,war,'legacy'].join('/'),hour,faction,player:0,war,source:'legacy',samples:h.samples,online:h.online,unknown:0,at:Math.min(hour+HOUR,r.updated)});
+        }
+      }
+    }
+    await transact('hours',s=>rows.forEach(r=>s.put(r)));rows.forEach(r=>combatArchive.hours.set(r.id,r));
+    state.data.meta.hourMigration=1;save();
   }

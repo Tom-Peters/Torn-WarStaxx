@@ -1,5 +1,5 @@
   const commandSync={room:null,scope:'',token:'',readAt:0,error:'',busy:false,attempt:0};
-  function roomKey(){const s=sharedScope();return s&&sharedEndpoint()?sharedEndpoint()+'/'+s.faction+'/'+s.war:'';}
+  function roomKey(){const s=sharedScope();return s&&state.data.war.opponentId===cfg.enemyId&&sharedEndpoint()?sharedEndpoint()+'/'+s.faction+'/'+s.war:'';}
   function commandRoom(){
     return roomKey()&&roomKey()===commandSync.scope&&commandSync.token===cfg.shared.token?commandSync.room:null;
   }
@@ -49,7 +49,7 @@
   }
   function coordinationAlerts(){
     if(!state.data.war?.id)return [];
-    const out=[],room=commandRoom(),add=(id,title,detail,tab,priority)=>out.push({id,title,detail,tab,priority,status:'now'});
+    const out=commandSignals.scope===state.data.war.id&&Date.now()-commandSignals.at<5*MIN?[...commandSignals.alerts]:[],room=commandRoom(),add=(id,title,detail,tab,priority)=>out.push({id,title,detail,tab,priority,status:'now'});
     if(roomKey()&&commandSync.error)add('cmd-sync','Shared coordination needs attention',commandSync.error,'squad',84);
     if(preparingWar()&&(!room||!Object.keys(room.ops.roll).length))add('cmd-ready','Opening roll call outstanding','Review opening coverage and voluntary availability.','brief',75);
     if(!room||Date.now()-commandSync.readAt>5*MIN)return out;
@@ -63,8 +63,7 @@
   function sharedNextStep(){
     const r=commandRoom(),me=state.data.meta.ownerId;
     if(!r||Date.now()-commandSync.readAt>3*MIN||!me)return null;
-    const row=Object.entries(r.plan.assignments).filter(([,a])=>a.primary===me)
-      .sort((a,b)=>b[1].priority-a[1].priority)[0];
+    const row=sharedQueue(me)[0];
     if(!row)return null;
     const [id]=row,claim=r.ops.claims[id],stateNow=r.ops.states[id];
     const title=claimLive(claim)&&claim.hitter!==me?'Wait for the active target claim':
@@ -116,4 +115,31 @@
       (Number(i)===actor&&d.target?(claimLive(room.ops.claims[d.target])?room.ops.claims[d.target].hitter===actor?b('Release','cmd-release:'+d.target):'':b('Claim','cmd-claim:'+d.target)):'')+'</p>').join('')+
       (room.events||[]).map(x=>'<p>'+esc(stamp(x.at)+' / revision '+x.revision+' / '+x.event.type+' / '+(x.event.target?playerName(x.event.target):'')+' '+(x.event.changes||[]).map(c=>playerName(c.target)+' to '+playerName(c.primary)+' ('+c.reason+')').join(', '))+'</p>').join(''));
     return html+b('Legacy orders and squad membership','tab:leader');
+  }
+  let commandSignals={scope:'',at:0,alerts:[]};
+  function refreshCommandSignals(){
+    const now=Date.now(),w=state.data.war;if(!w||!rosterFresh('ours')||!rosterFresh('enemies'))return;
+    const alerts=[],add=(id,title,detail,tab,priority)=>alerts.push({id,title,detail,tab,priority,status:'now'});
+    const room=commandRoom(),bands=enemyRoleBands();
+    if(room&&[...bands.heavy].some(id=>!room.plan.assignments[id]))add('cmd-uncovered','High-priority target needs a hitter','Review the available matchups and ordered backups.','squad',91);
+    if(activeWarNow()&&protectionPriorities().some(x=>x.player.id===state.data.meta.ownerId&&x.exposed&&x.feedFresh&&x.impact.underFire)&&travelPlan().some(r=>r.safe))
+      add('cmd-flight','Consider defensive travel','Compare flight cover and your next attacking duty.','flights',90);
+    if(activeWarNow()&&forecastReport().windows.some(w=>w.start&&w.start-now<30*MIN))add('cmd-window','Attack window approaching','Review availability, operational risks and confidence.','heatmap',83);
+    commandSignals={scope:w.id,at:now,alerts};
+  }
+  function sharedQueue(id){
+    const r=commandRoom();if(!r)return [];
+    const entries=Object.entries(r.plan.assignments);
+    return entries.filter(([t,a])=>a.primary===id||claimLive(r.ops.claims[t])&&r.ops.claims[t].hitter===id)
+      .sort(([i,a],[j,b])=>Number(claimLive(r.ops.claims[j])&&r.ops.claims[j].hitter===id)-
+        Number(claimLive(r.ops.claims[i])&&r.ops.claims[i].hitter===id)||b.priority-a.priority||Number(i)-Number(j));
+  }
+  function sharedRestriction(target,hitter){
+    const r=commandRoom();if(!r)return '';
+    const claim=r.ops.claims[target],a=r.plan.assignments[target];
+    if(claimLive(claim)&&claim.hitter!==hitter)return 'This target is reserved by '+playerName(claim.hitter)+'.';
+    if(!a)return '';
+    if(commandSync.error||Date.now()-commandSync.readAt>3*MIN)return 'Refresh the shared order before acting.';
+    if(a.primary!==hitter&&!(claimLive(claim)&&claim.hitter===hitter))return 'Another hitter holds this shared assignment.';
+    return '';
   }

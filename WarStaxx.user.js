@@ -186,8 +186,8 @@
   window.__warStaxxBooted = true;
   const ID='war', VER='3.0.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
-  const sections=['squad','brief','heatmap','flights','combat','overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics','dashboard','scouting','archive','scouter'];
-  const labels={squad:'Black Skull command',brief:'War briefing',heatmap:'Activity and forecasts',flights:'Defensive travel',combat:'Combat archive',scouter:'FFScouter Premium',overview:'Live war',enemy:'Players',reports:'Tools & reports',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics',dashboard:'Full dashboard',scouting:'Faction scouting',archive:'Detailed reports'};
+  const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics','dashboard','scouting','archive','scouter','squad','brief','heatmap','flights','combat'];
+  const labels={scouter:'FFScouter Premium',overview:'Live war',enemy:'Players',reports:'Tools & reports',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics',dashboard:'Full dashboard',scouting:'Faction scouting',archive:'Detailed reports',squad:'Black Skull command',brief:'War briefing',heatmap:'Activity and forecasts',flights:'Defensive travel',combat:'Combat archive'};
   const $=(s,root=document)=>root.querySelector(s);
   const $$=(s,root=document)=>Array.from(root.querySelectorAll(s));
   const n=v=>Number.isFinite(Number(v))?Number(v):0;
@@ -302,6 +302,15 @@
     for(const k of archiveNumbers)if(typeof raw[k]==='number'&&Number.isFinite(raw[k])&&raw[k]>=0&&(!['attackerFaction','defenderFaction','warId','startedAt','endedAt'].includes(k)||raw[k]>0))row[k]=raw[k];
     for(const k of ['result','attackerName','defenderName'])if(typeof raw[k]==='string'&&raw[k])row[k]=raw[k].slice(0,80);
     if(typeof raw.ranked==='boolean')row.ranked=raw.ranked;
+    const dated={};
+    for(const [side,who] of [['attacker',row.attacker],['defender',row.defender]]){
+      const prior=raw.spyEvidence?.[side],live=spy(who);
+      const valid=v=>v?.observedAt>0&&v.observedAt<=row.at&&bsScore(v)!==null;
+      const evidence=valid(prior)?prior:valid(live)?live:null;
+      if(evidence)dated[side]={observedAt:evidence.observedAt,source:String(evidence.source||'Local dated spy').slice(0,60),
+        ...Object.fromEntries(['strength','speed','defense','dexterity'].map(k=>[k,Number(evidence[k])]))};
+    }
+    if(Object.keys(dated).length)row.spyEvidence=dated;
     return row;
   }
   function transact(store,callback){
@@ -316,7 +325,7 @@
   async function keepFights(rows,source){
     await archiveReady;
     if(!combatArchive.db||!rows.length)return;
-    const staged=new Map();
+    const staged=new Map();let newCount=0;
     await transact('fights',store=>{
       for(const raw of rows){
         const row=cleanFight(raw);if(!row||staged.has(row.id))continue;
@@ -325,11 +334,13 @@
         req.onsuccess=()=>{
           const old=req.result;
           if(old&&(old.attacker!==row.attacker||old.defender!==row.defender))return;
-          if(!old&&combatArchive.fights.size+staged.size>40000){combatArchive.error='Combat archive capacity reached. Export your archive before collecting more.';return;}
+          if(!old&&combatArchive.fights.size+newCount>=40000){combatArchive.error='Combat archive capacity reached. Export your archive before collecting more.';return;}
+          if(!old)newCount++;
           const sources=[...new Set([...(old?.sources||[]),...(source==='Local import'?(raw.sources||[]).filter(x=>permittedSources.includes(x)):[]),source])];
           const merged={...row,...old,sources,capturedAt:old?.capturedAt||(source==='Local import'&&Number.isSafeInteger(raw.capturedAt)?Math.min(Date.now(),raw.capturedAt):Date.now())};
           // Prefer detailed live fields over a partial or legacy record.
           if(source==='Torn faction'||source==='Torn ranked attacks')Object.assign(merged,row);
+          if(old?.spyEvidence||row.spyEvidence)merged.spyEvidence={...row.spyEvidence,...old?.spyEvidence};
           merged.quality=merged.ff!==undefined&&merged.startedAt&&merged.endedAt?'detailed':'partial';
           if(JSON.stringify(old)!==JSON.stringify(merged))store.put(merged);
           staged.set(row.id,merged);
@@ -413,14 +424,23 @@
       }
     });
     rows.forEach(x=>combatArchive.hours.set(x.id,x));
+    const observedIds=new Set(players.map(p=>p.id));
     const people=[];
     await transact('people',store=>{
+      for(const entry of combatArchive.people.values()){
+        const last=entry.memberships.at(-1);
+        if(last?.faction!==faction||last.departed||entry.at>=at||observedIds.has(entry.id))continue;
+        const read=store.get(entry.id);read.onsuccess=()=>{
+          const stored=read.result,h=stored?.memberships.at(-1);
+          if(h?.faction===faction&&!h.departed&&stored.at<at){h.departed=at;stored.at=at;store.put(stored);people.push(stored);}
+        };
+      }
       for(const p of players){
         const req=store.get(p.id);
         req.onsuccess=()=>{
           const r=req.result||{id:p.id,memberships:[]};
           if(r.at>=at)return;
-          if(r.memberships.at(-1)?.faction!==faction)r.memberships.push({faction,first:at});
+          if(r.memberships.at(-1)?.faction!==faction||r.memberships.at(-1)?.departed)r.memberships.push({faction,first:at});
           r.name=p.name.slice(0,80);r.at=at;r.memberships.at(-1).last=at;
           store.put(r);people.push(r);
         };
@@ -442,7 +462,7 @@
       const hour=b.ts*1000;
       if(!Number.isInteger(b.ts)||b.ts<meta.start||b.ts>=meta.end||hour>at||hour<at-31*24*HOUR||!Number.isFinite(b.activity_score)||b.activity_score<0)continue;
       rows.push({id:[hour,faction,player,'scanner'].join('/'),hour,faction,player,war:warAt(faction,hour),
-        source:'scanner',score:b.activity_score,active:officialNumber(b.active_players),roster:officialNumber(meta.member_count),
+        owner:positive(state.data.meta.ownerId),source:'scanner',score:b.activity_score,active:officialNumber(b.active_players),roster:officialNumber(meta.member_count),
         ratio:officialNumber(b.active_ratio),partial:meta.truncated===true,at});
     }
     await transact('hours',s=>rows.forEach(r=>s.put(r)));rows.forEach(r=>combatArchive.hours.set(r.id,r));
@@ -465,7 +485,9 @@
     finally{scannerBusy=false;if(state.open)render();}
   }
   function activityCells(faction,options=activityPrefs,at=Date.now()){
-    const cells=new Map(),today=Math.floor(at/(24*HOUR))*24*HOUR,cut=today-(options.days-1)*24*HOUR;
+    const cells=new Map();
+    if(options.source==='scanner'&&!scouterPremiumActive())return cells;
+    const today=Math.floor(at/(24*HOUR))*24*HOUR,cut=today-(options.days-1)*24*HOUR;
     const allowed=(war)=>options.period==='all'||(options.period==='war'?war>0:war===0);
     function bucket(hour){
       if(!cells.has(hour))cells.set(hour,{sum:0,count:0,players:new Set(),roster:0,at:0,received:0,missing:0});
@@ -478,10 +500,15 @@
       }
     }else for(const r of combatArchive.hours.values()){
       if(r.hour<cut||r.hour>at||r.faction!==faction||!allowed(r.war)||r.source!==(options.source==='recent'?'roster':options.source))continue;
+      if(r.source==='scanner'&&r.owner!==positive(state.data.meta.ownerId))continue;
       if(options.player?r.player!==options.player:r.source==='scanner'&&r.player)continue;
       const c=bucket(r.hour);c.at=Math.max(c.at,r.at);c.roster=Math.max(c.roster,r.roster||0);c.received++;
       if(r.source==='scanner'){c.sum+=r.score;c.count++;if(r.partial)c.missing++;}
       else{c.players.add(r.player);c.sum+=options.source==='recent'?r.recent:r.online;c.count+=options.source==='recent'?r.samples:r.samples-r.unknown;c.missing+=r.unknown;}
+    }
+    if(options.source==='roster'&&!options.player)for(const r of combatArchive.hours.values()){
+      if(r.source!=='legacy'||r.hour<cut||r.faction!==faction||!allowed(r.war)||cells.has(r.hour))continue;
+      const c=bucket(r.hour);c.sum=r.online;c.count=r.samples;c.at=r.at;c.received=1;
     }
     return cells;
   }
@@ -494,20 +521,30 @@
     const results=[];
     for(const minutes of [30,60,120]){
       let best=null;
+      const byHour=new Map();
       for(let step=0;step<48;step++){
         const start=Math.ceil(at/(30*MIN))*30*MIN+step*30*MIN,end=start+minutes*MIN;
         let score=0,coverage=Infinity;
         for(let t=start;t<end;t+=30*MIN){
-          const h=new Date(t).getUTCHours(),a=weightedCells(own,d=>d.getUTCHours()===h),b=weightedCells(enemy,d=>d.getUTCHours()===h);
+          const h=new Date(t).getUTCHours();
+          if(!byHour.has(h))byHour.set(h,[weightedCells(own,d=>d.getUTCHours()===h),weightedCells(enemy,d=>d.getUTCHours()===h)]);
+          const [a,b]=byHour.get(h);
           if(a.days<2||b.days<2){coverage=0;break;}
           coverage=Math.min(coverage,a.days,b.days);
-          score+=2*a.mean-b.mean;
+          const heavy=conditions.heavyHours?.[h],skulls=conditions.skullHours?.[h];
+          score+=2*a.mean-b.mean+(skulls?.count?0.4*skulls.sum/skulls.count:0)-(heavy?.count?0.5*heavy.sum/heavy.count:0);
         }
         if(!coverage||!conditions.hitterCount||!conditions.targetCount)continue;
         score/=minutes/30;
         const release=conditions.releases.filter(t=>t>=start&&t<end).length;
         const arrivals=conditions.arrivals.filter(t=>t>=start&&t<end).length;
         score+=0.05*Math.min(3,release)-0.05*Math.min(3,arrivals);
+        if(start-at<HOUR){
+          score+=Math.min(0.3,conditions.targetCount*0.03)+Math.min(0.2,conditions.hitterCount*0.02);
+          if(conditions.heavy)score-=0.15*Math.max(0,conditions.heavy-conditions.covered)/conditions.heavy;
+          if(conditions.netRate!=null)score+=Math.max(-0.15,Math.min(0.15,conditions.netRate/1000));
+          if(conditions.activeHeavy)score-=Math.min(0.2,conditions.activeHeavy*0.025);
+        }
         if(!best||score>best.score)best={minutes,start,end,score,coverage,release,arrivals,confidence:coverage>=5?'Moderate':'Limited'};
       }
       results.push(best||{minutes,confidence:'Insufficient coverage'});
@@ -537,6 +574,22 @@
     for(let d=0;d<7;d++)rows+=tr(['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d],means(x=>x.getUTCDay()===d));
     const last=Math.max(0,...[...cells.values()].map(c=>c.at)),coverage=[...cells.values()].filter(c=>c.count).length;
     return card(title,'<p>'+coverage+' sampled hour(s) / '+opts.days+' UTC dates. Latest '+esc(stamp(last))+'. Dash = missing.</p><div class="ws-hour-scroll" tabindex="0"><table><thead><tr><th>TCT</th>'+headers+'</tr></thead><tbody>'+rows+'</tbody></table></div>');
+  }
+  async function migrateLegacyActivity(){
+    if(!combatArchive.db||state.data.meta.hourMigration)return;
+    const oldest=Date.now()-30*24*HOUR,rows=[];
+    for(const r of Object.values(state.data.warTimelines||{})){
+      for(const side of ['ours','enemies']){
+        const faction=side==='ours'?r.ourId:r.enemyId;if(!idKey(faction))continue;
+        for(const [index,h] of Object.entries(r.sides?.[side]?.hours||{})){
+          const hour=Number(index)*HOUR;if(hour<oldest||!h.samples)continue;
+          const war=hour>=r.start?r.id:hour+HOUR<=r.start?0:null;
+          rows.push({id:[hour,faction,0,war,'legacy'].join('/'),hour,faction,player:0,war,source:'legacy',samples:h.samples,online:h.online,unknown:0,at:Math.min(hour+HOUR,r.updated)});
+        }
+      }
+    }
+    await transact('hours',s=>rows.forEach(r=>s.put(r)));rows.forEach(r=>combatArchive.hours.set(r.id,r));
+    state.data.meta.hourMigration=1;save();
   }
   // END bundled activity.js
   // BEGIN bundled planning.js
@@ -604,6 +657,10 @@
         hospital:kind==='hospital',until:p.until,hiding:!p.lastAt||at-p.lastAt>168*HOUR,
         proven:!!me&&commandMatch(me,p).category==='Proven favourable matchup'};
     });
+    const expected=state.data.factionBasic[cfg.enemyId];
+    if(expected?.observed&&at-expected.observed<30*MIN&&expected.members>enemies.length){
+      for(let i=enemies.length;i<Math.min(100,expected.members);i++)enemies.push({known:false});
+    }
     return travelRanking({method:cfg.flightMethod,book:cfg.flightBook,enemies,at,overseas:localWarRules().overseas});
   }
   function suggestedAssignments(){
@@ -622,6 +679,11 @@
       }).filter(x=>['Proven favourable matchup','Possible favourable matchup'].includes(x.ev.category))
         .sort((a,b)=>Number(b.available)-Number(a.available)||Number(b.ev.category.startsWith('Proven'))-Number(a.ev.category.startsWith('Proven'))||
           (loads[a.p.id]||0)-(loads[b.p.id]||0)||a.p.id-b.p.id);
+      const saved=Object.entries(cfg.assignments).find(([i,t])=>t===target.id&&candidates.some(x=>x.p.id===Number(i)));
+      if(saved&&!assignments[target.id]){
+        const index=candidates.findIndex(x=>x.p.id===Number(saved[0]));
+        candidates.unshift(...candidates.splice(index,1));
+      }
       const first=candidates[0];
       if(first&&!assignments[target.id])loads[first.p.id]=(loads[first.p.id]||0)+1;
       result.push({target,candidates,primary:first?.p.id,backups:candidates.slice(1,21).map(x=>x.p.id),priority:Math.max(1,100-index),reasons:bands.reasons.get(target.id)||[]});
@@ -632,13 +694,26 @@
     const scope=commandRoom(),at=Date.now(),bands=enemyRoleBands();
     const hitters=state.data.ours.filter(p=>p.updated<=at&&at-p.updated<=5*MIN&&['Online','Idle'].includes(p.lastAction)&&
       ['okay','away'].includes(memberState(p))&&['present','abroad'].includes(currentLocation(p).phase)&&hitterReadiness(p).energyEnough!==false);
+    const suitable=new Set();
     const targets=state.data.enemies.filter(p=>p.updated<=at&&at-p.updated<=5*MIN&&['okay','away'].includes(memberState(p))&&
-      ['abroad','present'].includes(currentLocation(p).phase)).filter(p=>hitters.some(h=>currentLocation(h).country===currentLocation(p).country&&
-      roleAllows(h,p,bands)&&!['Avoid or reassess','Insufficient evidence'].includes(commandMatch(h,p).category)));
+      ['abroad','present'].includes(currentLocation(p).phase)).filter(p=>{
+      let viable=false;
+      for(const h of hitters)if(currentLocation(h).country===currentLocation(p).country&&roleAllows(h,p,bands)&&
+        !['Avoid or reassess','Insufficient evidence'].includes(commandMatch(h,p).category)){suitable.add(h.id);viable=true;}
+      return viable;
+    });
     const enemyFresh=state.data.enemies.filter(p=>p.updated<=at&&at-p.updated<=5*MIN);
     const releases=enemyFresh.filter(p=>memberState(p)==='hospital'&&p.until>at).map(p=>p.until);
     const arrivals=enemyFresh.map(p=>currentLocation(p)).filter(l=>l.phase==='inbound'&&l.eta>at).map(l=>l.eta);
-    return {hitters,targets,hitterCount:hitters.length,targetCount:targets.length,releases,arrivals,
+    const heavyHours={},skullHours={};
+    for(const r of combatArchive.hours.values()){
+      if(r.source!=='roster'||at-r.hour>30*24*HOUR)continue;
+      const profile=r.faction===cfg.ourId&&cfg.blackSkulls[r.player]?skullHours:r.faction===cfg.enemyId&&bands.heavy.has(r.player)?heavyHours:null;
+      if(profile){const h=new Date(r.hour).getUTCHours(),bucket=profile[h]||(profile[h]={sum:0,count:0});bucket.sum+=r.online;bucket.count+=r.samples-r.unknown;}
+    }
+    const pace=warPace();
+    return {hitters:hitters.filter(h=>suitable.has(h.id)),targets,hitterCount:suitable.size,targetCount:targets.length,releases,arrivals,heavyHours,skullHours,
+      netRate:pace?.measurable&&at-pace.last.at<5*MIN?pace.netRate:null,
       covered:Object.keys(scope?.plan.assignments||{}).length,heavy:bands.heavy.size,
       activeHeavy:enemyFresh.filter(p=>isOnline(p)&&bands.heavy.has(p.id)).length};
   }
@@ -663,7 +738,7 @@
   // END bundled planning.js
   // BEGIN bundled coordination.js
   const commandSync={room:null,scope:'',token:'',readAt:0,error:'',busy:false,attempt:0};
-  function roomKey(){const s=sharedScope();return s&&sharedEndpoint()?sharedEndpoint()+'/'+s.faction+'/'+s.war:'';}
+  function roomKey(){const s=sharedScope();return s&&state.data.war.opponentId===cfg.enemyId&&sharedEndpoint()?sharedEndpoint()+'/'+s.faction+'/'+s.war:'';}
   function commandRoom(){
     return roomKey()&&roomKey()===commandSync.scope&&commandSync.token===cfg.shared.token?commandSync.room:null;
   }
@@ -713,7 +788,7 @@
   }
   function coordinationAlerts(){
     if(!state.data.war?.id)return [];
-    const out=[],room=commandRoom(),add=(id,title,detail,tab,priority)=>out.push({id,title,detail,tab,priority,status:'now'});
+    const out=commandSignals.scope===state.data.war.id&&Date.now()-commandSignals.at<5*MIN?[...commandSignals.alerts]:[],room=commandRoom(),add=(id,title,detail,tab,priority)=>out.push({id,title,detail,tab,priority,status:'now'});
     if(roomKey()&&commandSync.error)add('cmd-sync','Shared coordination needs attention',commandSync.error,'squad',84);
     if(preparingWar()&&(!room||!Object.keys(room.ops.roll).length))add('cmd-ready','Opening roll call outstanding','Review opening coverage and voluntary availability.','brief',75);
     if(!room||Date.now()-commandSync.readAt>5*MIN)return out;
@@ -727,8 +802,7 @@
   function sharedNextStep(){
     const r=commandRoom(),me=state.data.meta.ownerId;
     if(!r||Date.now()-commandSync.readAt>3*MIN||!me)return null;
-    const row=Object.entries(r.plan.assignments).filter(([,a])=>a.primary===me)
-      .sort((a,b)=>b[1].priority-a[1].priority)[0];
+    const row=sharedQueue(me)[0];
     if(!row)return null;
     const [id]=row,claim=r.ops.claims[id],stateNow=r.ops.states[id];
     const title=claimLive(claim)&&claim.hitter!==me?'Wait for the active target claim':
@@ -780,6 +854,33 @@
       (Number(i)===actor&&d.target?(claimLive(room.ops.claims[d.target])?room.ops.claims[d.target].hitter===actor?b('Release','cmd-release:'+d.target):'':b('Claim','cmd-claim:'+d.target)):'')+'</p>').join('')+
       (room.events||[]).map(x=>'<p>'+esc(stamp(x.at)+' / revision '+x.revision+' / '+x.event.type+' / '+(x.event.target?playerName(x.event.target):'')+' '+(x.event.changes||[]).map(c=>playerName(c.target)+' to '+playerName(c.primary)+' ('+c.reason+')').join(', '))+'</p>').join(''));
     return html+b('Legacy orders and squad membership','tab:leader');
+  }
+  let commandSignals={scope:'',at:0,alerts:[]};
+  function refreshCommandSignals(){
+    const now=Date.now(),w=state.data.war;if(!w||!rosterFresh('ours')||!rosterFresh('enemies'))return;
+    const alerts=[],add=(id,title,detail,tab,priority)=>alerts.push({id,title,detail,tab,priority,status:'now'});
+    const room=commandRoom(),bands=enemyRoleBands();
+    if(room&&[...bands.heavy].some(id=>!room.plan.assignments[id]))add('cmd-uncovered','High-priority target needs a hitter','Review the available matchups and ordered backups.','squad',91);
+    if(activeWarNow()&&protectionPriorities().some(x=>x.player.id===state.data.meta.ownerId&&x.exposed&&x.feedFresh&&x.impact.underFire)&&travelPlan().some(r=>r.safe))
+      add('cmd-flight','Consider defensive travel','Compare flight cover and your next attacking duty.','flights',90);
+    if(activeWarNow()&&forecastReport().windows.some(w=>w.start&&w.start-now<30*MIN))add('cmd-window','Attack window approaching','Review availability, operational risks and confidence.','heatmap',83);
+    commandSignals={scope:w.id,at:now,alerts};
+  }
+  function sharedQueue(id){
+    const r=commandRoom();if(!r)return [];
+    const entries=Object.entries(r.plan.assignments);
+    return entries.filter(([t,a])=>a.primary===id||claimLive(r.ops.claims[t])&&r.ops.claims[t].hitter===id)
+      .sort(([i,a],[j,b])=>Number(claimLive(r.ops.claims[j])&&r.ops.claims[j].hitter===id)-
+        Number(claimLive(r.ops.claims[i])&&r.ops.claims[i].hitter===id)||b.priority-a.priority||Number(i)-Number(j));
+  }
+  function sharedRestriction(target,hitter){
+    const r=commandRoom();if(!r)return '';
+    const claim=r.ops.claims[target],a=r.plan.assignments[target];
+    if(claimLive(claim)&&claim.hitter!==hitter)return 'This target is reserved by '+playerName(claim.hitter)+'.';
+    if(!a)return '';
+    if(commandSync.error||Date.now()-commandSync.readAt>3*MIN)return 'Refresh the shared order before acting.';
+    if(a.primary!==hitter&&!(claimLive(claim)&&claim.hitter===hitter))return 'Another hitter holds this shared assignment.';
+    return '';
   }
   // END bundled coordination.js
   // BEGIN bundled views.js
@@ -854,7 +955,7 @@
       (member?commandOption('roll',choiceItems(['at start','later','unavailable']),roll[member]?.choice,'My availability')+
         '<label>From (UTC)<input type="datetime-local" id="ws-cmd-from"></label><label>Until (UTC)<input type="datetime-local" id="ws-cmd-until"></label>'+b('Submit my availability','cmd-roll'):
         '<p>A member-bound credential is required to respond.</p>'))+
-      forecastCard()+card('Defensive priorities',losses||empty('No fresh, captured scoring losses and exposure to report.'))+
+      openingEvidence()+forecastCard()+card('Defensive priorities',losses||empty('No fresh, captured scoring losses and exposure to report.'))+
       foldCommand('rules','Weekly war rules', '<p>Torn reports a target and scores. Enter any additional conditions shown on this war\'s enlistment panel.</p>'+
       '<label>Winning condition<input maxlength="100" id="ws-cmd-condition" value="'+esc(rules.condition||'')+'"></label>'+
       '<label>Threshold reduction per hour (%)<input type="number" min="0" max="100" id="ws-cmd-decay" value="'+esc(rules.decay??'')+'"></label>'+
@@ -927,6 +1028,29 @@
       render();
     }catch(e){state.error='WarStaxx: '+String(e.message||'Request failed').slice(0,160);render();}
   }
+  function playerActivityDetail(p){
+    const places=new Map(),weekday=Array(7).fill(0);
+    let recent=0,away=0,samples=0;
+    for(const r of combatArchive.hours.values())if(r.player===p.id&&r.source==='roster'){
+      recent=Math.max(recent,r.at);samples+=r.samples;away+=r.away;
+      if(r.country&&r.country!=='Unknown')places.set(r.country,(places.get(r.country)||0)+1);
+    }
+    for(const row of combatArchive.fights.values())if(row.attacker===p.id)weekday[new Date(row.at).getUTCDay()]++;
+    const visits=[...places.entries()].sort((a,b)=>b[1]-a[1]).map(([c,h])=>c+' ('+h+' sampled hours)').join(', ');
+    return foldCommand('player-patterns-'+p.id,'Activity, travel and attack timing','<p>'+samples+' roster samples / '+away+' away observations / last '+esc(stamp(recent))+
+      '.</p><p>'+esc(visits||'No reliable country observations')+'</p><p>Captured attacks by UTC weekday: '+weekday.map((n,i)=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][i]+' '+n).join(', ')+'.</p>'+
+      b('Hourly activity and weekday averages','cmd-player:'+p.id));
+  }
+  function openingEvidence(){
+    const sides=[['ours','Our faction'],['enemies','Opponent']];
+    return foldCommand('opening-evidence','Previous wars and opening threats',sides.map(([side,label])=>{
+      const m=factionWarMetrics(side);
+      const seen=state.data[side].map(p=>({p,pat:pattern(side,p.id)})).filter(x=>x.pat.count>=3).sort((a,b)=>b.pat.travel-a.pat.travel);
+      const top=side==='enemies'?[...enemyRoleBands().heavy].slice(0,5).map(playerName):state.data.ours.filter(p=>cfg.blackSkulls[p.id]).map(p=>p.name);
+      return '<p><b>'+label+'</b> / '+m.wars+' previous wars / '+m.wins+' recorded wins / mean score '+fmt(m.scoreAvg)+'.</p><p>'+esc(top.join(', ')||'Heavy roster unknown')+
+        '</p><p>Most often observed away: '+esc(seen.slice(0,3).map(x=>x.p.name+' ('+x.pat.travel+'% of '+x.pat.count+' samples)').join(', ')||'Insufficient observations')+'</p>';
+    }).join(''));
+  }
   // END bundled views.js
   const effectiveKey=()=>String(cfg.key||'').trim()||(apiKeyPda.includes('PDA-APIKEY')?'':apiKeyPda);
   const saveCfg=()=>{try{localStorage.setItem(CONFIG,JSON.stringify(cfg));return true;}catch(_){state.localKeyError=true;return false;}};
@@ -937,6 +1061,7 @@
     try{localStorage.setItem(DATA,JSON.stringify(state.data));return true;}catch(e){state.error='Local storage is full; observations cannot be saved.';return false;}
   }};
   if(heavyRuleMigrated)saveCfg();
+  archiveReady.then(migrateLegacyActivity).catch(archiveFailure);
   archiveReady.then(()=>keepFights(state.data.attacks,'Legacy local')).catch(archiveFailure);
   const parseArray=(value)=>Array.isArray(value)?value.filter(v=>v&&typeof v==='object'):Object.entries(value&&typeof value==='object'?value:{}).filter(([key])=>/^\d+$/.test(key)).map(([key,v])=>({...(v&&typeof v==='object'&&!Array.isArray(v)?v:{}),id:positive(v?.id)||positive(v?.faction_id)||positive(key)}));
   const unpack=(j,k)=>j?.[k]??j;
@@ -1701,7 +1826,7 @@
     if(body?.meta?.subject_type!=='player'||Number(body.meta.subject_id)!==id||!Array.isArray(body.buckets))throw Error('Activity response does not match this player');
     const start=Number(body.meta.start),end=Number(body.meta.end),seen=new Set();
     const rows=body.buckets.filter(x=>Number.isFinite(x?.ts)&&x.ts>=start&&x.ts<end&&Number.isFinite(x.activity_score)&&x.activity_score>=0)
-      .filter(x=>{if(seen.has(x.ts))return false;seen.add(x.ts);return true;}).slice(0,168).sort((a,b)=>a.ts-b.ts)
+      .filter(x=>{if(seen.has(x.ts))return false;seen.add(x.ts);return true;}).slice(0,744).sort((a,b)=>a.ts-b.ts)
       .map(x=>({ts:x.ts*1000,score:x.activity_score}));
     return {at,rows,truncated:body.meta.truncated===true};
   }
@@ -1731,7 +1856,7 @@
         query.set('from',String(Math.floor(Date.now()/1000)-7*86400));
       }else{
         path='activity/player';query.set('target',String(id));query.set('bucket','3600');
-        const end=Math.floor(Date.now()/HOUR)*3600;query.set('end',String(end));query.set('start',String(end-86400));
+        const end=Math.floor(Date.now()/HOUR)*3600;query.set('end',String(end));query.set('start',String(end-(state.tab==='heatmap'?activityPrefs.days:1)*86400));
       }
       const body=await ffRequest('https://ffscouter.com/api/v1/'+path+'?'+query);if(!current())return;
       const at=Date.now();
@@ -2070,7 +2195,7 @@
       medicalSource:recentMed?'Own Torn API':manual?'Manual (<45m)':'Unknown',okay};
   }
   function attackHistoryFor(friendId,enemyId,at=Date.now()){
-    const pool=new Map((state.data.attacks||[]).map((a,i)=>[a.id??-i,a]));
+    const pool=new Map((state.data.attacks||[]).filter(a=>a.attacker===friendId&&a.defender===enemyId).map((a,i)=>[a.id??-i,a]));
     for(const row of pairRows(friendId,enemyId))pool.set(row.id,row);
     const recent=[...pool.values()].filter(x=>positive(x.attacker)===positive(friendId)&&
       positive(x.defender)===positive(enemyId)&&n(x.at)>at-30*24*HOUR&&n(x.at)<=at);
@@ -2476,7 +2601,7 @@
         liveRespect:recent===null?null:n(l.respect),
         source:history===null?'No official per-player historical score loaded':
           'Official last completed war #'+last.id,
-        confidence:history===null?'BSS-only priority':'BSS + official historical war score'}];
+        confidence:history===null?(bands.metric||'BSS')+'-only priority':(bands.metric||'BSS')+' + official historical war score'}];
     }));
   }
   function blackSkullsCoverage(at=Date.now()){
@@ -3153,14 +3278,14 @@
         if(w)recordWarScore(w);
         if(w&&w.opponentId)setOpponent(w.opponentId);
       }
-      const own=await call('/faction/'+cfg.ourId+'/members','ours',force?0:90*1000);
-      if(own){state.data.ours=roster(own,state.data.ours);captureRoster('ours',state.data.ours,state.data.updated.ours,wars?(activeWarNow()?state.data.war.id:0):null).catch(archiveFailure);}
+      const ownStart=Date.now(),own=await call('/faction/'+cfg.ourId+'/members?timestamp='+Math.floor(ownStart/1000),'ours',force?0:90*1000);
+      if(own){state.data.ours=roster(own,state.data.ours).map(p=>({...p,updated:ownStart}));captureRoster('ours',state.data.ours,state.data.updated.ours,wars?(activeWarNow()?state.data.war.id:0):null).catch(archiveFailure);}
       if(state.data.war?.id&&state.data.ours.length)snapshotWarSquads(state.data.war.id);
       if(positive(cfg.enemyId)){
         const old=state.data.enemies.slice(),oldAt=n(state.data.updated.enemies);
-        const enemy=await call('/faction/'+cfg.enemyId+'/members','enemies',force?0:90*1000);
+        const enemyStart=Date.now(),enemy=await call('/faction/'+cfg.enemyId+'/members?timestamp='+Math.floor(enemyStart/1000),'enemies',force?0:90*1000);
         if(enemy){
-          const fresh=roster(enemy,old);
+          const fresh=roster(enemy,old).map(p=>({...p,updated:enemyStart}));
           if(oldAt&&Date.now()-oldAt<5*MIN&&activeWarNow())observeNativeWarTransitions(old,fresh,positive(state.data.war?.id));
           state.data.enemies=fresh;captureRoster('enemies',fresh,state.data.updated.enemies,wars?(activeWarNow()?state.data.war.id:0):null).catch(archiveFailure);
           if(previousWarId&&state.data.war&&previousWarId===positive(state.data.war.id)&&
@@ -3185,7 +3310,8 @@
       await refreshBattleIntel();
       await refreshPublicIntel(activeWarNow()?3:2);
       await refreshFF();
-      if(sharedEndpoint()&&sharedScope()){sharedPull(false);await syncCommand(null,true);}
+      if(!document.hidden&&sharedEndpoint()&&sharedScope()){sharedPull(false);await syncCommand(null,true);}
+      refreshCommandSignals();
       state.lastRefresh=Date.now();
     }catch(e){state.error=String(e.message||e);}
     finally{recordDeskChanges(deskBefore);state.loading=false;state.spinner='';save();publish();render();syncNativeWar();}
@@ -3793,22 +3919,23 @@
   // The quick hit button respects a Skull Capo / locally saved order.
   // A stale or unsafe order must NEVER silently redirect to another opponent.
   function myMission(){
-    const self=ourWarReadiness(),assignedId=positive(cfg.assignments[self.id]),
+    const self=ourWarReadiness(),assignedId=positive(sharedQueue(self.id)[0]?.[0]||cfg.assignments[self.id]),
       assigned=state.data.enemies.find(p=>p.id===assignedId)||null,
       // One verified scan serves both the recommended option and any saved order.
       options=self.kind==='okay'&&self.player?
-        efficiencyHits(self.player,Math.max(1,state.data.enemies.length)):[],
+        efficiencyHits(self.player,Math.max(1,state.data.enemies.length)).filter(hit=>!sharedRestriction(hit.player.id,self.id)):[],
       recommended=options[0]||null;
     let target=assignedId?null:recommended,issue='',evidence=null;
     if(assignedId){
-      if(!assigned)issue='The assigned opponent is missing from the current roster.';
+      if(sharedRestriction(assignedId,self.id))issue=sharedRestriction(assignedId,self.id);
+      else if(!assigned)issue='The assigned opponent is missing from the current roster.';
       else if(!self.player||self.kind!=='okay')issue='Your official status is not confirmed Okay.';
       else if(!rosterFresh('ours')||!rosterFresh('enemies'))
         issue='An official roster is older than five minutes.';
       else if(memberState(assigned)!=='okay')
         issue='The assigned opponent is '+memberState(assigned)+', not Okay.';
       else if(!roleAllows(self.player,assigned))
-        issue='The assigned opponent is outside your Black Skulls / regular BSS bracket.';
+        issue='The assigned opponent is outside your selected Black Skull strength bracket.';
       else{
         evidence=matchEvidence(self.player,assigned);
         target=options.find(hit=>hit.player.id===assignedId)||null;
@@ -6719,7 +6846,7 @@
       '</td><td>'+b('Scorecard','war:'+x.war.id)+'</td></tr>').join('')+'</tbody></table></div>':
       empty('No previous wars for this player are loaded on this device.'));
     if(side==='enemies')html+=memberWarTimeline(id);
-    html+=playerArchiveCard(p)+encountersPanel(id);
+    html+=playerArchiveCard(p)+playerActivityDetail(p)+encountersPanel(id);
     html+=card('Online and travel evidence',
       '<p>Observed '+pat.count+' foreground checks. Online '+(pat.count?pat.online+'%':'unknown')+
       ', away '+(pat.count?pat.travel+'%':'unknown')+
@@ -7179,7 +7306,7 @@
     const queues=new Map(queueLanes.map(([lane])=>[lane,warQueueRows(lane,state.data.enemies,heavy,watched,owners,at)]));
     const rows=queues.get(queueLane);
     const line=row=>{
-      const p=row.player,place=nativeWarLocation(p),expiry=row.release?'Hospital ~'+Math.ceil((p.until-at)/MIN)+'m':p.status||'Unknown';
+      const p=row.player,place=currentLocation(p),expiry=row.release?'Hospital ~'+Math.ceil((p.until-at)/MIN)+'m':p.status||'Unknown';
       const owner=row.assigned.length?'Assigned: '+row.assigned.map(h=>h.name).join(', '):'Unassigned';
       return '<div class="ws-note"><div class="ws-player-heading">'+infoButton(p.name,p.id)+'<strong>'+esc(expiry)+'</strong></div><small>'+esc(place.country+' / '+owner)+'</small></div>';
     };
@@ -7337,7 +7464,7 @@
       '<button type="button" class="'+((state.tab===tab||
         !primary.includes(state.tab)&&tab===detailGroup)?'on':'')+
       '" data-tab="'+tab+'">'+esc(labels[tab])+'</button>').join('');
-    const pages={squad:squadScreen,brief:briefScreen,heatmap:activityScreen,flights:flightScreen,combat:archiveScreen,scouter:scouterScreen,overview:warWorkspace,enemy:rosterWorkspace,reports:archiveWorkspace,dashboard:overview,scouting:enemyScreen,archive:reportsScreen,leader:leaderScreen,skulls:blackSkullsRoom,commander,operations,ledger,threats,control,turtle,command,pace,afteraction,intel,targets,matchups,timeline,strategy,activity,history,assignments:orders,alerts:alertView,settings,diagnostics};
+    const pages={scouter:scouterScreen,overview:warWorkspace,enemy:rosterWorkspace,reports:archiveWorkspace,dashboard:overview,scouting:enemyScreen,archive:reportsScreen,leader:leaderScreen,skulls:blackSkullsRoom,commander,operations,ledger,threats,control,turtle,command,pace,afteraction,intel,targets,matchups,timeline,strategy,activity,history,assignments:orders,alerts:alertView,settings,diagnostics,squad:squadScreen,brief:briefScreen,heatmap:activityScreen,flights:flightScreen,combat:archiveScreen};
     const content=$('.ws-content',root);
     const scroll=content.scrollTop;
     if(previousDisclosureView){
@@ -8536,7 +8663,7 @@
     });
     if(!anchor){box?.remove();return;}
     const p=state.data[side].find(p=>p.id===id),strength=nativeWarStrength(p),fresh=rosterFresh(side);
-    const place=nativeWarLocation(p),now=Date.now();
+    const place=currentLocation(p),now=Date.now();
     if(memberState(p)==='away'&&place.phase!=='abroad'&&scouterPremiumActive()&&!scouterExtra.busy&&
       now-Math.max(n(scouterExtra.flights[id]?.at),n(scouterExtra.attempts['flights:'+id]))>=2*MIN)
       scouterRead('flights',id);
@@ -9047,6 +9174,9 @@
           (band.reasons.get(p.id)?.join('; ')||'Manual target'):
           band.regular.has(p.id)?'Regular target bracket':'Needs strength classification',
         previous=lastKnownMemberScore('enemies',p.id);
+      const room=commandRoom(),order=room?.plan.assignments[p.id],claim=room?.ops.claims[p.id];
+      if(order)html+=field('Shared primary',playerName(order.primary)+(order.lock?' (locked)':'')+' / revision '+room.revision);
+      if(claimLive(claim))html+=field('Reserved',playerName(claim.hitter)+' to '+stamp(claim.expires));
       html=field('Your fight history',personalFightHistory(p.id),'wsnw-personal-fights')+html;
       html+=field('Battle intelligence',power.detail)+
         field('FF / difficulty',ff.source==='estimate'?
@@ -9065,8 +9195,8 @@
         field('Target role and evidence',targetGroup)+
         field('Strongest known regular',band.strongestRegular?
           band.strongestRegular.p.name+' \u00b7 '+fmt(band.strongestRegular.value)+
-          ' BSS'+(band.missingRegular?' \u00b7 '+band.missingRegular+' regular stats unknown':''):
-          'No available regular-member BSS benchmark')+
+          ' '+band.metric+(band.missingRegular?' \u00b7 '+band.missingRegular+' regular stats unknown':''):
+          'No reliable regular-member threshold')+
         field('Past recorded member score',previous===null||previous===undefined?'No completed scorecard':fmt(previous));
     }else{
       const impact=cfg.autoConceded===false?null:liveWarMemberImpact(p.id),
@@ -9399,13 +9529,13 @@
         else if(kind==='hospital')message=expanded?'HOSP '+hospitalCountdown(p.until,now):nativeWarHospitalShort(p.until,now);
         else if(other&&kind!=='away')message=''; // Keep the external status for non-hospital states.
         else if(kind==='away'){
-          const place=nativeWarLocation(p);
+          const place=currentLocation(p);
           if(place.phase==='inbound')message='TO '+place.country+(place.eta?' '+flightCountdown(place.eta,now):'');
           else if(place.phase==='abroad')message='In '+place.country;
           else message=place.phase==='unknown-travel'?'FLIGHT | DEST HIDDEN':'LOCATION UNKNOWN';
         }else if(kind==='okay')message=enemy?'READY':nativeWarLastSeen(p,now); // Readable readiness without a tooltip.
         if(recent)message=recent.kind+' | '+(message||'OKAY');
-        const place=nativeWarLocation(p);
+        const place=currentLocation(p);
         const flightTimer=kind==='away'&&(!enemy||fresh)?premiumTravelTimer(p,place,now):'';
         if(flightTimer)message=flightTimer;
         let flightLine=row.querySelector('.wsnw-flight-line');
@@ -9634,7 +9764,7 @@
       const id=nativeWarPlayerId(row),p=state.data.enemies.find(x=>x.id===id)||
         state.data.ours.find(x=>x.id===id);
       if(!p)continue;
-      const recent=nativeWarTransition(id,now),kind=memberState(p),place=nativeWarLocation(p);
+      const recent=nativeWarTransition(id,now),kind=memberState(p),place=currentLocation(p);
       let value='';
       if(kind==='hospital'&&expiry){
         value=(recent?recent.kind+' | ':'')+
@@ -9850,7 +9980,7 @@
     }catch(_){}
   },true);
   const sharedPolling=setInterval(()=>{if(!document.hidden&&sharedEndpoint()&&sharedScope())
-    sharedPull(false);},90000);
+    {sharedPull(false);if(Date.now()-commandSync.attempt>=75000)syncCommand();}},90000);
   window.addEventListener('scroll',handleWarScroll,{passive:true});
   document.addEventListener('scroll',handleWarScroll,{passive:true,capture:true});
   window.addEventListener('popstate',()=>{renderWarStrip(true);syncNativeWar();});

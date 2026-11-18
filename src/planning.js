@@ -62,6 +62,10 @@
         hospital:kind==='hospital',until:p.until,hiding:!p.lastAt||at-p.lastAt>168*HOUR,
         proven:!!me&&commandMatch(me,p).category==='Proven favourable matchup'};
     });
+    const expected=state.data.factionBasic[cfg.enemyId];
+    if(expected?.observed&&at-expected.observed<30*MIN&&expected.members>enemies.length){
+      for(let i=enemies.length;i<Math.min(100,expected.members);i++)enemies.push({known:false});
+    }
     return travelRanking({method:cfg.flightMethod,book:cfg.flightBook,enemies,at,overseas:localWarRules().overseas});
   }
   function suggestedAssignments(){
@@ -80,6 +84,11 @@
       }).filter(x=>['Proven favourable matchup','Possible favourable matchup'].includes(x.ev.category))
         .sort((a,b)=>Number(b.available)-Number(a.available)||Number(b.ev.category.startsWith('Proven'))-Number(a.ev.category.startsWith('Proven'))||
           (loads[a.p.id]||0)-(loads[b.p.id]||0)||a.p.id-b.p.id);
+      const saved=Object.entries(cfg.assignments).find(([i,t])=>t===target.id&&candidates.some(x=>x.p.id===Number(i)));
+      if(saved&&!assignments[target.id]){
+        const index=candidates.findIndex(x=>x.p.id===Number(saved[0]));
+        candidates.unshift(...candidates.splice(index,1));
+      }
       const first=candidates[0];
       if(first&&!assignments[target.id])loads[first.p.id]=(loads[first.p.id]||0)+1;
       result.push({target,candidates,primary:first?.p.id,backups:candidates.slice(1,21).map(x=>x.p.id),priority:Math.max(1,100-index),reasons:bands.reasons.get(target.id)||[]});
@@ -90,13 +99,26 @@
     const scope=commandRoom(),at=Date.now(),bands=enemyRoleBands();
     const hitters=state.data.ours.filter(p=>p.updated<=at&&at-p.updated<=5*MIN&&['Online','Idle'].includes(p.lastAction)&&
       ['okay','away'].includes(memberState(p))&&['present','abroad'].includes(currentLocation(p).phase)&&hitterReadiness(p).energyEnough!==false);
+    const suitable=new Set();
     const targets=state.data.enemies.filter(p=>p.updated<=at&&at-p.updated<=5*MIN&&['okay','away'].includes(memberState(p))&&
-      ['abroad','present'].includes(currentLocation(p).phase)).filter(p=>hitters.some(h=>currentLocation(h).country===currentLocation(p).country&&
-      roleAllows(h,p,bands)&&!['Avoid or reassess','Insufficient evidence'].includes(commandMatch(h,p).category)));
+      ['abroad','present'].includes(currentLocation(p).phase)).filter(p=>{
+      let viable=false;
+      for(const h of hitters)if(currentLocation(h).country===currentLocation(p).country&&roleAllows(h,p,bands)&&
+        !['Avoid or reassess','Insufficient evidence'].includes(commandMatch(h,p).category)){suitable.add(h.id);viable=true;}
+      return viable;
+    });
     const enemyFresh=state.data.enemies.filter(p=>p.updated<=at&&at-p.updated<=5*MIN);
     const releases=enemyFresh.filter(p=>memberState(p)==='hospital'&&p.until>at).map(p=>p.until);
     const arrivals=enemyFresh.map(p=>currentLocation(p)).filter(l=>l.phase==='inbound'&&l.eta>at).map(l=>l.eta);
-    return {hitters,targets,hitterCount:hitters.length,targetCount:targets.length,releases,arrivals,
+    const heavyHours={},skullHours={};
+    for(const r of combatArchive.hours.values()){
+      if(r.source!=='roster'||at-r.hour>30*24*HOUR)continue;
+      const profile=r.faction===cfg.ourId&&cfg.blackSkulls[r.player]?skullHours:r.faction===cfg.enemyId&&bands.heavy.has(r.player)?heavyHours:null;
+      if(profile){const h=new Date(r.hour).getUTCHours(),bucket=profile[h]||(profile[h]={sum:0,count:0});bucket.sum+=r.online;bucket.count+=r.samples-r.unknown;}
+    }
+    const pace=warPace();
+    return {hitters:hitters.filter(h=>suitable.has(h.id)),targets,hitterCount:suitable.size,targetCount:targets.length,releases,arrivals,heavyHours,skullHours,
+      netRate:pace?.measurable&&at-pace.last.at<5*MIN?pace.netRate:null,
       covered:Object.keys(scope?.plan.assignments||{}).length,heavy:bands.heavy.size,
       activeHeavy:enemyFresh.filter(p=>isOnline(p)&&bands.heavy.has(p.id)).length};
   }

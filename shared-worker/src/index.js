@@ -1,4 +1,4 @@
-import {commandRoute,memberIdentity} from './command.js';
+import {commandRoute,memberIdentity,cleanOperationalData} from './command.js';
 // Optional WarStaxx shared-orders Cloudflare Worker. NEVER send Torn API keys here.
 const ORIGINS=new Set(['https://www.torn.com','https://torn.com']);
 function reply(data,status=200,origin=''){
@@ -66,7 +66,10 @@ async function ensureSchema(db){
   }
   try{await pending;}catch(error){schemaReady.delete(db);throw error;}
 }
-export default {async fetch(request,env){
+export default {scheduled(event,env,ctx){ctx.waitUntil(cleanOperationalData(env));},async fetch(request,env){
+  try{return await handle(request,env);}catch{return reply({error:'Shared database unavailable'},503,request.headers.get('Origin')||'');}
+}};
+async function handle(request,env){
   const origin=request.headers.get('Origin')||'';
   if(request.method==='OPTIONS')
     return ORIGINS.has(origin)?reply(null,204,origin):reply({error:'origin not allowed'},403,origin);
@@ -82,7 +85,7 @@ export default {async fetch(request,env){
   // Never echo credentials or reveal secret material in responses.
   if(!auth.startsWith('Bearer ')||!auth.slice(7))
     return reply({error:'Authorization Bearer header missing',code:'auth_header_missing'},401,origin);
-  if(!env.SHARED_WRITE_TOKEN||!env.SHARED_READ_TOKEN)
+  if(!env.SHARED_WRITE_TOKEN||!env.SHARED_READ_TOKEN||secureEqual(env.SHARED_READ_TOKEN,env.SHARED_WRITE_TOKEN))
     return reply({error:'Worker access secrets are not configured on this deployment',code:'worker_secrets_missing'},503,origin);
   const token=auth.slice(7),
     writer=secureEqual(token,env.SHARED_WRITE_TOKEN),
@@ -136,4 +139,4 @@ export default {async fetch(request,env){
     return reply({error:'revision conflict',revision:latest?.revision||0},409,origin);
   }
   return reply({faction,war,revision:expected+1,updatedAt:time,data},200,origin);
-}};
+}
