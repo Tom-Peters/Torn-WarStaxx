@@ -52,6 +52,6 @@ test('HTTP 401 stays distinguishable from network connection failure',async()=>{
 });
 test('Torn PDA userscript parses with updated version and Worker network grant',()=>{
   assert.doesNotThrow(()=>new Script(source));
-  assert.match(source,/\/\/ @version\s+2\.8\.7/);
+  assert.match(source,/\/\/ @version\s+2\.8\.8/);
   assert.match(source,/\/\/ @connect\s+\*\.workers\.dev/);
 });
