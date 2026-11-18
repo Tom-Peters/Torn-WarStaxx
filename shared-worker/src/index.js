@@ -106,6 +106,7 @@ async function handle(request,env){
     try{return await commandRoute(request,env,[faction,war],actor,(body,status=200)=>reply(body,status,origin));}
     catch(error){return reply({error:error.status?error.message:'Coordination schema or database unavailable'},error.status||503,origin);}
   }
+  if(member?.role==='member')return reply({faction,war,revision:0,updatedAt:0,data:null},200,origin);
   try{await ensureSchema(env.DB);}catch(_){
     return reply({error:'D1 schema initialization unavailable'},503,origin);
   }

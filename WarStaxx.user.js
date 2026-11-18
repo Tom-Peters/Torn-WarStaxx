@@ -902,14 +902,16 @@
       '<p>'+esc(commandPosture()+' / '+c.covered+' planned assignments / '+c.heavy+' heavy targets / '+c.activeHeavy+' heavy opponents seen online')+'</p><p>Current hitters: '+esc(c.hitters.slice(0,8).map(p=>p.name).join(', ')||'Unknown')+
       '. Current target opportunities: '+esc(c.targets.slice(0,8).map(p=>p.name).join(', ')||'None verified')+'. Landing times, energy and future availability can change.</p>');
   }
-  let medicalSupplies=null,medicalAttempt=0;
+  let medicalSupplies=null,medicalAttempt=0,lastTravelMethod='';
   async function checkSupplies(){
     if(!effectiveKey()||document.hidden||Date.now()-medicalAttempt<15*MIN)return;
     medicalAttempt=Date.now();
     try{
       const body=await call('/user/inventory?cat=Medical&limit=250','cmd-medical',15*MIN),items=body?.inventory?.items;
       if(!Array.isArray(items))return;
-      medicalSupplies={owner:positive(state.data.meta.ownerId),at:epochMs(body.inventory.timestamp),ipecac:items.filter(x=>x.name==='Ipecac Syrup').reduce((s,x)=>s+x.amount,0),partial:items.length>=250};
+      const travel=await call('/user/travel','cmd-travel-method',15*MIN).catch(()=>null);
+      if(flyMethods.includes(travel?.travel?.method))lastTravelMethod=travel.travel.method;
+      medicalSupplies={owner:positive(state.data.meta.ownerId),at:epochMs(body.inventory.timestamp),bags:items.filter(i=>/blood bag/i.test(i.name)&&i.amount>0).map(i=>i.name).slice(0,12),ipecac:items.filter(x=>x.name==='Ipecac Syrup').reduce((s,x)=>s+x.amount,0),partial:items.length>=250};
     }catch{medicalSupplies=null;}if(state.open)render();
   }
   function flightScreen(){
@@ -931,11 +933,11 @@
       esc(r.favourable.length?'Proven opponents: '+r.favourable.map(e=>e.name).join(', '):'No proven overseas target.')+'</p><p>Approximate return '+r.min+'-'+r.max+'m with the same configuration. Standard fare $'+fmt(r.cost)+'. Verify travel slots, equipment and ticket requirements in Torn.</p>');
     return card('Personal protection',esc(decision)+'<p>Medical cooldown: '+esc(available?.medicalLeft==null?'unknown':available.medicalLeft+'m')+
       ' / Ipecac: '+esc(med?(med.partial?'at least ':'')+med.ipecac:'unknown')+' / revives: '+esc(me?.reviveSetting||'Unknown')+
-      '. Ipecac typically gives 60-90 minutes in hospital and adds 30 minutes to medical cooldown.</p>'+
+      '. '+esc(med?.bags.length?'Bags recorded: '+med.bags.join(', ')+'. Check your blood type in Torn before considering an incompatible bag. ':'')+'Ipecac typically gives 60-90 minutes in hospital and adds 30 minutes to medical cooldown.</p>'+
       b('Check medical inventory','cmd-medical')+b('Review Items','fast-turtle'))+
       card('Flight configuration',commandOption('method',[['','Show method scenarios'],...choiceItems(flyMethods)],cfg.flightMethod||'','Next flight')+
       commandOption('book',[['unknown','Unknown'],['no','Inactive'],['yes','Active']],cfg.flightBook||'unknown','Mailing Yourself Abroad')+
-      b('Compare routes','cmd-flight')+'<p>Published flight estimates vary by about 3%. Eligibility uses the estimated one-way time. Equipment occupies travel slots. Recheck the weekly overseas rules before attacking.</p>'+
+      b('Compare routes','cmd-flight')+(lastTravelMethod?'<p>Last method reported by Torn: '+esc(lastTravelMethod)+'. Select the method for your next departure.</p>':'')+'<p>Published flight estimates vary by about 3%. Eligibility uses the estimated one-way time. Equipment occupies travel slots. Recheck the weekly overseas rules before attacking.</p>'+
       '<a class="ws-btn" href="https://www.torn.com/travelagency.php">Open travel agency</a>')+
       card('Safest destinations',safe.map(display).join('')||empty('No route meets the current configuration and coverage checks.'))+
       card('Offensive opportunities',offense.map(display).join('')||empty('No proven overseas opportunity with sufficient coverage.'))+

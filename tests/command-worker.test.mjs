@@ -15,7 +15,7 @@ function database(){
   };},run:async()=>statement.run()};}};
   const grants={};
   for(const [token,id,role] of [['skull-1',1,'skull'],['skull-2',2,'skull'],['regular',3,'member'],['officer',4,'officer']]){
-    grants[createHash('sha256').update(token).digest('hex')]={id,role,faction:57819};
+    grants[createHash('sha256').update(token).digest('hex')]={id,role,faction:57819,expires:Date.now()+86400000};
   }
   return {sqlite,env:{DB:db,FACTION_ID:'57819',SHARED_WRITE_TOKEN:'writer',SHARED_READ_TOKEN:'reader',MEMBER_GRANTS:JSON.stringify(grants)}};
 }

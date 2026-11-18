@@ -14,7 +14,7 @@ export async function memberIdentity(token,env){
   const hash=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token));
   const key=Array.from(new Uint8Array(hash),b=>b.toString(16).padStart(2,'0')).join('');
   const raw=JSON.parse(env.MEMBER_GRANTS)[key];
-  return raw&&id(raw.id)&&roles.includes(raw.role)&&raw.faction===Number(env.FACTION_ID)?
+  return raw&&id(raw.id)&&roles.includes(raw.role)&&raw.faction===Number(env.FACTION_ID)&&Number.isSafeInteger(raw.expires)&&raw.expires>Date.now()?
     {id:raw.id,role:raw.role}:null;
 }
 function emptyRoom(){return {plan:{assignments:{},duties:{},policy:'bse',manual:[],holdMinutes:10},ops:{claims:{},roll:{},observations:{},states:{}}};}
@@ -132,6 +132,13 @@ export function commandMutation(room,cmd,actor,now){
   audit.changes=transition(room,now);
   return audit;
 }
+function visibleRoom(room,actor){
+  if(actor.role!=='member')return room;
+  const mine=actor.id,a=room.plan.duties[mine],target=a?.target;
+  const select=(all,key)=>key&&all[key]?{[key]:all[key]}:{};
+  return {plan:{...room.plan,manual:[],assignments:select(room.plan.assignments,target),duties:select(room.plan.duties,mine)},
+    ops:{claims:select(room.ops.claims,target),roll:select(room.ops.roll,mine),states:select(room.ops.states,target),observations:{}}};
+}
 export async function commandRoute(request,env,scope,actor,reply){
   const now=Date.now(),[f,w]=scope;
   const current=await env.DB.prepare('SELECT revision,plan,operations,updated FROM war_command WHERE faction=? AND war=?').bind(f,w).first();
@@ -142,8 +149,8 @@ export async function commandRoute(request,env,scope,actor,reply){
       if(s.since!=null&&now-s.since>=graceMs&&s.phase==='UNAVAILABLE_PENDING')s.phase='REASSIGNMENT_READY';
       else if(!s.since&&s.verified&&now-s.verified>freshMs)s.phase='UNKNOWN_STATUS';
     }
-    const events=await env.DB.prepare("SELECT revision,at,event FROM war_command_event WHERE faction=? AND war=? AND (json_extract(event,'$.type')!='observe' OR json_array_length(event,'$.changes')>0) ORDER BY revision DESC LIMIT 30").bind(f,w).all();
-    return reply({schema:1,revision,now,...room,actor,events:events.results.map(e=>({...e,event:JSON.parse(e.event)}))});
+    const events=actor.role==='member'?{results:[]}:await env.DB.prepare("SELECT revision,at,event FROM war_command_event WHERE faction=? AND war=? AND (json_extract(event,'$.type')!='observe' OR json_array_length(event,'$.changes')>0) ORDER BY revision DESC LIMIT 30").bind(f,w).all();
+    return reply({schema:1,revision,now,...visibleRoom(room,actor),actor,events:events.results.map(e=>({...e,event:JSON.parse(e.event)}))});
   }
   need(actor.role!=='reader',403,'Read-only credential');
   const expected=request.headers.get('If-Match');
@@ -160,12 +167,12 @@ export async function commandRoute(request,env,scope,actor,reply){
   let cmd;try{cmd=JSON.parse(body).data;}catch{throw message(400,'Invalid JSON');}
   const event=commandMutation(room,cmd,actor,now);
   const plan=JSON.stringify(room.plan),ops=JSON.stringify(room.ops);
-  if(cmd.type==='observe'&&plan===current?.plan&&ops===current?.operations)return reply({schema:1,revision,now,...room,actor});
+  if(cmd.type==='observe'&&plan===current?.plan&&ops===current?.operations)return reply({schema:1,revision,now,...visibleRoom(room,actor),actor});
   const args=[plan,ops,now,JSON.stringify(event),f,w];
   const result=revision===0?await env.DB.prepare('INSERT OR IGNORE INTO war_command(plan,operations,updated,event,faction,war,revision) VALUES(?,?,?,?,?,?,1)').bind(...args).run():
     await env.DB.prepare('UPDATE war_command SET plan=?,operations=?,updated=?,event=?,next_cleanup=0,revision=revision+1 WHERE faction=? AND war=? AND revision=?').bind(...args,revision).run();
   need(result.meta.changes===1,409,'Revision conflict. Refresh orders.');
-  return reply({schema:1,revision:revision+1,now,...room,actor,event});
+  return reply({schema:1,revision:revision+1,now,...visibleRoom(room,actor),actor,...(actor.role==='member'?{}:{event})});
 }
 // Housekeeping never calls Torn. An elapsed grace period cannot authorise a switch.
 export async function cleanOperationalData(env,now=Date.now()){
