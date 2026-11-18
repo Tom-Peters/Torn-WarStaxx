@@ -91,7 +91,7 @@ test('Operations tab, manual controls and safe user-script installer remain wire
     "'operations','ledger'"]){
     assert.ok(source.includes(fragment),'Missing integration: '+fragment);
   }
-  assert.match(source,/\/\/ @version\s+2\.8\.0/);
+  assert.match(source,/\/\/ @version\s+2\.8\.1/);
   assert.ok(source.startsWith('// ==UserScript==\n'));
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
@@ -281,7 +281,7 @@ test('unified roster blocks live status filters on stale data without hiding cac
 });
 
 function nextStepFixture(){
- const context={cfg:{ourId:10},effectiveKey:()=>true,positive:Number,activeWarNow:()=>true,
+ const context={preparingWar:()=>false,cfg:{ourId:10},effectiveKey:()=>true,positive:Number,activeWarNow:()=>true,
   rosterFresh:()=>true,skullReleaseQueue:()=>[],protectionPriorities:()=>[],
   myMission:()=>({self:{id:1,energy:100},target:null,hasOrder:false})};
  const build=()=>runInNewContext(part('  function nextWarStep(){','  const queueLanes=')+';nextWarStep()',context);
