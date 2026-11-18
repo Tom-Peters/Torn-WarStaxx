@@ -1,3 +1,4 @@
+import {commandRoute,memberIdentity} from './command.js';
 // Optional WarStaxx shared-orders Cloudflare Worker. NEVER send Torn API keys here.
 const ORIGINS=new Set(['https://www.torn.com','https://torn.com']);
 function reply(data,status=200,origin=''){
@@ -70,7 +71,9 @@ export default {async fetch(request,env){
   if(request.method==='OPTIONS')
     return ORIGINS.has(origin)?reply(null,204,origin):reply({error:'origin not allowed'},403,origin);
   if(origin&&!ORIGINS.has(origin))return reply({error:'origin not allowed'},403,origin);
-  const match=new URL(request.url).pathname.match(
+  const path=new URL(request.url).pathname;
+  const v2=path.match(/^\/v2\/factions\/([1-9][0-9]{0,9})\/wars\/([1-9][0-9]{0,9})\/command$/);
+  const match=v2||path.match(
     /^\/v1\/factions\/([1-9][0-9]{0,9})\/wars\/([1-9][0-9]{0,9})\/orders$/);
   if(!match||!['GET','PUT'].includes(request.method))
     return reply({error:'not found'},404,origin);
@@ -84,8 +87,10 @@ export default {async fetch(request,env){
   const token=auth.slice(7),
     writer=secureEqual(token,env.SHARED_WRITE_TOKEN),
     reader=writer||secureEqual(token,env.SHARED_READ_TOKEN);
-  if(!reader)return reply({error:'invalid shared token',code:'invalid_token'},401,origin);
-  if(request.method==='PUT'&&!writer)return reply({error:'write permission required'},403,origin);
+  let member=null;
+  if(!reader)try{member=await memberIdentity(token,env);}catch{return reply({error:'Member access configuration unavailable'},503,origin);}
+  if(!reader&&!member)return reply({error:'invalid shared token',code:'invalid_token'},401,origin);
+  if(request.method==='PUT'&&!writer&&!(v2&&member))return reply({error:'write permission required'},403,origin);
   if(!env.DB)return reply({error:'D1 database unavailable'},503,origin);
   const faction=Number(match[1]),war=Number(match[2]);
   // A deployed Worker belongs to exactly one faction. Tokens must not
@@ -93,6 +98,11 @@ export default {async fetch(request,env){
   if(!Number.isSafeInteger(Number(env.FACTION_ID))||
      Number(env.FACTION_ID)!==faction)
     return reply({error:'faction not permitted on this Worker'},403,origin);
+  if(v2){
+    const actor=member||(writer?{id:null,role:'capo'}:{id:null,role:'reader'});
+    try{return await commandRoute(request,env,[faction,war],actor,(body,status=200)=>reply(body,status,origin));}
+    catch(error){return reply({error:error.status?error.message:'Coordination schema or database unavailable'},error.status||503,origin);}
+  }
   try{await ensureSchema(env.DB);}catch(_){
     return reply({error:'D1 schema initialization unavailable'},503,origin);
   }
@@ -125,6 +135,5 @@ export default {async fetch(request,env){
     const latest=await read();
     return reply({error:'revision conflict',revision:latest?.revision||0},409,origin);
   }
-  const latest=await read();
-  return reply({faction,war,revision:latest.revision,updatedAt:time,data},200,origin);
+  return reply({faction,war,revision:expected+1,updatedAt:time,data},200,origin);
 }};
