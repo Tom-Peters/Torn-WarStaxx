@@ -1,3 +1,7 @@
+## 2.8.8 - Shared Black Skull policy sync compatibility
+
+Fixes shared-orders PUT 400 when WarStaxx's v2 Black Skull targeting uses `relative` mode (strongest regular member plus recorded winning attacks), previously rejected by the Cloudflare Worker. The Worker now accepts and retains this policy with schema version 2 and continues to support legacy `percent` and `min-bss`. WarStaxx accepts the same mode on shared GET. No keys, assignments or local history are reset. After deployment, test Publish then Pull; live Torn PDA connectivity still requires verification.
+
 ## 2.8.7 - Shared Cloudflare orders from Torn PDA
 
 WarStaxx now sends Cloudflare shared-order GET and PUT requests through Torn PDA's native HTTP bridge when available, with GM userscript HTTP support and browser fetch as the final fallback. This addresses the WebView `Failed to fetch` error and preserves HTTPS, existing bearer-token authentication, revision-conflict protection, local settings and saved orders. Worker secrets remain in Cloudflare and are never passed through TornStaxx hub events. Live Torn PDA connectivity and configured account permissions still require device verification.
