@@ -202,6 +202,7 @@
   const apiKeyPda=typeof window.PDA_APIKEY==='string'?window.PDA_APIKEY:'###PDA-APIKEY###';
   const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,autoConceded:true,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},controlAssignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,warStripCompact:true,warStripScope:'contextual',nativeWarEnabled:true,nativeWarCountryGroups:true,nativeWarSort:'availability',nativeEnemyMetric:'points',nativeFriendlySort:'given',nativeFriendlyDesc:true,nativeWarFilter:'all',nativeFriendlyFilter:'all',nativeChainBubble:false,priorityNotifications:true,hitterRisk:{},heavyPolicy:{version:2,mode:'relative',percent:40,minBss:0},manualHeavyTargetsByEnemy:{},shared:{enabled:false,endpoint:'',token:'',canWrite:false},hidden:false};
   const cfg=Object.assign({},defaults,safeRead(CONFIG,{}));
+  if(!cfg.commandMetric)cfg.commandMetric=['percent','min-bss'].includes(cfg.heavyPolicy?.mode)?'legacy':'bse';
   if(cfg.nativeWarCountryGroups!==false){
     if(cfg.nativeWarSort==='torn')cfg.nativeWarSort='availability';
     if(cfg.nativeFriendlySort==='torn')cfg.nativeFriendlySort='given';
@@ -262,6 +263,108 @@
     if(cfg.ffConsent&&cfg.ffEnabled)state.data.updated.ffscouter=0;
     state.data.meta.ffEstimateParserVersion=2;
   }
+  // BEGIN bundled intelligence.js
+  // Locally stored evidence is shared between sessions on this Torn origin.
+  const intel = {db:null, fights:new Map(), pairs:new Map(), people:new Map(), hours:new Map(), error:'', ready:false};
+  const idKey = v => Number.isSafeInteger(v) && v>0 && v<=9999999999;
+  const pairKey = (a,b) => Math.min(a,b)+'/'+Math.max(a,b);
+  function indexFight(row){
+    const key=pairKey(row.attacker,row.defender);
+    if(!intel.pairs.has(key))intel.pairs.set(key,new Map());
+    intel.pairs.get(key).set(row.id,row);intel.fights.set(row.id,row);
+  }
+  function pairRows(a,b){return Array.from(intel.pairs.get(pairKey(a,b))?.values()||[]);}
+  function fightOutcome(result){
+    if(/^(attacked|left|hospitali[sz]ed|mugged|looted|won|victory)$/i.test(result))return 'wins';
+    if(/^(lost|defeated)$/i.test(result))return 'losses';
+    return /^stalemate$/i.test(result)?'stalemates':'unknown';
+  }
+  function pairEvidence(rows,hitter,at,ratio=null){
+    const totals=()=>({wins:0,losses:0,stalemates:0,unknown:0});
+    const offense=totals(),defense=totals(),recent=[];
+    for(const row of rows.filter(r=>r.at>0&&r.at<=at).sort((a,b)=>b.at-a.at)){
+      const outcome=fightOutcome(row.result);
+      if(row.attacker===hitter){
+        offense[outcome]++;
+        if(outcome!=='unknown'&&at-row.at<=30*86400000)recent.push(outcome);
+      }else defense[outcome==='wins'?'losses':outcome==='losses'?'wins':outcome]++;
+    }
+    const category=recent[0]==='losses'||recent[0]==='stalemates'||ratio>=1.15?'Avoid or reassess':
+      recent[0]==='wins'&&ratio!==null&&ratio<1?'Proven favourable matchup':
+      recent[0]==='wins'||(ratio!==null&&ratio<0.8)?'Possible favourable matchup':'Insufficient evidence';
+    return {offense,defense,recent,category};
+  }
+  const archiveNumbers=['at','startedAt','endedAt','attackerFaction','defenderFaction','warId','ff','respect','respectLoss','chain','chainBonus','modifierWar','modifierRetaliation','modifierOverseas','modifierGroup','modifierWarlord'];
+  function cleanFight(raw){
+    if(!raw||![raw.id,raw.attacker,raw.defender].every(idKey)||raw.attacker===raw.defender||
+      !Number.isSafeInteger(raw.at)||raw.at<1e12||raw.at>Date.now()+60000)return null;
+    const row={id:raw.id,attacker:raw.attacker,defender:raw.defender};
+    for(const k of archiveNumbers)if(typeof raw[k]==='number'&&Number.isFinite(raw[k])&&raw[k]>=0&&(!['attackerFaction','defenderFaction','warId','startedAt','endedAt'].includes(k)||raw[k]>0))row[k]=raw[k];
+    for(const k of ['result','attackerName','defenderName'])if(typeof raw[k]==='string'&&raw[k])row[k]=raw[k].slice(0,80);
+    if(typeof raw.ranked==='boolean')row.ranked=raw.ranked;
+    return row;
+  }
+  function transact(store,callback){
+    return new Promise((resolve,reject)=>{
+      const tx=intel.db.transaction(store,'readwrite');
+      tx.oncomplete=resolve;tx.onabort=tx.onerror=()=>reject(tx.error||Error('Local archive write failed'));
+      callback(tx.objectStore(store),tx);
+    });
+  }
+  const archiveFailure=()=>{intel.error='Local intelligence could not be saved. Export a backup and check device storage.';};
+  const permittedSources=['Torn personal','Torn faction','Torn ranked attacks','Legacy local','Local import'];
+  async function keepFights(rows,source){
+    await archiveReady;
+    if(!intel.db||!rows.length)return;
+    const staged=new Map();
+    await transact('fights',store=>{
+      for(const raw of rows){
+        const row=cleanFight(raw);if(!row||staged.has(row.id))continue;
+        staged.set(row.id,null);
+        const req=store.get(row.id);
+        req.onsuccess=()=>{
+          const old=req.result;
+          if(old&&(old.attacker!==row.attacker||old.defender!==row.defender))return;
+          if(!old&&intel.fights.size+staged.size>40000){intel.error='Combat archive capacity reached. Export your archive before collecting more.';return;}
+          const sources=[...new Set([...(old?.sources||[]),...(source==='Local import'?(raw.sources||[]).filter(x=>permittedSources.includes(x)):[]),source])];
+          const merged={...row,...old,sources,capturedAt:old?.capturedAt||(source==='Local import'&&Number.isSafeInteger(raw.capturedAt)?Math.min(Date.now(),raw.capturedAt):Date.now())};
+          // Prefer detailed live fields over a partial or legacy record.
+          if(source==='Torn faction'||source==='Torn ranked attacks')Object.assign(merged,row);
+          merged.quality=merged.ff!==undefined&&merged.startedAt&&merged.endedAt?'detailed':'partial';
+          if(JSON.stringify(old)!==JSON.stringify(merged))store.put(merged);
+          staged.set(row.id,merged);
+        };
+      }
+    });
+    for(const row of staged.values())if(row)indexFight(row);
+  }
+  function readArchiveStore(name){
+    return new Promise((resolve,reject)=>{
+      const req=intel.db.transaction(name).objectStore(name).getAll();
+      req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
+    });
+  }
+  const archiveReady=(async()=>{
+    try{
+      intel.db=await new Promise((resolve,reject)=>{
+        const req=indexedDB.open('warstaxx-intelligence',1);
+        req.onupgradeneeded=()=>{for(const store of ['fights','people','hours'])req.result.createObjectStore(store,{keyPath:'id'});};
+        req.onblocked=()=>reject(Error('Archive open in another tab'));
+        req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
+      });
+      const [fights,people,hours]=await Promise.all(['fights','people','hours'].map(readArchiveStore));
+      for(const row of fights)indexFight(row);
+      for(const row of people)intel.people.set(row.id,row);
+      for(const row of hours)intel.hours.set(row.id,row);
+      intel.ready=true;
+    }catch(_){archiveFailure();}
+  })();
+  function reliableBse(player){
+    const x=ffscouter(player.id),at=Date.now();
+    return x&&!ffIsStale(x)&&x.updatedAt>0&&x.updatedAt<=at&&x.at<=at&&x.bsEstimate>0?
+      {value:x.bsEstimate,source:'FFScouter BSE',at:x.updatedAt}:{value:null,source:'BSE needs intelligence'};
+  }
+  // END bundled intelligence.js
   const effectiveKey=()=>String(cfg.key||'').trim()||(apiKeyPda.includes('PDA-APIKEY')?'':apiKeyPda);
   const saveCfg=()=>{try{localStorage.setItem(CONFIG,JSON.stringify(cfg));return true;}catch(_){state.localKeyError=true;return false;}};
   const save=()=>{try{localStorage.setItem(DATA,JSON.stringify(state.data));return true;}catch(_){
@@ -271,6 +374,7 @@
     try{localStorage.setItem(DATA,JSON.stringify(state.data));return true;}catch(e){state.error='Local storage is full; observations cannot be saved.';return false;}
   }};
   if(heavyRuleMigrated)saveCfg();
+  archiveReady.then(()=>keepFights(state.data.attacks,'Legacy local')).catch(archiveFailure);
   const parseArray=(value)=>Array.isArray(value)?value.filter(v=>v&&typeof v==='object'):Object.entries(value&&typeof value==='object'?value:{}).filter(([key])=>/^\d+$/.test(key)).map(([key,v])=>({...(v&&typeof v==='object'&&!Array.isArray(v)?v:{}),id:positive(v?.id)||positive(v?.faction_id)||positive(key)}));
   const unpack=(j,k)=>j?.[k]??j;
   function roster(j,previous=[]){
@@ -366,7 +470,9 @@
       return {id:positive(a.id||a.attack_id),
         at:epochMs(a.timestamp_ended||a.ended||a.timestamp_started||a.started||a.timestamp||a.start),
         startedAt:epochMs(a.timestamp_started||a.started||a.start),
-        attacker,defender,attackerFaction,defenderFaction,ranked,
+        attacker,defender,attackerFaction,defenderFaction,ranked:warFlag==null?null:ranked,
+        endedAt:epochMs(a.timestamp_ended||a.ended),respectLoss:officialNumber(a.respect_loss),
+        modifierWarlord:officialNumber(a.modifiers?.warlord),
         attackerName:String(a.attacker?.name||a.attacker_name||'').slice(0,80),
         defenderName:String(a.defender?.name||a.defender_name||'').slice(0,80),
         ff:validFF(rawFF),result:String(a.result||'').slice(0,50),
@@ -1399,12 +1505,14 @@
       medicalSource:recentMed?'Own Torn API':manual?'Manual (<45m)':'Unknown',okay};
   }
   function attackHistoryFor(friendId,enemyId,at=Date.now()){
-    const recent=(state.data.attacks||[]).filter(x=>positive(x.attacker)===positive(friendId)&&
+    const pool=new Map((state.data.attacks||[]).map((a,i)=>[a.id??-i,a]));
+    for(const row of pairRows(friendId,enemyId))pool.set(row.id,row);
+    const recent=[...pool.values()].filter(x=>positive(x.attacker)===positive(friendId)&&
       positive(x.defender)===positive(enemyId)&&n(x.at)>at-30*24*HOUR&&n(x.at)<=at);
     let wins=0,losses=0,stalemates=0,unknown=0;
     for(const a of recent){
       const result=String(a.result||'').toLowerCase();
-      if(/hospitali[sz]ed|mugged|left|victory|won/.test(result))wins++;
+      if(/^(attacked|looted|hospitali[sz]ed|mugged|left|victory|won)$/.test(result))wins++;
       else if(result==='stalemate')stalemates++;
       else if(/^(lost|defeated)$/.test(result))losses++;
       else unknown++;
@@ -1563,7 +1671,8 @@
     const latest=enemySpy?.observedAt||0;
     const exactStats=Boolean(m.exact);
     const encounters=attackHistoryFor(friend.id,enemy.id);
-    const knownLoss=encounters.losses>0;
+    const evidence=pairEvidence(pairRows(friend.id,enemy.id),friend.id,Date.now(),m.known?m.ratio:null);
+    const knownLoss=encounters.losses>0&&evidence.recent[0]!=='wins';
     const rosterVerified=rosterFresh('ours')&&rosterFresh('enemies');
     const freshSpies=exactStats&&n(latest)>0&&n(friendSpy?.observedAt)>0&&
       Date.now()-latest<30*24*HOUR&&Date.now()-n(friendSpy?.observedAt)<30*24*HOUR;
@@ -1578,7 +1687,7 @@
     else if(exactStats&&m.known&&m.ratio<0.8&&!freshSpies){
       category='Recheck old spies';reason='One or both spy records are older than 30 days or undated';tier=2;
     }else if(knownLoss){category='Reassess losses';reason=encounters.losses+' recent recorded loss(es) for this hitter';tier=4;
-    }else if(encounters.stalemates&&!encounters.wins){category='Previous stalemate';reason='This hitter previously attacked and stalemated';tier=3;
+    }else if(encounters.stalemates&&(!encounters.wins||evidence.recent[0]==='stalemates')){category='Previous stalemate';reason='This hitter previously attacked and stalemated';tier=3;
     }else if(exactStats&&m.known&&m.ratio<0.7){
       category='Strong candidate';reason='Recent favourable exact API / spy stats'+(encounters.wins?' + '+encounters.wins+' confirmed recent win(s)':'')+'; verify buffs';tier=0;
     }else if(exactStats&&m.known&&m.ratio<0.8){
@@ -1680,12 +1789,12 @@
         Math.min(1e15,threshold):0};
   }
   function enemyRoleBands(){
-    const rule=heavyRule(),ranked=state.data.enemies.map(enemy=>({
-      enemy,...enemyBattleEstimate(enemy)
+    const rule=heavyRule(),useBse=cfg.commandMetric==='bse',ranked=state.data.enemies.map(enemy=>({
+      enemy,...(useBse?reliableBse(enemy):enemyBattleEstimate(enemy))
     })).filter(x=>x.value!==null).sort((a,b)=>b.value-a.value||
       n(b.enemy.level)-n(a.enemy.level)||a.enemy.id-b.enemy.id),
       regulars=state.data.ours.filter(p=>!cfg.blackSkulls[positive(p.id)]),
-      knownRegular=regulars.map(p=>({p,...friendlyBattleEstimate(p)}))
+      knownRegular=regulars.map(p=>({p,...(useBse?reliableBse(p):friendlyBattleEstimate(p))}))
         .filter(x=>x.value!==null).sort((a,b)=>b.value-a.value),
       strongest=knownRegular[0]||null,missingRegular=regulars.length-knownRegular.length,
       manual=manualHeavyTargets(),reasons=new Map(),automatic=new Set(),
@@ -1697,11 +1806,11 @@
       captured=concessionSnapshot();
     for(const x of ranked){
       const id=positive(x.enemy.id),notes=[];
-      if(rule.mode==='relative'&&strongest){
+      if((useBse||rule.mode==='relative')&&strongest){
         if(x.value>strongest.value){
           automatic.add(id);
           notes.push('Above strongest known regular '+strongest.p.name+
-            ' ('+fmt(strongest.value)+' BSS)'+(missingRegular?' \u00b7 '+missingRegular+
+            ' ('+fmt(strongest.value)+ (useBse?' BSE)':' BSS)')+(missingRegular?' \u00b7 '+missingRegular+
               ' regular member(s) unknown':''));
         }else{
           const capturedWins=n(captured?.winsByDefender?.[strongest.p.id]?.[id]?.wins),
@@ -1712,21 +1821,21 @@
               strongest.p.name+' ('+Math.max(capturedWins,history.wins)+' recorded)');
           }
         }
-      }else if(rule.mode!=='relative'&&legacyHeavy.has(id)){
+      }else if(!useBse&&rule.mode!=='relative'&&legacyHeavy.has(id)){
         automatic.add(id);notes.push(rule.mode==='percent'?
           'Legacy top '+rule.percent+'% BSS selection':
           'Legacy minimum '+fmt(rule.minBss)+' BSS selection');
       }
       if(manual[id]===true)notes.push('Manually added by Skull Capo');
       if(automatic.has(id)||manual[id]===true)heavy.add(id);
-      else regular.add(id);
+      else if(!useBse||strongest&&!missingRegular)regular.add(id);
       if(notes.length)reasons.set(id,notes);
     }
     // Also classify an unknown-BSS opponent after a CONFIRMED scoring win
     // against the top regular. Evidence takes precedence over missing models.
     for(const enemy of state.data.enemies){
       const id=positive(enemy.id);
-      if(!ranked.some(x=>x.enemy.id===id)&&rule.mode==='relative'&&strongest){
+      if(!ranked.some(x=>x.enemy.id===id)&&(useBse||rule.mode==='relative')&&strongest){
         const wins=n(captured?.winsByDefender?.[strongest.p.id]?.[id]?.wins),
           prior=attackHistoryFor(id,strongest.p.id).wins;
         if(wins>0||prior>0){
@@ -1747,7 +1856,7 @@
     return {heavy,regular,automatic,
       manual:new Set(state.data.enemies.filter(p=>manual[p.id]===true).map(p=>p.id)),
       reasons,heavyCount:heavy.size,regularCount:regular.size,
-      known:ranked.length,unknown,missingRegular,strongestRegular:strongest,
+      metric:useBse?'BSE':'BSS',known:ranked.length,unknown:useBse?state.data.enemies.length-heavy.size-regular.size:unknown,missingRegular,strongestRegular:strongest,
       regularCountOurs:regulars.length,knownRegular:knownRegular.length,
       threshold:strongest?.value??null,ranked,rule};
   }
@@ -1857,15 +1966,15 @@
       '. An order does not prove a target is hittable.</p>'+
       '<p>Heavy policy: '+(cutoff.mode==='relative'?
         (data.bands.strongestRegular?'Above strongest known regular ('+
-        fmt(data.bands.strongestRegular.value)+' BSS, '+
+        fmt(data.bands.strongestRegular.value)+' '+data.bands.metric+', '+
         esc(data.bands.strongestRegular.p.name)+') plus recorded wins and manual extras':
-        'No known regular BSS yet; manual extras still work'):
+        'No known regular threshold yet; manual extras still work'):
         cutoff.mode==='min-bss'?
         'minimum BSS '+fmt(cutoff.minBss):
         'top '+fmt(cutoff.percent)+'% of '+fmt(data.bands.known)+' known BSS opponents')+
-        '. '+fmt(data.bands.unknown)+' enemy BSS unknown; '+
+        '. '+fmt(data.bands.unknown)+' enemies need intelligence; '+
         fmt(data.bands.missingRegular)+' / '+fmt(data.bands.regularCountOurs)+
-        ' regular members missing BSS (boundary provisional).</p>'+
+        ' regular members missing strength evidence (boundary provisional).</p>'+
       (data.targets.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr>'+
         '<th>Black Skull target / reason</th><th>BSS</th><th>Last war points</th><th>Priority</th>'+
         '<th>Current status</th>'+
@@ -2456,7 +2565,8 @@
       const j=await call('/faction/attacks?limit=100','attacks',3*MIN);
       if(!j)return;
       const seen=new Map((state.data.attacks||[]).map(a=>[a.id,a]));
-      for(const a of attacks(j))seen.set(a.id,a);
+      const parsed=attacks(j);await keepFights(parsed,'Torn faction').catch(archiveFailure);
+      for(const a of parsed)seen.set(a.id,a);
       state.data.attacks=[...seen.values()].sort((a,b)=>a.at-b.at).slice(-1000);
     }catch(e){state.data.errors.attacks=String(e.message||e);}
   }
@@ -2498,6 +2608,7 @@
       if(urgentReport)state.data.meta.lastDebriefAttempt=Date.now();
       await refreshHistory(force||urgentReport);
       await refreshAttacks();
+      if(state.open&&state.data.war)await checkPersonalFights();
       await refreshWarConcessions(force);
       try{
         const chain=await call('/faction/'+cfg.ourId+'/chain','chain',30*1000);
@@ -4761,6 +4872,7 @@
           'concessions',0);
         if(!response)break;
         const source=parseArray(unpack(response,'attacks')),parsed=attacks(response);
+        await keepFights(parsed.map(a=>a.ranked&&a.at>=w.start&&a.at<=w.end&&[a.attackerFaction,a.defenderFaction].sort().join() === [w.ourId,w.enemyId].sort().join()?{...a,warId:w.id}:a),'Torn ranked attacks').catch(archiveFailure);
         captureConcessionAttacks(rec,parsed);
         rec.fetches++;rec.lastFetch=Date.now();rec.error='';
         if(source.length<100){
@@ -5482,7 +5594,7 @@
         'Enemies with a recorded win against that regular also qualify, even at lower BSS. '+
         'Pin extras manually below. Incomplete regular BSS makes the boundary provisional.</p>'+
         '<div class="ws-toolbar"><label>Strength cutoff method<select id="ws-heavy-mode">'+
-        [['relative','Strongest regular + observed winning attacks (default)'],
+        [['bse','Estimated total stats (BSE) + observed victories'],['relative','Legacy relative BSS'],
           ['percent','Legacy top percentage'],['min-bss','Legacy minimum BSS']].map(([v,label])=>
           '<option value="'+v+'" '+(bands.rule.mode===v?'selected':'')+'>'+label+'</option>').join('')+
         '</select></label>'+
@@ -6917,12 +7029,12 @@
       const mode=String($('#ws-heavy-mode',root)?.value||'relative'),
         percent=Number($('#ws-heavy-percent',root)?.value),
         minBss=Number($('#ws-heavy-bss',root)?.value);
-      if(!['relative','percent','min-bss'].includes(mode)||!Number.isInteger(percent)||
+      if(!['bse','relative','percent','min-bss'].includes(mode)||!Number.isInteger(percent)||
         percent<5||percent>100||!Number.isFinite(minBss)||minBss<0||minBss>1e15){
         state.error='Cutoff must use 5-100% or a non-negative BSS up to 1e15.';
         render();return;
       }
-      cfg.heavyPolicy=heavyRule({mode,percent,minBss});saveCfg();markSharedDirty();
+      cfg.commandMetric=mode==='bse'?'bse':'legacy';cfg.heavyPolicy=heavyRule({mode:mode==='bse'?'relative':mode,percent,minBss});saveCfg();markSharedDirty();
       confirmed('Black Skull target policy saved. Review automatic and manual targets.');
       render();return;
     }
@@ -8308,6 +8420,7 @@
       if(cache!==personalFightCache())return;
       if(!Array.isArray(body?.attacks))throw Error('No personal attack records returned');
       cache.rows=attacks(body).filter(a=>a.attacker===cache.owner||a.defender===cache.owner);
+      await keepFights(cache.rows,'Torn personal').catch(archiveFailure);
       cache.count=body.attacks.length;cache.checked=Date.now();cache.error='';
     }catch(e){cache.error='Personal history unavailable. Check that your Torn key can read personal attacks.';}
     finally{cache.busy=false;if(cache===personalFightCache()&&nativeWarState.expandedId)syncNativeWar();}
@@ -8315,7 +8428,7 @@
   function personalFightHistory(id){
     const cache=personalFightCache(),me=cache.owner,matches=new Map();
     if(!me)return 'Waiting for your Torn player ID.';
-    for(const a of [...(state.data.attacks||[]),...cache.rows]){
+    for(const a of [...pairRows(me,id),...(state.data.attacks||[]),...cache.rows]){
       if((a.attacker===me&&a.defender===id)||(a.defender===me&&a.attacker===id))matches.set(a.id,a);
     }
     const rows=[...matches.values()].sort((a,b)=>b.at-a.at||b.id-a.id);
