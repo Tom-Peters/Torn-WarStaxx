@@ -49,6 +49,21 @@ function clean(input){
     Number.isFinite(data.heavyPolicy.minBss)&&
     data.heavyPolicy.minBss>=0&&data.heavyPolicy.minBss<=1e15?data:null;
 }
+// Initialise the same schema as migrations/0001_init.sql on first authenticated use.
+// This supports GitHub-connected Workers Builds with auto-provisioned D1.
+// Existing databases are left intact by CREATE TABLE IF NOT EXISTS.
+const schemaReady=new WeakMap();
+async function ensureSchema(db){
+  let pending=schemaReady.get(db);
+  if(!pending){
+    pending=db.prepare('CREATE TABLE IF NOT EXISTS faction_orders ('+
+      'faction_id INTEGER NOT NULL, war_id INTEGER NOT NULL, '+
+      'revision INTEGER NOT NULL DEFAULT 1, data TEXT NOT NULL, '+
+      'updated_at INTEGER NOT NULL, PRIMARY KEY (faction_id, war_id))').run();
+    schemaReady.set(db,pending);
+  }
+  try{await pending;}catch(error){schemaReady.delete(db);throw error;}
+}
 export default {async fetch(request,env){
   const origin=request.headers.get('Origin')||'';
   if(request.method==='OPTIONS')
@@ -71,6 +86,9 @@ export default {async fetch(request,env){
   if(!Number.isSafeInteger(Number(env.FACTION_ID))||
      Number(env.FACTION_ID)!==faction)
     return reply({error:'faction not permitted on this Worker'},403,origin);
+  try{await ensureSchema(env.DB);}catch(_){
+    return reply({error:'D1 schema initialization unavailable'},503,origin);
+  }
   const read=()=>env.DB.prepare(
     'SELECT revision,data,updated_at FROM faction_orders WHERE faction_id=? AND war_id=?'
   ).bind(faction,war).first();
