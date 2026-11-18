@@ -12,6 +12,8 @@ const data={assignments:{'4':88},blackSkulls:{'4':true},
   hitterRisk:{'4':{mode:'balanced'}},controlAssignments:{'88':4}};
 function env(){
   const rooms=new Map(),db={prepare(sql){
+    if(sql.startsWith('CREATE TABLE IF NOT EXISTS faction_orders'))
+      return {async run(){return {meta:{changes:0}};}};
     return {bind(...args){return {
       async first(){
         const [faction,war]=args;
