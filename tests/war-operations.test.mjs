@@ -97,6 +97,11 @@ test('known past losses make a good BSS ratio a review target, not a safe auto d
   assert.equal(m.encounters.losses,1);
   assert.equal(m.category,'Reassess losses');
   assert.equal(m.tier,4);
+  f.state.data.attacks[0].result='Stalemate';
+  const draw=f.matchEvidence({id:1,status:'okay'},{id:101,status:'okay'});
+  assert.equal(draw.encounters.losses,0);
+  assert.equal(draw.encounters.stalemates,1);
+  assert.equal(draw.category,'Previous stalemate');
 });
 test('completed wars automatically create read-only reports with strict sampled evidence',()=>{
   const at=Date.now(),id=500;
@@ -135,7 +140,7 @@ test('all five operations are routed and do not automate Torn gameplay',()=>{
     "action.startsWith('save-readiness:')","action.startsWith('review-debrief:')",
     "action.startsWith('copy-debrief:')","id:'enemy-accelerating'","id:'inbound-return'"])
     assert.ok(source.includes(item),'Missing '+item);
-  assert.match(source,/\/\/ @version\s+2\.8\.5/);
+  assert.match(source,/\/\/ @version\s+2\.8\.6/);
   assert.doesNotThrow(()=>new Script(source));
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
 });

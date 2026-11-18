@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      2.8.5
+// @version      2.8.6
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='2.8.5';
+  const id='war', version='2.8.6';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='2.8.5', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='2.8.6', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics','dashboard','scouting','archive','scouter'];
   const labels={scouter:'FFScouter Premium',overview:'Live war',enemy:'Players',reports:'Tools & reports',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics',dashboard:'Full dashboard',scouting:'Faction scouting',archive:'Detailed reports'};
@@ -517,7 +517,7 @@
           onerror:()=>reject(new Error('Torn API connection failed')),ontimeout:()=>reject(new Error('Torn API request timed out'))});
       } else if(typeof PDA_httpGet==='function'){
         // Torn PDA compatibility fallback; key is sent only to the official Torn endpoint.
-        Promise.resolve(PDA_httpGet(url+'&key='+encodeURIComponent(key))).then(x=>resolve(typeof x==='string'?JSON.parse(x):x)).catch(reject);
+        Promise.resolve(PDA_httpGet(url+'&key='+encodeURIComponent(key))).then(x=>{const raw=x?.responseText??x;resolve(typeof raw==='string'?JSON.parse(raw):raw);}).catch(reject);
       } else {
         fetch(url,{headers:{Authorization:'ApiKey '+key}}).then(r=>r.json()).then(resolve).catch(reject);
       }
@@ -1400,14 +1400,15 @@
   function attackHistoryFor(friendId,enemyId,at=Date.now()){
     const recent=(state.data.attacks||[]).filter(x=>positive(x.attacker)===positive(friendId)&&
       positive(x.defender)===positive(enemyId)&&n(x.at)>at-30*24*HOUR&&n(x.at)<=at);
-    let wins=0,losses=0,unknown=0;
+    let wins=0,losses=0,stalemates=0,unknown=0;
     for(const a of recent){
       const result=String(a.result||'').toLowerCase();
       if(/hospitali[sz]ed|mugged|left|victory|won/.test(result))wins++;
-      else if(/lost|defeated|stalemate|timeout|escaped|escape/.test(result))losses++;
+      else if(result==='stalemate')stalemates++;
+      else if(/^(lost|defeated)$/.test(result))losses++;
       else unknown++;
     }
-    return {wins,losses,unknown,total:recent.length,last:recent.length?Math.max(...recent.map(x=>x.at)):0};
+    return {wins,losses,stalemates,unknown,total:recent.length,last:recent.length?Math.max(...recent.map(x=>x.at)):0};
   }
   function currentPlanKey(){
     return String(positive(state.data.war?.id)||('scout-'+positive(cfg.enemyId)));
@@ -1576,6 +1577,7 @@
     else if(exactStats&&m.known&&m.ratio<0.8&&!freshSpies){
       category='Recheck old spies';reason='One or both spy records are older than 30 days or undated';tier=2;
     }else if(knownLoss){category='Reassess losses';reason=encounters.losses+' recent recorded loss(es) for this hitter';tier=4;
+    }else if(encounters.stalemates&&!encounters.wins){category='Previous stalemate';reason='This hitter previously attacked and stalemated';tier=3;
     }else if(exactStats&&m.known&&m.ratio<0.7){
       category='Strong candidate';reason='Recent favourable exact API / spy stats'+(encounters.wins?' + '+encounters.wins+' confirmed recent win(s)':'')+'; verify buffs';tier=0;
     }else if(exactStats&&m.known&&m.ratio<0.8){
@@ -8171,6 +8173,8 @@
       '.faction-war ul.members-list li.wsnw-hospital-soon > .status{'+
         'box-shadow:inset 0 -4px #48df9b!important;outline:1px solid #319a74!important}';
     style.textContent+=
+      '.faction-war .wsnw-expanded-detail .wsnw-personal-fights{grid-column:1/-1!important}'+
+      '.faction-war ul.members-list li.wsnw-expanded .wsnw-detail-field.wsnw-personal-fights strong{white-space:pre-line!important}'+
       '.faction-war ul.members-list.wsnw-country-order:not([hidden]){display:flex!important;flex-direction:column!important}'+
       '.faction-war ul.members-list.wsnw-country-order>*{order:var(--wsnw-order,0)!important}'+
       '.faction-war ul.members-list li.wsnw-enhanced.wsnw-flight-row:not(.wsnw-expanded){height:88px!important;min-height:88px!important}'+
@@ -8251,6 +8255,46 @@
       row.querySelectorAll('.wsnw-flight-line,.wsnw-intel,.wsnw-detail,.wsnw-badge,.wsnw-copy').forEach(el=>el.remove());
     }
   }
+  let personalFights=null;
+  function personalFightCache(){
+    const owner=positive(state.data.meta.ownerId),key=effectiveKey();
+    if(!personalFights||personalFights.owner!==owner||personalFights.key!==key)
+      personalFights={owner,key,rows:[],checked:0,attempt:0,busy:false,error:''};
+    return personalFights;
+  }
+  async function checkPersonalFights(){
+    const cache=personalFightCache(),now=Date.now();
+    if(!cache.owner||!cache.key||cache.busy||now-cache.attempt<5*MIN||document.hidden)return;
+    cache.busy=true;cache.attempt=now;
+    try{
+      const body=await call('/user/attacksfull?sort=DESC&limit=1000','personalFights');
+      if(cache!==personalFightCache())return;
+      if(!Array.isArray(body?.attacks))throw Error('No personal attack records returned');
+      cache.rows=attacks(body).filter(a=>a.attacker===cache.owner||a.defender===cache.owner);
+      cache.count=body.attacks.length;cache.checked=Date.now();cache.error='';
+    }catch(e){cache.error='Personal history unavailable. Check that your Torn key can read personal attacks.';}
+    finally{cache.busy=false;if(cache===personalFightCache()&&nativeWarState.expandedId)syncNativeWar();}
+  }
+  function personalFightHistory(id){
+    const cache=personalFightCache(),me=cache.owner,matches=new Map();
+    if(!me)return 'Waiting for your Torn player ID.';
+    for(const a of [...(state.data.attacks||[]),...cache.rows]){
+      if((a.attacker===me&&a.defender===id)||(a.defender===me&&a.attacker===id))matches.set(a.id,a);
+    }
+    const rows=[...matches.values()].sort((a,b)=>b.at-a.at||b.id-a.id);
+    const lines=rows.slice(0,3).map(a=>{
+      const date=new Date(a.at).toISOString();
+      return (a.attacker===me?'You attacked':'They attacked you')+' / '+(a.result||'Result unavailable')+' / '+
+        date.slice(8,10)+'/'+date.slice(5,7)+'/'+date.slice(0,4)+' '+date.slice(11,19)+' TCT';
+    });
+    const coverage=cache.error||(cache.busy?'Checking personal attack history...':cache.checked?
+      'Checked '+cache.count+' recent personal attack records (limit 1,000) and locally captured faction fights.':
+      !cache.key?'Torn key needed for personal history.':'Personal history not checked yet.');
+    const draws=rows.filter(a=>/^stalemate$/i.test(a.result)).length;
+    const summary=rows.length?rows.length+' recorded encounter'+(rows.length===1?'':'s')+' / '+
+      draws+' stalemate'+(draws===1?'':'s'):'No matching encounter in the records available.';
+    return [summary,...lines,coverage].join('\n');
+  }
   function nativeWarDetailHTML(p,enemy,kind,place,band,orders){
     const field=(label,value,accent='')=>
       '<span class="wsnw-detail-field '+esc(accent)+'"><small>'+esc(label)+
@@ -8276,6 +8320,7 @@
           (band.reasons.get(p.id)?.join('; ')||'Manual target'):
           band.regular.has(p.id)?'Regular target bracket':'Needs strength classification',
         previous=lastKnownMemberScore('enemies',p.id);
+      html=field('Your fight history',personalFightHistory(p.id),'wsnw-personal-fights')+html;
       html+=field('Battle intelligence',power.detail)+
         field('FF / difficulty',ff.source==='estimate'?
           'Model '+ff.value+' \u00b7 strength estimate, not a win prediction':
@@ -8766,6 +8811,7 @@
         // Expand once for the secondary facts; keep compact rows free of prose.
         let expandedInfo=infoBar.querySelector('.wsnw-expanded-detail');
         if(expanded){
+          if(enemy)checkPersonalFights();
           if(!expandedInfo){expandedInfo=el('div','wsnw-expanded-detail');infoBar.appendChild(expandedInfo);}
           const detailHtml=nativeWarDetailHTML(p,enemy,kind,place,band,orders);
           // Preserve this container and the row's scroll position during 40s refreshes.
