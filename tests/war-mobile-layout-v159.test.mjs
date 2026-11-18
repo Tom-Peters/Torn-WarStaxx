@@ -59,7 +59,7 @@ test('Torn PDA: compact rows keep the native player/status cells intact',()=>{
     rosterFresh:()=>true,warScore:()=>null,chainStatus:()=>({fresh:false}),
     positive:x=>Number(x)>0?Number(x):0,memberState:p=>p.status.toLowerCase(),
     nativeWarFilters:()=>true,nativeWarTransition:()=>null,MIN:60000,
-    nativeWarLocation:()=>({country:'Torn',phase:'present',source:'Official roster'}),
+    currentLocation:()=>({country:'Torn',phase:'present',source:'Official roster'}),nativeWarLocation:()=>({country:'Torn',phase:'present',source:'Official roster'}),
     nativeWarLastSeen:()=> 'Seen 4m',nativeWarHospitalTier:()=> 'wsnw-soon',
     isOnline:()=>false,
     el:(tag,cls,text)=>{const n=element(tag,cls);n.textContent=text||'';return n;},

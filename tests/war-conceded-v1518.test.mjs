@@ -33,7 +33,7 @@ function fixture(){
     canCall:()=>true,warAttackRows:()=>[],
     call:async()=>({attacks:++calls===1?first:second}),
     parseArray:value=>value,unpack:value=>value.attacks,
-    attacks:value=>value.attacks,save:()=>true,
+    attacks:value=>value.attacks,save:()=>true,keepFights:async()=>{},archiveFailure:()=>{},
   });
   new Script(excerpt+';globalThis.exposed={concessionSnapshot,refreshWarConcessions,concessionRecord};')
     .runInContext(scope);

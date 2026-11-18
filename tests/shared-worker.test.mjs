@@ -1,12 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
-import {runInNewContext} from 'node:vm';
 
-const source=readFileSync(new URL('../shared-worker/src/index.js',import.meta.url),'utf8');
-const sandbox={Response,URL};
-runInNewContext(source.replace('export default','globalThis.__worker ='),sandbox);
-const worker=sandbox.__worker;
+import worker from '../shared-worker/src/index.js';
 const READ='r'.repeat(48),WRITE='w'.repeat(48);
 const data={assignments:{'4':88},blackSkulls:{'4':true},
   hitterRisk:{'4':{mode:'balanced'}},controlAssignments:{'88':4}};
