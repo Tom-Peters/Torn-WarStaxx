@@ -5,13 +5,13 @@ const part=(a,b)=>source.slice(source.indexOf(a),source.indexOf(b,source.indexOf
 function fixture(response){
  const calls=[];
  const scope={console,URLSearchParams,Date,document:{hidden:false},render(){},syncPageBse(){},
-  checkFFRegistration:async()=>{},ffRequest:async url=>{calls.push(url);return typeof response==='function'?response(url):response;},
+  activeWarNow:()=>true,rosterFresh:()=>true,ffIsStale:()=>false,checkFFRegistration:async()=>{},ffRequest:async url=>{calls.push(url);return typeof response==='function'?response(url):response;},
   effectiveKey:()=> 'fixture',positive:v=>Number.isSafeInteger(Number(v))&&Number(v)>0?Number(v):0,
   n:v=>Number(v)||0,esc:String,fmt:String,age:()=> 'recent',stamp:String,b:()=>'',a:()=>'',card:(h,b)=>h+b,link:String,empty:String,
   cfg:{ffEnabled:true,ffConsent:true,ffKey:'fixture'},MIN:60000,HOUR:3600000,
   state:{data:{meta:{ffRegistration:{premium:true,at:Date.now()}},ffstats:{},enemies:[],ours:[]}}};
  const code=part('  const scouterExtra=','  // Fair Fight from FFScouter')+part('  const ffApiKey=','  function matchup(')+
- ';({scouterExtra,parseFFRows,ffscouter,parseScouterFlights,parseScouterActivity,scouterRead,scouterScreen,scouterPremiumActive})';
+ ';({scouterExtra,parseFFRows,ffscouter,parseScouterFlights,parseScouterActivity,scouterRead,scouterScreen,scouterPremiumActive,scouterArrivalAlerts,scouterDistributionText,pollScouterFlights})';
  return {...runInNewContext(code,scope),scope,calls};
 }
 test('OpenAPI 1.20.0 selected estimate, distribution and spy provenance remain separate',()=>{
@@ -54,4 +54,19 @@ test('Activity success code zero is accepted by the native FFScouter transport',
  const transport=part('  async function ffRequest(url){','  async function checkFFRegistration(');
  const call=runInNewContext(transport+';ffRequest',{PDA_httpGet:async()=>({status:200,responseText:'{"code":0,"buckets":[]}'}),setTimeout:()=>0});
  assert.equal((await call('https://ffscouter.com/api/v1/activity/player')).code,0);
+});
+
+test('Arrival alerts require recent observations, upcoming windows and enabled Premium',()=>{
+ const f=fixture(),now=Date.now();f.scouterExtra.flights={11:{at:now,current:{earliest:now+60000,latest:now+180000}}};
+ assert.equal(f.scouterArrivalAlerts(now).length,1);
+ assert.equal(f.scouterArrivalAlerts(now+4*60000).length,0);
+ f.scope.state.data.enemies=[{id:11,updated:now+1,status:'Okay'}];assert.equal(f.scouterArrivalAlerts(now).length,0);
+ f.scope.state.data.enemies=[];f.scope.cfg.scouterFlightAlerts=false;assert.equal(f.scouterArrivalAlerts(now).length,0);
+ f.scope.cfg.scouterFlightAlerts=true;f.scope.cfg.ffConsent=false;assert.equal(f.scouterArrivalAlerts(now).length,0);
+});
+test('Expanded distribution preserves missing stats and entitlement',()=>{
+ const f=fixture();f.scope.state.data.ffstats[11]={at:Date.now(),distribution:{percentages:{strength:70,speed:30},at:0}};
+ assert.match(f.scouterDistributionText(11),/STR 70% \/ SPD 30%/);
+ assert.doesNotMatch(f.scouterDistributionText(11),/DEF 0/);
+ f.scope.cfg.ffConsent=false;assert.equal(f.scouterDistributionText(11),'');
 });

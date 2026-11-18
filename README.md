@@ -1,3 +1,11 @@
+## 2.7.1 - expanded distributions and arrival alerts
+
+Expanded players in both the main roster and Torn native ranked-war rows now show supplied Premium STR/SPD/DEF/DEX percentages with age and estimate labels. Unknown stats are omitted.
+
+Flight arrival alerts appear in WarStaxx and the hub when a checked arrival window overlaps the next 15 minutes. They expire after three minutes without a fresh observation or after the latest estimated arrival. A newer non-travelling Torn roster observation suppresses the old flight alert. These alerts do not confirm landing or availability.
+
+With verified Premium and fresh enemy rosters, ranked-war flights refresh every two minutes while Torn is visible (up to 100 loaded players). Outside war, use the existing manual flight check. Disable alerts and automatic checks in Settings. No OS/background notifications or game actions are submitted.
+
 ## 2.7.0 - FFScouter Premium intelligence
 
 WarStaxx now retains Premium stat distributions, alternative estimates and dated spy snapshots, preserving the provider-selected BSE and personal FFS. Open **Tools & reports → FFScouter Premium**, or expand a native player badge and choose **Premium player details**.

@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      2.7.0
+// @version      2.7.1
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='2.7.0';
+  const id='war', version='2.7.1';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='2.7.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='2.7.1', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics','dashboard','scouting','archive','scouter'];
   const labels={scouter:'FFScouter Premium',overview:'Live war',enemy:'Players',reports:'Tools & reports',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics',dashboard:'Full dashboard',scouting:'Faction scouting',archive:'Detailed reports'};
@@ -1088,6 +1088,29 @@
     const x=f.current;
     return old+'FFScouter: '+x.description+' / '+x.method+(x.earliest?' / estimated arrival window '+stamp(x.earliest)+' to '+stamp(x.latest):' / arrival window unknown')+' / checked '+age(f.at);
   }
+  function scouterDistributionText(id){
+    if(!scouterPremiumActive())return '';
+    const x=ffscouter(id),d=x?.distribution;if(!d)return '';
+    const labels={strength:'STR',speed:'SPD',defense:'DEF',dexterity:'DEX'};
+    return (ffIsStale(x)?'STALE / ':'')+'Estimated '+Object.entries(d.percentages).map(([k,v])=>labels[k]+' '+v+'%').join(' / ')+
+      ' / '+(d.at?age(d.at):'date unknown')+'. Missing stats unknown; not exact battle stats.';
+  }
+  function scouterArrivalAlerts(at=Date.now()){
+    if(cfg.scouterFlightAlerts===false||!scouterPremiumActive())return [];
+    const rows=Object.entries(scouterExtra.flights).filter(([id,f])=>{
+      const x=f.current;if(!x||!x.earliest||!x.latest||at-f.at>3*MIN||f.at>at||x.latest<at||x.earliest>at+15*MIN)return false;
+      const p=[...state.data.enemies,...state.data.ours].find(p=>p.id===Number(id));
+      return !(p&&p.updated>f.at&&!/travel/i.test(p.status||''));
+    });
+    return rows.length?[{id:'scouter-arrivals',title:rows.length+' estimated flight arrival(s) approaching',
+      detail:'FFScouter arrival windows overlap the next 15 minutes. Observations are under three minutes old. Review flight details; landing and attack availability are not confirmed.',
+      status:'now',priority:82,tab:'scouter'}]:[];
+  }
+  function pollScouterFlights(){
+    if(document.hidden||cfg.scouterFlightAlerts===false||!scouterPremiumActive()||scouterExtra.busy||!activeWarNow()||!rosterFresh('enemies'))return;
+    if(Date.now()-n(scouterExtra.attempts['flights:0'])<2*MIN)return;
+    scouterRead('flights');
+  }
   function scouterStrengthHTML(id){
     const x=ffscouter(id);if(!x)return '<p>No cached strength estimate. Check stats to load this player.</p>';
     const parts={strength:'STR',speed:'SPD',defense:'DEF',dexterity:'DEX'};
@@ -1101,7 +1124,7 @@
   function scouterScreen(){
     scouterContext();const id=positive(scouterExtra.selected),active=scouterPremiumActive(),reg=state.data.meta.ffRegistration;
     const policy='<p class="ws-small">Source: FFScouter. Uses your own registered key only. <a href="https://ffscouter.com/#data-policy" target="_blank" rel="noopener noreferrer">Data policy</a> / <a href="https://ffscouter.com/volunteer" target="_blank" rel="noopener noreferrer">Scanner data policy</a>. Checks are requested here; no attacks or claims are submitted.</p>';
-    let html=card('FFScouter Premium',policy+'<p>'+(!cfg.ffEnabled||!cfg.ffConsent?'Enable FFScouter in Settings.':active?'Premium verified':reg?.premium?'Premium verification needs refreshing':'Premium not verified for the configured key')+'</p>'+
+    let html=card('FFScouter Premium',policy+'<p>Flight alerts '+(cfg.scouterFlightAlerts===false?'off':'on')+': automatic foreground checks during ranked wars; checked player flights can also generate alerts. Manage in Settings.</p>'+ '<p>'+(!cfg.ffEnabled||!cfg.ffConsent?'Enable FFScouter in Settings.':active?'Premium verified':reg?.premium?'Premium verification needs refreshing':'Premium not verified for the configured key')+'</p>'+
       '<div class="ws-toolbar">'+b('Settings','tab:settings')+b('Verify key','check-ff-key')+b('Check roster flights (up to 100)','scouter:flights:0')+b('Find respect targets','scouter:targets:0')+'</div>'+
       '<label>Player Torn ID <input id="ws-scouter-id" inputmode="numeric" type="number" min="1" value="'+(id||'')+'"></label>'+b('Open player','scouter-open')+
       (scouterExtra.busy?'<p role="status">Checking FFScouter...</p>':'')+(scouterExtra.error?'<p class="ws-note ws-warn">'+esc(scouterExtra.error)+'</p>':''));
@@ -2031,7 +2054,7 @@
     return {our:n(our.score),enemy:n(theirs.score),net:n(our.score)-n(theirs.score),target:n(w.target)};
   }
   function currentAlerts(){
-    const out=[];
+    const out=[...scouterArrivalAlerts()];
     const w=activeWarNow()?state.data.war:null,score=w?warScore():null,t=state.data.updated.enemies||0;
     if(!effectiveKey())out.push({id:'api-key',title:'Connect Torn API',detail:'Add a key in Settings to load live and historical intelligence.',status:'now',priority:95,tab:'settings'});
     if(!positive(cfg.ourId))out.push({id:'faction-id',title:'Detect your faction',detail:'WarStaxx checks your API key identity automatically. Open Settings if you need to retry or use a manual ID.',status:'now',priority:92,tab:'settings'});
@@ -2991,7 +3014,8 @@
       '. Estimates are for the registered API-key owner. Individual Black Skulls FF values are calculated separately when you have comparable spy/BSS data for both players.</p>'+
       (state.data.errors.ffscouter?'<div class="ws-note ws-warn">FFScouter: '+esc(state.data.errors.ffscouter)+'</div>':'')+
       '<div class="ws-toolbar">'+b('Refresh FF','refresh-ff')+b('Check registered key','check-ff-key')+
-      b('FF settings','tab:settings')+b('Premium intelligence','tab:scouter')+'</div>'+
+      b('FF settings','tab:settings')+b('Premium intelligence','tab:scouter')+
+      '<label><input type="checkbox" id="ws-ff-flight-alerts" '+(cfg.scouterFlightAlerts!==false?'checked':'')+'> Flight arrival alerts: check loaded war rosters every two minutes while Torn is visible. Show estimated windows within 15 minutes; hide observations older than three minutes.</label>'+'</div>'+
       '<p class="ws-small">FFScouter calculated FF can exceed 3.00: that means an increasingly tough opponent, NOT bonus respect above 3.00. Torn awarded FF stays between 1.00 and 3.00; logged attacks are labelled observed.</p>');
   }
   async function manualFFCheck(onlyCheck=false){
@@ -5908,7 +5932,7 @@
         state.tab==='targets'&&positive(state.chosen)===positive(id))
         loadPublicIntel(id);},100);
     }
-    let html=statusNote()+b('FFScouter Premium details','scouter-player:'+id)+
+    let html=statusNote()+(scouterDistributionText(id)?card('Estimated stat distribution',esc(scouterDistributionText(id))):'')+b('FFScouter Premium details','scouter-player:'+id)+
       '<div class="ws-toolbar">'+b('Back to enemy players','tab:targets')+b('Opponent dossier','tab:intel')+
       a('Torn profile',link(id))+(side==='enemies'?a('Attack page',attackLink(id)):'')+'</div>'+
       '<div class="ws-lead"><span class="ws-data-label">PLAYER INTELLIGENCE | '+(side==='ours'?'OUR MEMBER':'OPPONENT')+'</span>'+
@@ -6437,6 +6461,7 @@
       '<span class="ws-player-status '+tone+'">'+esc(fresh?p.status:'Cached: '+p.status)+(timer?' / '+timer:'')+'</span></div>'+
       '<p class="ws-player-glance">'+esc(own?'Given '+(!impact.complete&&impact.given!==null?'at least ':'')+scoreLabel(impact.given)+' captured points':strength.short)+'</p>'+
       '<details data-ws-disclosure="roster-'+side+'-'+p.id+'"><summary>Details and actions</summary>'+
+      (scouterDistributionText(p.id)?'<p class="ws-small">'+esc(scouterDistributionText(p.id))+'</p>':'')+
       '<div class="ws-player-metrics">'+(own?metric('Earned',impact.earned)+metric('Given',impact.given)+metric('Net*',impact.net):
         metric('Scored',impact.scored)+metric('Hits',impact.hits)+'<span><small>STRENGTH</small><b>'+esc(strength.short)+'</b></span>')+'</div>'+
       '<div class="ws-player-foot"><span>'+esc(nativeWarLastSeen(p))+'</span><span>'+
@@ -6951,6 +6976,7 @@
       const supplied=$('#ws-key',root)?.value?.trim();if(supplied&&supplied!==cfg.key){cfg.key=supplied;delete state.data.meta.ffRegistration;state.data.updated.ffscouter=0;state.data.ffstats={};}
       const ffSupplied=$('#ws-ffkey',root)?.value?.trim();if(ffSupplied&&ffSupplied!==cfg.ffKey){cfg.ffKey=ffSupplied;delete state.data.meta.ffRegistration;state.data.updated.ffscouter=0;state.data.ffstats={};}
       cfg.ffConsent=Boolean($('#ws-ff-consent',root)?.checked);
+      cfg.scouterFlightAlerts=Boolean($('#ws-ff-flight-alerts',root)?.checked);
       cfg.ffEnabled=Boolean($('#ws-ff-enable',root)?.checked)&&cfg.ffConsent&&Boolean(cfg.ffKey||effectiveKey());
       const manualId=positive($('#ws-our',root)?.value);
       cfg.factionAuto=Boolean($('#ws-auto-faction',root)?.checked);
@@ -8153,6 +8179,8 @@
           !impact?.known?'Awaiting API capture':impact.complete?'Current scan caught up':
           'Partial data \u00b7 counts are minimums'+(impact.error?' \u00b7 '+impact.error:''));
     }
+    const distribution=scouterDistributionText(p.id);
+    if(distribution)html+=field('FFScouter distribution',distribution);
     return '<div class="wsnw-expanded-detail" aria-label="Detailed player intelligence">'+
       '<div class="wsnw-detail-grid">'+html+'</div>'+
       '<p>WarStaxx uses cached Torn observations. Unknown is not zero; \u2265 is a captured minimum.'+
@@ -8872,6 +8900,7 @@
     document.dispatchEvent(new CustomEvent('staxx:ping'));
   }},45000);
   const warStripTimer=setInterval(()=>{if(!document.hidden)renderWarStrip();},10000);
+  const scouterFlightTimer=setInterval(()=>{if(!document.hidden){pollScouterFlights();publish();if(state.open&&state.tab==='alerts')render();}},30000);
   const hospitalClockTimer=setInterval(()=>{if(!document.hidden)updateHospitalCountdowns();},10000);
   const nativeWarTimer=setInterval(()=>{if(!document.hidden){syncNativeWar();syncNativeProfile();syncPageBse();}},5000);
   window.addEventListener('hashchange',syncPageBse);
