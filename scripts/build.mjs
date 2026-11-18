@@ -10,7 +10,7 @@ for(const name of readdirSync(new URL('src/',base)).filter(x=>x.endsWith('.js'))
     const i=result.indexOf(start),j=result.indexOf(end,i);
     if(j<0)throw Error('Missing end marker for '+name);
     result=result.slice(0,i)+block+result.slice(j+end.length);
-  }else result=result.replace('  const effectiveKey=',block+'\n  const effectiveKey=');
+  }else result=result.replace('  const effectiveKey=',()=>block+'\n  const effectiveKey=');
 }
 if(process.argv.includes('--check')){
   if(result!==source)throw Error('Rebuild the userscript with npm run build');

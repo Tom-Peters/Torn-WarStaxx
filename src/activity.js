@@ -8,7 +8,7 @@
     return null;
   }
   async function captureRoster(side,players,at,war){
-    await archiveReady;if(!intel.db||!players.length)return;
+    await archiveReady;if(!combatArchive.db||!players.length)return;
     const faction=side==='ours'?cfg.ourId:cfg.enemyId,hour=Math.floor(at/HOUR)*HOUR;
     const rows=[];
     await transact('hours',store=>{
@@ -25,7 +25,7 @@
         };
       }
     });
-    rows.forEach(x=>intel.hours.set(x.id,x));
+    rows.forEach(x=>combatArchive.hours.set(x.id,x));
     const people=[];
     await transact('people',store=>{
       for(const p of players){
@@ -38,17 +38,17 @@
           store.put(r);people.push(r);
         };
       }
-    });people.forEach(p=>intel.people.set(p.id,p));
+    });people.forEach(p=>combatArchive.people.set(p.id,p));
     if(at-activitySweep>HOUR){
-      activitySweep=at;const expired=[...intel.hours.values()].filter(x=>x.hour<hour-30*24*HOUR);
+      activitySweep=at;const expired=[...combatArchive.hours.values()].filter(x=>x.hour<hour-30*24*HOUR);
       if(expired.length)await transact('hours',s=>expired.forEach(x=>s.delete(x.id)));
-      expired.forEach(x=>intel.hours.delete(x.id));
+      expired.forEach(x=>combatArchive.hours.delete(x.id));
     }
   }
   async function captureScanner(body,faction,player=0){
     await archiveReady;
     const meta=body?.meta,at=Date.now();
-    if(!intel.db||meta?.subject_type!==(player?'player':'faction')||Number(meta.subject_id)!==(player||faction)||
+    if(!combatArchive.db||meta?.subject_type!==(player?'player':'faction')||Number(meta.subject_id)!==(player||faction)||
       meta.bucket_seconds!==3600||!Array.isArray(body.buckets)||body.buckets.length>744)throw Error('Unrecognised activity response');
     const rows=[];
     for(const b of body.buckets){
@@ -58,7 +58,7 @@
         source:'scanner',score:b.activity_score,active:officialNumber(b.active_players),roster:officialNumber(meta.member_count),
         ratio:officialNumber(b.active_ratio),partial:meta.truncated===true,at});
     }
-    await transact('hours',s=>rows.forEach(r=>s.put(r)));rows.forEach(r=>intel.hours.set(r.id,r));
+    await transact('hours',s=>rows.forEach(r=>s.put(r)));rows.forEach(r=>combatArchive.hours.set(r.id,r));
   }
   async function loadFactionScanner(){
     if(scannerBusy||document.hidden||Date.now()-scannerAttempt<15*MIN||!cfg.ffConsent||!cfg.ffEnabled)return;
@@ -85,11 +85,11 @@
       return cells.get(hour);
     }
     if(options.source==='attack'){
-      for(const r of intel.fights.values()){
+      for(const r of combatArchive.fights.values()){
         if(r.attackerFaction!==faction||r.at<cut||!allowed(r.warId??(r.ranked===false?0:null))||options.player&&r.attacker!==options.player)continue;
         const c=bucket(Math.floor(r.at/HOUR)*HOUR);c.sum++;c.count=1;c.players.add(r.attacker);c.at=Math.max(c.at,r.at);
       }
-    }else for(const r of intel.hours.values()){
+    }else for(const r of combatArchive.hours.values()){
       if(r.hour<cut||r.hour>at||r.faction!==faction||!allowed(r.war)||r.source!==(options.source==='recent'?'roster':options.source))continue;
       if(options.player?r.player!==options.player:r.source==='scanner'&&r.player)continue;
       const c=bucket(r.hour);c.at=Math.max(c.at,r.at);c.roster=Math.max(c.roster,r.roster||0);c.received++;

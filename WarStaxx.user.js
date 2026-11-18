@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      2.8.8
+// @version      3.0.0
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -71,7 +71,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='2.8.8';
+  const id='war', version='3.0.0';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -184,10 +184,10 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='2.8.8', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='3.0.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
-  const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics','dashboard','scouting','archive','scouter'];
-  const labels={scouter:'FFScouter Premium',overview:'Live war',enemy:'Players',reports:'Tools & reports',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics',dashboard:'Full dashboard',scouting:'Faction scouting',archive:'Detailed reports'};
+  const sections=['squad','brief','heatmap','flights','combat','overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics','dashboard','scouting','archive','scouter'];
+  const labels={squad:'Black Skull command',brief:'War briefing',heatmap:'Activity and forecasts',flights:'Defensive travel',combat:'Combat archive',scouter:'FFScouter Premium',overview:'Live war',enemy:'Players',reports:'Tools & reports',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics',dashboard:'Full dashboard',scouting:'Faction scouting',archive:'Detailed reports'};
   const $=(s,root=document)=>root.querySelector(s);
   const $$=(s,root=document)=>Array.from(root.querySelectorAll(s));
   const n=v=>Number.isFinite(Number(v))?Number(v):0;
@@ -265,15 +265,15 @@
   }
   // BEGIN bundled intelligence.js
   // Locally stored evidence is shared between sessions on this Torn origin.
-  const intel = {db:null, fights:new Map(), pairs:new Map(), people:new Map(), hours:new Map(), error:'', ready:false};
+  const combatArchive = {db:null, fights:new Map(), pairs:new Map(), people:new Map(), hours:new Map(), error:'', ready:false};
   const idKey = v => Number.isSafeInteger(v) && v>0 && v<=9999999999;
   const pairKey = (a,b) => Math.min(a,b)+'/'+Math.max(a,b);
   function indexFight(row){
     const key=pairKey(row.attacker,row.defender);
-    if(!intel.pairs.has(key))intel.pairs.set(key,new Map());
-    intel.pairs.get(key).set(row.id,row);intel.fights.set(row.id,row);
+    if(!combatArchive.pairs.has(key))combatArchive.pairs.set(key,new Map());
+    combatArchive.pairs.get(key).set(row.id,row);combatArchive.fights.set(row.id,row);
   }
-  function pairRows(a,b){return Array.from(intel.pairs.get(pairKey(a,b))?.values()||[]);}
+  function pairRows(a,b){return Array.from(combatArchive.pairs.get(pairKey(a,b))?.values()||[]);}
   function fightOutcome(result){
     if(/^(attacked|left|hospitali[sz]ed|mugged|looted|won|victory)$/i.test(result))return 'wins';
     if(/^(lost|defeated)$/i.test(result))return 'losses';
@@ -306,16 +306,16 @@
   }
   function transact(store,callback){
     return new Promise((resolve,reject)=>{
-      const tx=intel.db.transaction(store,'readwrite');
+      const tx=combatArchive.db.transaction(store,'readwrite');
       tx.oncomplete=resolve;tx.onabort=tx.onerror=()=>reject(tx.error||Error('Local archive write failed'));
       callback(tx.objectStore(store),tx);
     });
   }
-  const archiveFailure=()=>{intel.error='Local intelligence could not be saved. Export a backup and check device storage.';};
+  const archiveFailure=()=>{combatArchive.error='Local intelligence could not be saved. Export a backup and check device storage.';};
   const permittedSources=['Torn personal','Torn faction','Torn ranked attacks','Legacy local','Local import'];
   async function keepFights(rows,source){
     await archiveReady;
-    if(!intel.db||!rows.length)return;
+    if(!combatArchive.db||!rows.length)return;
     const staged=new Map();
     await transact('fights',store=>{
       for(const raw of rows){
@@ -325,7 +325,7 @@
         req.onsuccess=()=>{
           const old=req.result;
           if(old&&(old.attacker!==row.attacker||old.defender!==row.defender))return;
-          if(!old&&intel.fights.size+staged.size>40000){intel.error='Combat archive capacity reached. Export your archive before collecting more.';return;}
+          if(!old&&combatArchive.fights.size+staged.size>40000){combatArchive.error='Combat archive capacity reached. Export your archive before collecting more.';return;}
           const sources=[...new Set([...(old?.sources||[]),...(source==='Local import'?(raw.sources||[]).filter(x=>permittedSources.includes(x)):[]),source])];
           const merged={...row,...old,sources,capturedAt:old?.capturedAt||(source==='Local import'&&Number.isSafeInteger(raw.capturedAt)?Math.min(Date.now(),raw.capturedAt):Date.now())};
           // Prefer detailed live fields over a partial or legacy record.
@@ -340,13 +340,13 @@
   }
   function readArchiveStore(name){
     return new Promise((resolve,reject)=>{
-      const req=intel.db.transaction(name).objectStore(name).getAll();
+      const req=combatArchive.db.transaction(name).objectStore(name).getAll();
       req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
     });
   }
   const archiveReady=(async()=>{
     try{
-      intel.db=await new Promise((resolve,reject)=>{
+      combatArchive.db=await new Promise((resolve,reject)=>{
         const req=indexedDB.open('warstaxx-intelligence',1);
         req.onupgradeneeded=()=>{for(const store of ['fights','people','hours'])req.result.createObjectStore(store,{keyPath:'id'});};
         req.onblocked=()=>reject(Error('Archive open in another tab'));
@@ -354,15 +354,34 @@
       });
       const [fights,people,hours]=await Promise.all(['fights','people','hours'].map(readArchiveStore));
       for(const row of fights)indexFight(row);
-      for(const row of people)intel.people.set(row.id,row);
-      for(const row of hours)intel.hours.set(row.id,row);
-      intel.ready=true;
+      for(const row of people)combatArchive.people.set(row.id,row);
+      for(const row of hours)combatArchive.hours.set(row.id,row);
+      combatArchive.ready=true;
     }catch(_){archiveFailure();}
   })();
   function reliableBse(player){
     const x=ffscouter(player.id),at=Date.now();
     return x&&!ffIsStale(x)&&x.updatedAt>0&&x.updatedAt<=at&&x.at<=at&&x.bsEstimate>0?
       {value:x.bsEstimate,source:'FFScouter BSE',at:x.updatedAt}:{value:null,source:'BSE needs intelligence'};
+  }
+  async function importPeople(rows){
+    if(!Array.isArray(rows)||rows.length>40000)throw Error('Invalid membership backup');
+    const staged=[];
+    await transact('people',store=>{
+      for(const row of rows){
+        if(!idKey(row.id)||typeof row.name!=='string'||!Number.isSafeInteger(row.at)||!Array.isArray(row.memberships))continue;
+        const incoming=row.memberships.filter(m=>idKey(m.faction)&&Number.isSafeInteger(m.first)&&Number.isSafeInteger(m.last)&&m.first<=m.last&&m.last<=Date.now()+MIN)
+          .map(m=>({faction:m.faction,first:m.first,last:m.last}));
+        const req=store.get(row.id);req.onsuccess=()=>{
+          const old=req.result,history=new Map();
+          for(const m of [...incoming,...(old?.memberships||[])]){
+            const k=m.faction+'/'+m.first,prior=history.get(k);if(!prior||m.last>prior.last)history.set(k,m);
+          }
+          const newest=old&&old.at>=row.at?old:row,merged={id:row.id,name:newest.name.slice(0,80),at:newest.at,memberships:[...history.values()].sort((a,b)=>a.first-b.first)};
+          store.put(merged);staged.push(merged);
+        };
+      }
+    });staged.forEach(p=>combatArchive.people.set(p.id,p));
   }
   // END bundled intelligence.js
   // BEGIN bundled activity.js
@@ -376,7 +395,7 @@
     return null;
   }
   async function captureRoster(side,players,at,war){
-    await archiveReady;if(!intel.db||!players.length)return;
+    await archiveReady;if(!combatArchive.db||!players.length)return;
     const faction=side==='ours'?cfg.ourId:cfg.enemyId,hour=Math.floor(at/HOUR)*HOUR;
     const rows=[];
     await transact('hours',store=>{
@@ -393,7 +412,7 @@
         };
       }
     });
-    rows.forEach(x=>intel.hours.set(x.id,x));
+    rows.forEach(x=>combatArchive.hours.set(x.id,x));
     const people=[];
     await transact('people',store=>{
       for(const p of players){
@@ -406,17 +425,17 @@
           store.put(r);people.push(r);
         };
       }
-    });people.forEach(p=>intel.people.set(p.id,p));
+    });people.forEach(p=>combatArchive.people.set(p.id,p));
     if(at-activitySweep>HOUR){
-      activitySweep=at;const expired=[...intel.hours.values()].filter(x=>x.hour<hour-30*24*HOUR);
+      activitySweep=at;const expired=[...combatArchive.hours.values()].filter(x=>x.hour<hour-30*24*HOUR);
       if(expired.length)await transact('hours',s=>expired.forEach(x=>s.delete(x.id)));
-      expired.forEach(x=>intel.hours.delete(x.id));
+      expired.forEach(x=>combatArchive.hours.delete(x.id));
     }
   }
   async function captureScanner(body,faction,player=0){
     await archiveReady;
     const meta=body?.meta,at=Date.now();
-    if(!intel.db||meta?.subject_type!==(player?'player':'faction')||Number(meta.subject_id)!==(player||faction)||
+    if(!combatArchive.db||meta?.subject_type!==(player?'player':'faction')||Number(meta.subject_id)!==(player||faction)||
       meta.bucket_seconds!==3600||!Array.isArray(body.buckets)||body.buckets.length>744)throw Error('Unrecognised activity response');
     const rows=[];
     for(const b of body.buckets){
@@ -426,7 +445,7 @@
         source:'scanner',score:b.activity_score,active:officialNumber(b.active_players),roster:officialNumber(meta.member_count),
         ratio:officialNumber(b.active_ratio),partial:meta.truncated===true,at});
     }
-    await transact('hours',s=>rows.forEach(r=>s.put(r)));rows.forEach(r=>intel.hours.set(r.id,r));
+    await transact('hours',s=>rows.forEach(r=>s.put(r)));rows.forEach(r=>combatArchive.hours.set(r.id,r));
   }
   async function loadFactionScanner(){
     if(scannerBusy||document.hidden||Date.now()-scannerAttempt<15*MIN||!cfg.ffConsent||!cfg.ffEnabled)return;
@@ -453,11 +472,11 @@
       return cells.get(hour);
     }
     if(options.source==='attack'){
-      for(const r of intel.fights.values()){
+      for(const r of combatArchive.fights.values()){
         if(r.attackerFaction!==faction||r.at<cut||!allowed(r.warId??(r.ranked===false?0:null))||options.player&&r.attacker!==options.player)continue;
         const c=bucket(Math.floor(r.at/HOUR)*HOUR);c.sum++;c.count=1;c.players.add(r.attacker);c.at=Math.max(c.at,r.at);
       }
-    }else for(const r of intel.hours.values()){
+    }else for(const r of combatArchive.hours.values()){
       if(r.hour<cut||r.hour>at||r.faction!==faction||!allowed(r.war)||r.source!==(options.source==='recent'?'roster':options.source))continue;
       if(options.player?r.player!==options.player:r.source==='scanner'&&r.player)continue;
       const c=bucket(r.hour);c.at=Math.max(c.at,r.at);c.roster=Math.max(c.roster,r.roster||0);c.received++;
@@ -642,6 +661,273 @@
     return 'Balanced';
   }
   // END bundled planning.js
+  // BEGIN bundled coordination.js
+  const commandSync={room:null,scope:'',token:'',readAt:0,error:'',busy:false,attempt:0};
+  function roomKey(){const s=sharedScope();return s&&sharedEndpoint()?sharedEndpoint()+'/'+s.faction+'/'+s.war:'';}
+  function commandRoom(){
+    return roomKey()&&roomKey()===commandSync.scope&&commandSync.token===cfg.shared.token?commandSync.room:null;
+  }
+  function roomClock(){const r=commandRoom();return r?r.now+Math.max(0,Date.now()-commandSync.readAt):Date.now();}
+  function claimLive(c){return c?.status==='claimed'&&c.expires>roomClock();}
+  async function syncCommand(cmd=null,observe=false){
+    const key=roomKey(),token=cfg.shared.token;
+    if(!key||document.hidden||commandSync.busy)return;
+    if(key!==commandSync.scope||commandSync.token!==token)Object.assign(commandSync,{room:null,scope:key,token,error:'',attempt:0});
+    commandSync.busy=true;commandSync.attempt=Date.now();
+    const valid=()=>key===roomKey()&&token===cfg.shared.token;
+    try{
+      const request=async action=>{
+        if(!valid())throw Error('War or access changed');
+        const response=await sharedTransport(action?'PUT':'GET',commandSync.room?.revision||0,action,'command');
+        if(!valid())return false;
+        if(!response.ok){
+          if(response.status===409&&action){await request(null);throw Error('Orders changed. Review the latest revision before retrying.');}
+          throw Error(response.status===404?'The installed Worker does not yet offer command rooms.':response.status===503?'Command database or migration unavailable.':response.result?.error||'Worker request failed');
+        }
+        const r=response.result;
+        if(r.schema!==1||!r.plan?.assignments||!r.ops?.states||!Number.isSafeInteger(r.revision)||!r.actor)throw Error('Unsupported command schema');
+        commandSync.room={...r,events:r.events||commandSync.room?.events||[]};commandSync.readAt=Date.now();commandSync.error='';return true;
+      };
+      if(cmd&&!commandSync.room)throw Error('Read current orders before publishing.');
+      if(!await request(cmd))return;
+      if(observe&&['capo','officer'].includes(commandSync.room.actor.role)&&Object.keys(commandSync.room.plan.assignments).length){
+        const rows=[...state.data.ours,...state.data.enemies].filter(p=>Date.now()-p.updated<=90000&&p.updated<=Date.now()).map(p=>{
+          const loc=nativeWarLocation(p),kind=memberState(p);
+          return {id:p.id,at:p.updated,state:kind==='okay'||loc.phase==='abroad'?'ready':
+            kind==='hospital'?'hospital':kind==='jail'?'jail':loc.phase==='inbound'||/travel/i.test(p.status)?'travelling':'unknown',
+            online:['Online','Idle','Offline'].includes(p.lastAction)?p.lastAction:'Unknown',
+            country:loc.country==='Unknown'||loc.source.startsWith('Prior')?null:loc.country};
+        });
+        if(rows.length)await request({type:'observe',rows});
+        if(valid()&&commandSync.room.event?.changes?.length)await request(null);
+        // An authorised officer submits only a verified attack reference.
+        if(valid())for(const [target,claim] of Object.entries(commandSync.room.ops.claims)){
+          if(!claimLive(claim))continue;
+          const record=pairRows(claim.hitter,Number(target)).find(r=>r.attacker===claim.hitter&&r.warId===state.data.war.id&&r.startedAt>=claim.at);
+          if(record){await request({type:'verify',target:Number(target),hitter:claim.hitter,attack:record.id,at:record.at});break;}
+        }
+      }
+      if(cmd&&valid())await request(null);
+    }catch(e){if(valid())commandSync.error=String(e.message||'Command service unavailable').slice(0,180);}
+    finally{commandSync.busy=false;if(valid()){publish();if(state.open)render();}}
+  }
+  function coordinationAlerts(){
+    if(!state.data.war?.id)return [];
+    const out=[],room=commandRoom(),add=(id,title,detail,tab,priority)=>out.push({id,title,detail,tab,priority,status:'now'});
+    if(roomKey()&&commandSync.error)add('cmd-sync','Shared coordination needs attention',commandSync.error,'squad',84);
+    if(preparingWar()&&(!room||!Object.keys(room.ops.roll).length))add('cmd-ready','Opening roll call outstanding','Review opening coverage and voluntary availability.','brief',75);
+    if(!room||Date.now()-commandSync.readAt>5*MIN)return out;
+    const ids=Object.keys(room.plan.assignments);
+    if(ids.some(id=>room.ops.states[id]?.phase==='REASSIGNMENT_READY'))add('cmd-grace','Five-minute grace elapsed','Check current status, backup coverage and reservations.','squad',94);
+    if(ids.some(id=>room.ops.states[id]?.phase==='LOCKED_UNAVAILABLE'))add('cmd-lock','Locked target needs cover','An officer must review the locked allocation.','squad',95);
+    if(room.events?.some(x=>roomClock()-x.at<10*MIN&&x.event.changes?.length))add('cmd-moved','Black Skull assignment changed','Open the revised hitter queue.','squad',92);
+    if(ids.some(id=>claimLive(room.ops.claims[id])&&room.ops.claims[id].hitter!==state.data.meta.ownerId))add('cmd-claim','Target reserved by another hitter','Check active reservations before selecting a target.','squad',80);
+    return out;
+  }
+  function sharedNextStep(){
+    const r=commandRoom(),me=state.data.meta.ownerId;
+    if(!r||Date.now()-commandSync.readAt>3*MIN||!me)return null;
+    const row=Object.entries(r.plan.assignments).filter(([,a])=>a.primary===me)
+      .sort((a,b)=>b[1].priority-a[1].priority)[0];
+    if(!row)return null;
+    const [id]=row,claim=r.ops.claims[id],stateNow=r.ops.states[id];
+    const title=claimLive(claim)&&claim.hitter!==me?'Wait for the active target claim':
+      ['LOCKED_UNAVAILABLE','UNKNOWN_STATUS','UNAVAILABLE_PENDING','REASSIGNMENT_READY'].includes(stateNow?.phase)?'Review your coverage warning':'Review your first Black Skull target';
+    return {title,reason:playerName(Number(id))+' / priority '+row[1].priority+' / shared revision '+r.revision,label:'Open assignment',action:'tab:squad',tone:'attention'};
+  }
+  function playerName(id){return state.data.ours.find(x=>x.id===id)?.name||state.data.enemies.find(x=>x.id===id)?.name||combatArchive.people.get(id)?.name||'#'+id;}
+  const commandOption=(id,items,value,label)=>'<label>'+esc(label)+'<select id="ws-cmd-'+id+'">'+items.map(([v,t])=>'<option value="'+esc(v)+'" '+(String(v)===String(value)?'selected':'')+'>'+esc(t)+'</option>').join('')+'</select></label>';
+  const foldCommand=(id,title,html)=>'<details class="ws-tool-group" data-ws-disclosure="'+esc(id)+'"><summary>'+esc(title)+'</summary>'+html+'</details>';
+  const choiceItems=values=>values.map(v=>[v,v]);
+  const cmdValue=k=>$('#ws-cmd-'+k,root)?.value;
+  function squadScreen(){
+    const room=commandRoom(),role=room?.actor.role,mayPlan=role==='capo',actor=room?.actor.id;
+    let html=card('Black Skull command',esc(commandSync.error||(!room?'Local proposals. Connect shared orders in Settings to publish.':
+      'Shared revision '+room.revision+' / '+role+' / checked '+age(commandSync.readAt)))+
+      '<div class="ws-toolbar">'+b('Refresh orders','cmd-sync')+b('Settings','tab:settings')+'</div>');
+    const proposals=suggestedAssignments(),map=new Map(proposals.map(p=>[p.target.id,p]));
+    const ids=[...new Set([...Object.keys(room?.plan.assignments||{}).map(Number),...map.keys()])].sort((i,j)=>
+      (room?.plan.assignments[j]?.priority??map.get(j)?.priority??0)-(room?.plan.assignments[i]?.priority??map.get(i)?.priority??0));
+    const skulls=state.data.ours.filter(p=>cfg.blackSkulls[p.id]).map(p=>[p.id,p.name]);
+    for(const id of ids){
+      const a=room?.plan.assignments[id],s=room?.ops.states[id],c=room?.ops.claims[id],proposal=map.get(id);
+      const primary=a?.primary||proposal?.primary;
+      const status=s?.phase?.replaceAll('_',' ').toLowerCase()||(a?'assigned':primary?'proposal':'uncovered');
+      let body='<p>'+esc(proposal?.reasons.join('. ')||'Shared leadership order')+'</p><p>Primary '+esc(primary?playerName(primary):'Needs intelligence')+
+        ' / backups '+esc((a?.backups||proposal?.backups||[]).map(playerName).join(', ')||'None')+'</p>';
+      if(s?.since)body+='<p>First unavailable '+esc(stamp(s.since))+' / grace ends '+esc(stamp(s.since+5*MIN))+' / '+esc(s.reason)+'</p>';
+      if(s?.verified)body+='<p>Roster verified '+esc(stamp(s.verified))+'</p>';
+      if(a?.lock)body+='<p>Locked by '+esc(a.lock.by)+' / '+esc(stamp(a.lock.at))+' '+esc(a.lock.reason)+'</p>';
+      body+='<p>'+esc(claimLive(c)?'Claimed by '+playerName(c.hitter)+' until '+stamp(c.expires):'Claim '+(c?.status==='claimed'?'expired':c?.status||'available'))+'</p>';
+      body+=(proposal?.candidates||[]).slice(0,6).map(x=>'<p>'+esc(x.p.name+' / '+x.ev.category+' / '+(x.available?'available':'availability needs review')+' / last fight '+stamp(x.ev.last))+'</p>').join('');
+      if(actor&&a&&(actor===a.primary||a.backups.includes(actor)))body+=claimLive(c)?(c.hitter===actor?b('Release claim','cmd-release:'+id):''):b('Claim for 3 minutes','cmd-claim:'+id);
+      if(mayPlan){
+        body+=commandOption('primary-'+id,skulls,primary,'Primary')+
+          '<label>Ordered backup IDs<input id="ws-cmd-backups-'+id+'" value="'+esc((a?.backups||proposal?.backups||[]).join(','))+'"></label>'+
+          '<label>Priority<input type="number" min="0" max="100" id="ws-cmd-priority-'+id+'" value="'+(a?.priority??proposal?.priority??50)+'"></label>';
+        if(!a?.lock)body+=b('Publish assignment','cmd-assign:'+id);
+        if(a)body+='<label>Lock reason<input maxlength="120" id="ws-cmd-reason-'+id+'"></label>'+b(a.lock?'Unlock':'Lock',a.lock?'cmd-unlock:'+id:'cmd-lock:'+id);
+      }
+      html+=foldCommand('target-'+id,playerName(id)+' / '+status+(primary?' / '+playerName(primary):''),body);
+    }
+    if(!ids.length)html+=empty('No classified Black Skull targets. Check roster coverage or designate a manual target.');
+    if(mayPlan)html+=foldCommand('policy','Shared policy',commandOption('metric',choiceItems(['bse','legacy']),room.plan.policy,'Strength policy')+
+      '<label>Manual target IDs<input id="ws-cmd-manual" value="'+esc((room.revision?room.plan.manual:Object.keys(manualHeavyTargets())).join(','))+'"></label>'+
+      '<label>Return hold (minutes)<input id="ws-cmd-hold" type="number" min="5" max="120" value="'+room.plan.holdMinutes+'"></label>'+b('Save shared policy','cmd-policy'));
+    if(room&&['officer','capo'].includes(role))html+=foldCommand('duties','Tactical duties',commandOption('duty-hitter',state.data.ours.map(p=>[p.id,p.name]),0,'Member')+
+      commandOption('duty',choiceItems(['protect','scout','strike','reserve','turtle']),'reserve','Duty')+commandOption('duty-target',[[0,'None'],...state.data.enemies.map(p=>[p.id,p.name])],0,'Eligible target')+b('Publish duty','cmd-duty'));
+    if(room)html+=foldCommand('audit','Orders and assignment history',Object.entries(room.plan.duties).map(([i,d])=>'<p>'+esc(playerName(Number(i))+' / '+d.duty+' / '+(d.target?playerName(d.target):'No target'))+
+      (Number(i)===actor&&d.target?(claimLive(room.ops.claims[d.target])?room.ops.claims[d.target].hitter===actor?b('Release','cmd-release:'+d.target):'':b('Claim','cmd-claim:'+d.target)):'')+'</p>').join('')+
+      (room.events||[]).map(x=>'<p>'+esc(stamp(x.at)+' / revision '+x.revision+' / '+x.event.type+' / '+(x.event.target?playerName(x.event.target):'')+' '+(x.event.changes||[]).map(c=>playerName(c.target)+' to '+playerName(c.primary)+' ('+c.reason+')').join(', '))+'</p>').join(''));
+    return html+b('Legacy orders and squad membership','tab:leader');
+  }
+  // END bundled coordination.js
+  // BEGIN bundled views.js
+  function activityScreen(){
+    const player=activityPrefs.player,choices=[...state.data.ours,...state.data.enemies].map(p=>[p.id,p.name]);
+    if(player&&!choices.some(x=>x[0]===player))choices.push([player,playerName(player)]);
+    const opts=activityPrefs;
+    let html=card('Activity / TCT',commandOption('days',choiceItems([3,7,14,30]),opts.days,'Days')+
+      commandOption('period',[['all','All observations'],['war','Wartime'],['peace','Peacetime']],opts.period,'Period')+
+      commandOption('source',[['roster','Confirmed online samples'],['recent','Last action within 15m'],['scanner','Premium scanner score'],['attack','Recorded attacking hits']],opts.source,'Evidence')+
+      commandOption('player',[[0,'All members'],...choices],player,'Player')+b('Apply filters','cmd-filters')+b('Export CSV','cmd-csv')+
+      b('Refresh Premium history','cmd-scanner')+'<p>Percentages describe sampled statuses. A scanner score counts provider observations. '+esc(scannerError)+'</p>');
+    for(const [f,title] of [[cfg.ourId,'Our faction'],[cfg.enemyId,'Enemy faction']])if(f)html+=gridTable(f,title,opts);
+    return html+forecastCard()+foldCommand('old-activity','Observation summaries',activity());
+  }
+  function forecastCard(){
+    const {windows,context:c}=forecastReport();
+    return card('Attack-window forecasts',windows.map(w=>'<p><b>'+w.minutes+' minutes</b> / '+(w.start?esc(stamp(w.start)+' to '+stamp(w.end)+' / '+w.confidence+' / at least '+w.coverage+' sampled dates per hour / '+w.release+' releases / '+w.arrivals+' incoming'):esc(w.confidence))+'</p>').join('')+
+      '<p>'+esc(commandPosture()+' / '+c.covered+' planned assignments / '+c.heavy+' heavy targets / '+c.activeHeavy+' heavy opponents seen online')+'</p><p>Current hitters: '+esc(c.hitters.slice(0,8).map(p=>p.name).join(', ')||'Unknown')+
+      '. Current target opportunities: '+esc(c.targets.slice(0,8).map(p=>p.name).join(', ')||'None verified')+'. Landing times, energy and future availability can change.</p>');
+  }
+  let medicalSupplies=null,medicalAttempt=0;
+  async function checkSupplies(){
+    if(!effectiveKey()||document.hidden||Date.now()-medicalAttempt<15*MIN)return;
+    medicalAttempt=Date.now();
+    try{
+      const body=await call('/user/inventory?cat=Medical&limit=250','cmd-medical',15*MIN),items=body?.inventory?.items;
+      if(!Array.isArray(items))return;
+      medicalSupplies={owner:positive(state.data.meta.ownerId),at:epochMs(body.inventory.timestamp),ipecac:items.filter(x=>x.name==='Ipecac Syrup').reduce((s,x)=>s+x.amount,0),partial:items.length>=250};
+    }catch{medicalSupplies=null;}if(state.open)render();
+  }
+  function flightScreen(){
+    const me=state.data.ours.find(p=>p.id===state.data.meta.ownerId),available=me?hitterReadiness(me):null;
+    const self=me&&protectionPriorities().find(x=>x.player.id===me.id&&x.exposed&&x.feedFresh&&x.impact.underFire);
+    const routes=travelPlan(),safe=routes.filter(r=>r.safe),offense=routes.filter(r=>r.offensive),local=me?currentLocation(me):null;
+    const med=medicalSupplies?.owner===me?.id&&medicalSupplies&&Date.now()-medicalSupplies.at<=20*MIN?medicalSupplies:null;
+    const duty=commandRoom()?.plan.duties[me?.id],assigned=Object.values(commandRoom()?.plan.assignments||{}).some(a=>a.primary===me?.id);
+    const decision=!me||!rosterFresh('ours')?'Refresh your own status before planning protection.':
+      memberState(me)==='hospital'?'Already in hospital. Review discharge time and revive settings.':
+      assigned||duty?.duty==='strike'?'Coordinate cover for your attacking duty before leaving.':
+      !self?'No fresh repeat-hit evidence for personal protection. Review the route comparison if leadership requests cover.':
+      local?.country!=='Torn'?'You are away from Torn. Check local exposure and your return journey.':
+      safe.length?'Consider flying to '+safe[0].country+' for approximately '+safe[0].min+' minutes each way. Check enemy locations again before departure.':
+      med?.ipecac>0&&available?.medicalLeft===0?'Consider Ipecac in Items. Check your next duty and revive setting before use.':
+      'Review self-hospitalisation manually. No defensive flight currently passes the evidence checks.';
+    const display=r=>foldCommand('flight-'+r.country,r.country+' / '+(r.min===r.max?r.min:r.min+'-'+r.max)+'m / '+r.here.length+' present / '+r.incoming.length+' inbound',
+      '<p>'+esc(r.risk)+' / '+Math.round(r.coverage*100)+'% roster locations observed. '+r.before+' inbound could arrive before you. '+
+      esc(r.favourable.length?'Proven opponents: '+r.favourable.map(e=>e.name).join(', '):'No proven overseas target.')+'</p><p>Approximate return '+r.min+'-'+r.max+'m with the same configuration. Standard fare $'+fmt(r.cost)+'. Verify travel slots, equipment and ticket requirements in Torn.</p>');
+    return card('Personal protection',esc(decision)+'<p>Medical cooldown: '+esc(available?.medicalLeft==null?'unknown':available.medicalLeft+'m')+
+      ' / Ipecac: '+esc(med?(med.partial?'at least ':'')+med.ipecac:'unknown')+' / revives: '+esc(me?.reviveSetting||'Unknown')+
+      '. Ipecac typically gives 60-90 minutes in hospital and adds 30 minutes to medical cooldown.</p>'+
+      b('Check medical inventory','cmd-medical')+b('Review Items','fast-turtle'))+
+      card('Flight configuration',commandOption('method',[['','Show method scenarios'],...choiceItems(flyMethods)],cfg.flightMethod||'','Next flight')+
+      commandOption('book',[['unknown','Unknown'],['no','Inactive'],['yes','Active']],cfg.flightBook||'unknown','Mailing Yourself Abroad')+
+      b('Compare routes','cmd-flight')+'<p>Published flight estimates vary by about 3%. Eligibility uses the estimated one-way time. Equipment occupies travel slots. Recheck the weekly overseas rules before attacking.</p>'+
+      '<a class="ws-btn" href="https://www.torn.com/travelagency.php">Open travel agency</a>')+
+      card('Safest destinations',safe.map(display).join('')||empty('No route meets the current configuration and coverage checks.'))+
+      card('Offensive opportunities',offense.map(display).join('')||empty('No proven overseas opportunity with sufficient coverage.'))+
+      foldCommand('all-routes','All '+routes.length+' route assessments',routes.map(display).join(''));
+  }
+  function briefScreen(){
+    const w=state.data.war;if(!w)return empty('No confirmed scheduled or active war.');
+    const plans=suggestedAssignments(),room=commandRoom(),rules=localWarRules(),score=warScore();
+    const risks=protectionPriorities().filter(x=>x.exposed&&x.feedFresh);
+    const losses=risks.map(z=>'<p>'+esc(z.player.name)+' / '+z.impact.in30+' incoming in 30m / '+fmt(z.impact.given)+' captured respect conceded / '+fmt(z.impact.earned)+' earned / '+(z.impact.underFire?'repeat pressure':'monitor')+'</p>').join('');
+    const roll=room?.ops.roll||{},member=room?.actor.id;
+    return card(preparingWar()?'Opening plan':'Tactical briefing',esc(w.opponentName+' / '+commandPosture())+'<p>'+esc(stamp(epochMs(w.start)))+
+      ' / score '+(score?fmt(score.our)+' - '+fmt(score.enemy):'unknown')+' / official target '+fmt(w.target||null)+'</p>'+
+      '<p>'+plans.length+' heavy targets / '+plans.filter(x=>!x.primary).length+' need matchup evidence. '+state.data.ours.filter(p=>!roll[p.id]).length+' members have no roll-call response.</p>'+
+      b('Allocate hitters','tab:squad')+b('Regular matchups','tab:matchups')+b('Review opponent history','tab:scouting'))+
+      card('Voluntary roll call',Object.entries(roll).map(([i,x])=>'<p>'+esc(playerName(Number(i))+' / '+x.choice+(x.from?' / '+stamp(x.from):'')+(x.until?' to '+stamp(x.until):''))+'</p>').join('')+
+      (member?commandOption('roll',choiceItems(['at start','later','unavailable']),roll[member]?.choice,'My availability')+
+        '<label>From (UTC)<input type="datetime-local" id="ws-cmd-from"></label><label>Until (UTC)<input type="datetime-local" id="ws-cmd-until"></label>'+b('Submit my availability','cmd-roll'):
+        '<p>A member-bound credential is required to respond.</p>'))+
+      forecastCard()+card('Defensive priorities',losses||empty('No fresh, captured scoring losses and exposure to report.'))+
+      foldCommand('rules','Weekly war rules', '<p>Torn reports a target and scores. Enter any additional conditions shown on this war\'s enlistment panel.</p>'+
+      '<label>Winning condition<input maxlength="100" id="ws-cmd-condition" value="'+esc(rules.condition||'')+'"></label>'+
+      '<label>Threshold reduction per hour (%)<input type="number" min="0" max="100" id="ws-cmd-decay" value="'+esc(rules.decay??'')+'"></label>'+
+      '<label>Overseas score multiplier<input type="number" min="0" max="100" step=".01" id="ws-cmd-overseas" value="'+esc(rules.overseas??'')+'"></label>'+
+      '<label>Chain conditions<input maxlength="100" id="ws-cmd-chain" value="'+esc(rules.chain||'')+'"></label>'+
+      b('Save local war rules','cmd-rules')+'<p>'+esc(rules.at?'Manual rules updated '+stamp(rules.at):'Template modifiers unknown')+'</p>');
+  }
+  function archiveScreen(){
+    return card('Local combat intelligence',combatArchive.fights.size+' unique attacks / '+combatArchive.people.size+' player identities. '+esc(combatArchive.error)+
+      '<p>Exports contain private local combat records. Store them privately. Import merges records by attack ID.</p>'+
+      b('Export private backup','cmd-export')+'<label>Import backup<input type="file" id="ws-cmd-import" accept=".json,application/json"></label>'+b('Merge backup','cmd-import')+
+      b('Read older personal attacks','cmd-history')+'<p>'+esc(state.data.meta.historyMessage||'Older history loads one page per request.')+'</p>')+
+      foldCommand('archived-players','Find a returning opponent',commandOption('archive-player',[...combatArchive.people.values()].sort((a,b)=>a.name.localeCompare(b.name)).map(p=>[p.id,p.name+' #'+p.id]),0,'Player')+b('Open dossier','cmd-dossier'));
+  }
+  function playerArchiveCard(p){
+    const me=state.data.meta.ownerId,history=pairRows(me,p.id),person=combatArchive.people.get(p.id);
+    const ev=commandMatch({id:me},p),counts=x=>x.wins+' wins / '+x.losses+' losses / '+x.stalemates+' stalemates';
+    return card('Your matchup',esc(ev.category)+'<p>You attacked: '+counts(ev.offense)+'<br>You defended: '+counts(ev.defense)+'</p><p>Most recent '+esc(stamp(ev.last))+' / '+history.length+' captured encounters. Current buffs can change a matchup.</p>'+
+      (person?'<p>Observed memberships: '+esc(person.memberships.map(m=>'#'+m.faction+' ('+stamp(m.first)+' to '+stamp(m.last)+')').join(', '))+'</p>':'')+
+      b('Player activity grid','cmd-player:'+p.id));
+  }
+  async function olderPersonal(){
+    if(document.hidden||!effectiveKey()||!idKey(state.data.meta.ownerId))return;
+    const owner=state.data.meta.ownerId,meta=state.data.meta,cursors=meta.commandCursors||(meta.commandCursors={});
+    if(cursors[owner]===0){meta.historyMessage='Reached the end of the accessible personal feed.';return;}
+    const before=cursors[owner]||Math.floor(Date.now()/1000),body=await call('/user/attacks?sort=DESC&limit=100&to='+before,'command-backfill',MIN);
+    if(!body||state.data.meta.ownerId!==owner)return;
+    const rows=attacks(body);await keepFights(rows,'Torn personal');
+    const oldest=Math.min(...(body.attacks||[]).map(a=>a.ended).filter(Number.isFinite));
+    if(body.attacks?.length<100)cursors[owner]=0;
+    else if(oldest<before)cursors[owner]=oldest;
+    meta.historyMessage=body.attacks?.length===100&&oldest>=before?'Overlapping timestamp page could not advance. Coverage remains partial.':rows.length+' identifiable records checked.';save();
+  }
+  async function commandAction(action){
+    const [kind,value]=action.split(':'),target=Number(value),ids=v=>String(v||'').split(',').filter(x=>x.trim()).map(Number);
+    try{
+      if(kind==='sync')await syncCommand();
+      else if(['claim','release','lock','unlock'].includes(kind))await syncCommand({type:kind,target,reason:cmdValue('reason-'+target)||''});
+      else if(kind==='assign')await syncCommand({type:'assign',target,primary:Number(cmdValue('primary-'+target)),backups:ids(cmdValue('backups-'+target)),priority:Number(cmdValue('priority-'+target))});
+      else if(kind==='policy')await syncCommand({type:'policy',metric:cmdValue('metric'),holdMinutes:Number(cmdValue('hold')),manual:ids(cmdValue('manual'))});
+      else if(kind==='duty')await syncCommand({type:'duty',duty:cmdValue('duty'),hitter:Number(cmdValue('duty-hitter')),target:Number(cmdValue('duty-target'))});
+      else if(kind==='roll'){
+        const utc=k=>cmdValue(k)?Date.parse(cmdValue(k)+'Z'):null;
+        await syncCommand({type:'roll',choice:cmdValue('roll'),from:utc('from'),until:utc('until')});
+      }else if(kind==='scanner')await loadFactionScanner();
+      else if(kind==='filters'){Object.assign(activityPrefs,{days:Number(cmdValue('days')),period:cmdValue('period'),source:cmdValue('source'),player:Number(cmdValue('player'))});if(activityPrefs.source==='scanner'&&activityPrefs.player)await scouterRead('activity',activityPrefs.player);}
+      else if(kind==='player'){activityPrefs.player=target;navigate('heatmap');}
+      else if(kind==='csv'){
+        const csv=['faction,player,hour_utc,source,sum,denominator,observed_players,roster_size,unknown_observations,last_observation_utc'];
+        for(const f of [cfg.ourId,cfg.enemyId].filter(idKey))for(const [hour,c] of activityCells(f))
+          csv.push([f,activityPrefs.player||'',new Date(hour).toISOString(),activityPrefs.source,c.sum,c.count,c.players.size||'',c.roster||'',c.missing,new Date(c.at).toISOString()].join(','));
+        fileDownload('warstaxx-activity.csv','text/csv',csv.join('\r\n'));
+      }else if(kind==='flight'){cfg.flightMethod=cmdValue('method');cfg.flightBook=cmdValue('book');saveCfg();}
+      else if(kind==='medical')await checkSupplies();
+      else if(kind==='rules'){
+        const num=k=>cmdValue(k)===''?null:Number(cmdValue(k)),decay=num('decay'),overseas=num('overseas');
+        if([decay,overseas].some(v=>v!==null&&(!Number.isFinite(v)||v<0||v>100)))throw Error('Use a number from 0 to 100 or leave the field empty.');
+        (cfg.commandRules||={})[state.data.war.id]={condition:cmdValue('condition'),chain:cmdValue('chain'),overseas,decay,at:Date.now()};saveCfg();
+      }else if(kind==='history')await olderPersonal();
+      else if(kind==='export'){await archiveReady;if(!combatArchive.ready)throw Error('Archive unavailable.');
+        fileDownload('warstaxx-combat.json','application/json',JSON.stringify({schema:1,exportedAt:Date.now(),fights:await readArchiveStore('fights'),people:await readArchiveStore('people')}));}
+      else if(kind==='import'){
+        const file=$('#ws-cmd-import',root)?.files?.[0];if(!file||file.size>32*1024*1024)throw Error('Choose a combat backup under 32 MiB.');
+        const data=JSON.parse(await file.text());
+        if(data.schema!==1||!Array.isArray(data.fights)||data.fights.length>40000||!data.fights.every(r=>cleanFight(r)&&(!r.sources||Array.isArray(r.sources))))throw Error('Invalid combat backup.');
+        await archiveReady;if(!combatArchive.ready)throw Error('Local archive unavailable.');
+        await keepFights(data.fights,'Local import');
+        await importPeople(data.people||[]);
+      }else if(kind==='dossier'){const id=Number(cmdValue('archive-player'));if(id)handle('player:'+id);}
+      render();
+    }catch(e){state.error='WarStaxx: '+String(e.message||'Request failed').slice(0,160);render();}
+  }
+  // END bundled views.js
   const effectiveKey=()=>String(cfg.key||'').trim()||(apiKeyPda.includes('PDA-APIKEY')?'':apiKeyPda);
   const saveCfg=()=>{try{localStorage.setItem(CONFIG,JSON.stringify(cfg));return true;}catch(_){state.localKeyError=true;return false;}};
   const save=()=>{try{localStorage.setItem(DATA,JSON.stringify(state.data));return true;}catch(_){
@@ -663,7 +949,7 @@
       position:String(p.position||''),daysInFaction:n(p.days_in_faction),
       revivable:p.is_revivable===true,onWall:p.is_on_wall===true,inOc:p.is_in_oc===true,
       earlyDischarge:p.has_early_discharge===true,
-      status:String(p.status?.state||p.status||'Unknown'),
+      status:String(p.status?.state||p.status||'Unknown'),reviveSetting:String(p.revive_setting||'Unknown'),
       statusText:String(p.status?.description||''),statusDetails:String(p.status?.details||''),
       locationHint:String(p.location?.name||p.location||p.status?.location||''),
       destinationHint:String(p.travel?.destination?.name||p.travel?.destination||p.status?.destination||''),
@@ -2045,6 +2331,7 @@
     return {value:null,verified:false,source:'Teammate stats unknown'};
   }
   function manualHeavyTargets(){
+    const shared=commandRoom();if(shared?.plan.policySet)return Object.fromEntries(shared.plan.manual.map(id=>[id,true]));
     const per=cfg.manualHeavyTargetsByEnemy?.[String(positive(cfg.enemyId))];
     return per&&typeof per==='object'&&!Array.isArray(per)?per:{};
   }
@@ -2068,7 +2355,7 @@
         Math.min(1e15,threshold):0};
   }
   function enemyRoleBands(){
-    const rule=heavyRule(),useBse=cfg.commandMetric==='bse',ranked=state.data.enemies.map(enemy=>({
+    const rule=heavyRule(),useBse=(commandRoom()?.plan.policySet?commandRoom().plan.policy:cfg.commandMetric)==='bse',ranked=state.data.enemies.map(enemy=>({
       enemy,...(useBse?reliableBse(enemy):enemyBattleEstimate(enemy))
     })).filter(x=>x.value!==null).sort((a,b)=>b.value-a.value||
       n(b.enemy.level)-n(a.enemy.level)||a.enemy.id-b.enemy.id),
@@ -2471,7 +2758,7 @@
     return {our:n(our.score),enemy:n(theirs.score),net:n(our.score)-n(theirs.score),target:n(w.target)};
   }
   function currentAlerts(){
-    const out=[...scouterArrivalAlerts()];
+    const out=[...scouterArrivalAlerts(),...coordinationAlerts()];
     const w=activeWarNow()?state.data.war:null,score=w?warScore():null,t=state.data.updated.enemies||0;
     if(!effectiveKey())out.push({id:'api-key',title:'Connect Torn API',detail:'Add a key in Settings to load live and historical intelligence.',status:'now',priority:95,tab:'settings'});
     if(!positive(cfg.ourId))out.push({id:'faction-id',title:'Detect your faction',detail:'WarStaxx checks your API key identity automatically. Open Settings if you need to retry or use a manual ID.',status:'now',priority:92,tab:'settings'});
@@ -2898,7 +3185,7 @@
       await refreshBattleIntel();
       await refreshPublicIntel(activeWarNow()?3:2);
       await refreshFF();
-      if(sharedEndpoint()&&sharedScope())sharedPull(false);
+      if(sharedEndpoint()&&sharedScope()){sharedPull(false);await syncCommand(null,true);}
       state.lastRefresh=Date.now();
     }catch(e){state.error=String(e.message||e);}
     finally{recordDeskChanges(deskBefore);state.loading=false;state.spinner='';save();publish();render();syncNativeWar();}
@@ -2978,6 +3265,7 @@
     '#warstaxx-root .ws-lead{padding:14px;background:linear-gradient(110deg,#103e63,#0b2948);border:1px solid #397a9e;border-radius:12px;margin-bottom:10px}',
     '#warstaxx-root .ws-lead h2{font-size:18px;margin:0 0 8px}#warstaxx-root .ws-score{font-size:22px;font-weight:800}',
     '#warstaxx-root .ws-table-wrap button.ws-inline{border:0;background:none;color:#8ae3ff;padding:2px;min-height:28px;text-align:left;font-weight:700;text-decoration:underline}',
+    '#warstaxx-root .ws-hour-scroll{overflow-x:auto;max-width:100%;overscroll-behavior-x:contain}#warstaxx-root .ws-hour-scroll table{border-collapse:collapse;width:max-content;font-variant-numeric:tabular-nums}#warstaxx-root .ws-hour-scroll td,#warstaxx-root .ws-hour-scroll th{padding:5px;text-align:center;min-width:32px}#warstaxx-root .ws-hour-scroll th:first-child{position:sticky;left:0;background:#11283a;color:#dbf6ff}#warstaxx-root details label{display:grid;min-width:0}#warstaxx-root select,#warstaxx-root input{max-width:100%;box-sizing:border-box}',
     '#warstaxx-root .ws-hour-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:3px;margin:8px 0}#warstaxx-root .ws-hour{border:1px solid #426781;border-radius:5px;text-align:center;padding:5px 1px;background:#103652}',
     '#warstaxx-root .ws-hour.positive{background:#125d61;border-color:#4d9c99}#warstaxx-root .ws-hour.negative{background:#633144;border-color:#a26b7c}#warstaxx-root .ws-hour.unknown{opacity:.5;background:#1e3249}',
     '#warstaxx-root .ws-hour b{display:block;font-size:11px}#warstaxx-root .ws-hour small{font-size:9px}',
@@ -3736,9 +4024,12 @@
     saveCfg();
   }
   async function sharedRequest(method,revision,payload){
+    return sharedTransport(method,revision,payload,'orders');
+  }
+  async function sharedTransport(method,revision,payload,resource){
     const base=sharedEndpoint(),scope=sharedScope();
     if(!base||!scope)throw new Error('Shared orders require HTTPS endpoint, token, faction and active war');
-    const url=base+'/v1/factions/'+scope.faction+'/wars/'+scope.war+'/orders';
+    const url=base+(resource==='command'?'/v2/factions/':'/v1/factions/')+scope.faction+'/wars/'+scope.war+'/'+resource;
     const headers={'Authorization':'Bearer '+String(cfg.shared.token),
       'Accept':'application/json'};
     if(method==='PUT'){headers['Content-Type']='application/json';
@@ -4934,6 +5225,7 @@
       stat('Hospital / flight / jail',x.ownFresh?fmt(x.sheltered):'Unknown','Airborne only; abroad after landing is NOT counted protected')+
       stat('Unknown coverage',fmt(x.unclear),'Missing or stale roster state')+
       stat('Expiries within 15m',x.ownFresh?fmt(x.dueSoon):'Unknown','Time-limited Torn roster statuses')+'</div>';
+    h+=b('Compare self-hospitalisation and flights','tab:flights');
     h+=card('Recommended self-hospital window | manual',
       '<p><b>Suggested coverage:</b> '+
       (windowPlan.minutes===null?'Unavailable / hitter exemption':windowPlan.minutes+' minutes')+
@@ -5875,7 +6167,7 @@
         '<div class="ws-toolbar"><label>Strength cutoff method<select id="ws-heavy-mode">'+
         [['bse','Estimated total stats (BSE) + observed victories'],['relative','Legacy relative BSS'],
           ['percent','Legacy top percentage'],['min-bss','Legacy minimum BSS']].map(([v,label])=>
-          '<option value="'+v+'" '+(bands.rule.mode===v?'selected':'')+'>'+label+'</option>').join('')+
+          '<option value="'+v+'" '+((cfg.commandMetric==='bse'?'bse':bands.rule.mode)===v?'selected':'')+'>'+label+'</option>').join('')+
         '</select></label>'+
         '<label>Top % (5-100)<input id="ws-heavy-percent" type="number" min="5" max="100" step="1" value="'+bands.rule.percent+'"></label>'+
         '<label>Minimum BSS<input id="ws-heavy-bss" type="number" min="0" max="1000000000000000" step="any" value="'+bands.rule.minBss+'"></label></div>'+
@@ -6349,12 +6641,12 @@
       '<p class="ws-small">Scores shown only where official detailed reports exist. Attack links open Torn for manual action; no attack is submitted.</p>';
   }
   function encountersPanel(id){
-    const rows=(state.data.attacks||[]).filter(a=>a.defender===positive(id)||a.attacker===positive(id))
+    const rows=[...combatArchive.fights.values()].filter(a=>a.defender===positive(id)||a.attacker===positive(id))
       .sort((a,b)=>b.at-a.at).slice(0,20);
-    if(!rows.length)return card('Recorded faction encounters',
+    if(!rows.length)return card('Recorded encounters',
       empty('No faction attack records for this player. If you have permission, enable Read faction attacks in Settings.'));
-    return card('Recorded faction encounters | Torn attacks',
-      '<p>Only attacks returned by your authorised faction API. FF values here are actual logged outcomes for the listed attacker, not predictions for other hitters.</p>'+
+    return card('Recorded personal and faction encounters',
+      '<p>Stored encounters from authorised feeds. FF values here are actual logged outcomes for the listed attacker, not predictions for other hitters.</p>'+
       '<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Date</th><th>Attacker</th><th>Result</th><th>Actual FF</th><th>Respect</th></tr></thead><tbody>'+
       rows.map(a=>'<tr><td>'+esc(stamp(a.at))+'</td><td>'+
         (a.attacker?infoButton('Player #'+a.attacker,a.attacker):'Unknown')+'</td><td>'+esc(a.result)+
@@ -6374,6 +6666,7 @@
         break;
       }
     }
+    if(!p&&combatArchive.people.has(id))p={id,name:combatArchive.people.get(id).name,status:'Unknown',position:'Archived member',lastAction:'Unknown'};
     if(!p)return empty('Player was not found in current rosters or stored official reports.');
     const pat=pattern(side,id),hist=pastPerformance(id,side),s=spy(id),
       myFf=ffObserved(id),third=ffscouter(id),records=recentWarRecords(side,id),
@@ -6426,7 +6719,7 @@
       '</td><td>'+b('Scorecard','war:'+x.war.id)+'</td></tr>').join('')+'</tbody></table></div>':
       empty('No previous wars for this player are loaded on this device.'));
     if(side==='enemies')html+=memberWarTimeline(id);
-    html+=encountersPanel(id);
+    html+=playerArchiveCard(p)+encountersPanel(id);
     html+=card('Online and travel evidence',
       '<p>Observed '+pat.count+' foreground checks. Online '+(pat.count?pat.online+'%':'unknown')+
       ', away '+(pat.count?pat.travel+'%':'unknown')+
@@ -6833,7 +7126,7 @@
     const step=(title,reason,label,action,tone='calm')=>({title,reason,label,action,tone});
     if(!effectiveKey())return step('Connect WarStaxx', 'Add your Torn API key once so I can show you a useful next step.', 'Connect', 'tab:settings');
     if(!positive(cfg.ourId))return step('Find your faction', 'Your faction has not been identified yet.', 'Detect faction', 'detect-faction');
-    if(preparingWar())return step('Scout '+state.data.war.opponentName,prepStartLabel(state.data.war)+'. Both faction rosters are available for preparation.','Open people list','tab:enemy');
+    if(preparingWar())return step('Scout '+state.data.war.opponentName,prepStartLabel(state.data.war)+'. Both faction rosters are available for preparation.','Open briefing','tab:brief');
     if(!activeWarNow())return step('Check for a war', 'No current war is confirmed. Check Torn before making a war decision.', 'Check now', 'refresh');
     if(!rosterFresh('ours')||!rosterFresh('enemies'))return step('Update before acting', 'The roster is too old to recommend a target or defensive action.', 'Update now', 'refresh','attention');
     const release=skullReleaseQueue().find(x=>x.minutes<=5&&!x.assigned.length);
@@ -6898,25 +7191,25 @@
       (queueLane==='coverage'&&rows.length?b('Manage assignments','tab:command'):''));
   }
   function warWorkspace(){
-    const next=nextWarStep(),live=activeWarNow(),score=live?warScore():null;
+    const live=activeWarNow(),next=(live&&sharedNextStep())||nextWarStep(),score=live?warScore():null;
     const situation=preparingWar()?'War preparation':score?(score.net>=0?'Leading by ':'Behind by ')+fmt(Math.abs(score.net))+' points':'No confirmed live score';
     return '<div class="ws-focus-home">'+
       (state.error?'<p class="ws-note ws-warn" role="alert">'+esc(state.error)+'</p>':'')+
-      '<p class="ws-focus-context">'+esc(live?(state.data.war.opponentName||'Current war'):'WarStaxx')+'<span>'+esc(situation)+'</span></p>'+
+      '<p class="ws-focus-context">'+esc(live?(state.data.war.opponentName||'Current war'):'WarStaxx')+'<span>'+esc(situation+(score?' / '+fmt(score.our)+' - '+fmt(score.enemy):''))+'</span></p>'+
       '<section class="ws-next-step '+next.tone+'"><div class="ws-step-marker" aria-hidden="true">'+
         (next.tone==='attention'?'!':next.tone==='ready'?'\u2197':'\u2022')+'</div><h1>'+esc(next.title)+'</h1>'+
       '<p>'+esc(next.reason)+'</p><button class="ws-primary-action" type="button" data-action="'+esc(next.action)+'" '+
       (state.loading?'disabled':'')+'>'+esc(state.loading?'Updating...':next.label)+' <span aria-hidden="true">\u2192</span></button></section>'+
       '<p class="ws-focus-freshness">'+(state.loading?'Checking Torn now...':live?'Roster checked '+esc(age(Math.min(n(state.data.updated.ours),n(state.data.updated.enemies)))):'Connect / refresh to check current conditions.')+'</p>'+
-      liveQueueCard()+'<details class="ws-focus-extra" data-ws-disclosure="war-evidence"><summary>Show the wider picture</summary>'+
-      '<div class="ws-toolbar">'+b('Squad command','tab:leader')+b('My mission','workspace-mission')+b('All operations','tab:operations')+'</div>'+
-      (live?deskChangesCard()+warPlanningCard():b('Past wars','tab:history'))+'</details></div>';
+      '<details class="ws-focus-extra" data-ws-disclosure="war-evidence"><summary>Show the wider picture</summary>'+
+      '<div class="ws-toolbar">'+b('Squad command','tab:squad')+b('War briefing','tab:brief')+b('My mission','workspace-mission')+b('All operations','tab:operations')+'</div>'+
+      (live?liveQueueCard()+deskChangesCard()+warPlanningCard():b('Past wars','tab:history'))+'</details></div>';
   }
   function workspacePlayers(at=Date.now()){
     const side=workspace.side,fresh=rosterFresh(side,at),bands=enemyRoleBands(),q=workspace.query.trim().toLowerCase();
     const own=nativeWarOwnLocation();
     const localKnown=own.known&&rosterFresh('ours',at);
-    const rows=state.data[side].map(player=>({player,location:nativeWarLocation(player),kind:memberState(player),
+    const rows=state.data[side].map(player=>({player,location:currentLocation(player),kind:memberState(player),
       skull:side==='ours'?Boolean(cfg.blackSkulls[player.id]):bands.heavy.has(player.id),
       impact:side==='ours'?liveWarMemberImpact(player.id):liveEnemyWarImpact(player.id)}));
     const countries=[...new Set(rows.map(x=>x.location.country))].sort((a,b)=>a==='Unknown'?1:b==='Unknown'?-1:a.localeCompare(b));
@@ -7005,6 +7298,7 @@
   }
   function archiveWorkspace(){
     const groups=[['Command',[
+      ['Black Skull command','Primary hitters, backups, locks and claims','squad'],['War briefing','Roll call, opening plan and weekly rules','brief'],['Defensive travel','Safe routes and overseas opportunities','flights'],
       ['Squad command','Black Skulls, roles and coverage','leader'],['Orders','Assign hitters and review duties','command'],
       ['Defence','Protect exposed members','turtle'],['Operations','All current checks and warnings','operations'],
       ['Hospital control','Watcher assignments','control'],['My matchups','Compare hitter and target evidence','matchups']]],
@@ -7014,7 +7308,7 @@
       ['War history','Official reports and scorecards','history'],['Timelines','Observed war progress','timeline']]],
       ['Intelligence',[
       ['FFScouter Premium','Stat distribution, flights, activity and target search','scouter'],['Faction scouting','Opponent history and strength','scouting'],['Player dossiers','Detailed enemy analysis','targets'],
-      ['Activity','Sampled online and travel patterns','activity'],['Threats','Enemy impact and priorities','threats'],
+      ['Activity and forecasts','Compare both factions hour by hour','heatmap'],['Combat archive','Encounters, memberships and private backups','combat'],['Activity summaries','Sampled online and travel patterns','activity'],['Threats','Enemy impact and priorities','threats'],
       ['Strategy','Member-by-member planning','strategy'],['Full dashboard','All legacy metrics','dashboard']]],
       ['Setup',[
       ['Settings','Keys, FFScouter and shared orders','settings'],['Diagnostics','Data access and freshness','diagnostics'],
@@ -7043,7 +7337,7 @@
       '<button type="button" class="'+((state.tab===tab||
         !primary.includes(state.tab)&&tab===detailGroup)?'on':'')+
       '" data-tab="'+tab+'">'+esc(labels[tab])+'</button>').join('');
-    const pages={scouter:scouterScreen,overview:warWorkspace,enemy:rosterWorkspace,reports:archiveWorkspace,dashboard:overview,scouting:enemyScreen,archive:reportsScreen,leader:leaderScreen,skulls:blackSkullsRoom,commander,operations,ledger,threats,control,turtle,command,pace,afteraction,intel,targets,matchups,timeline,strategy,activity,history,assignments:orders,alerts:alertView,settings,diagnostics};
+    const pages={squad:squadScreen,brief:briefScreen,heatmap:activityScreen,flights:flightScreen,combat:archiveScreen,scouter:scouterScreen,overview:warWorkspace,enemy:rosterWorkspace,reports:archiveWorkspace,dashboard:overview,scouting:enemyScreen,archive:reportsScreen,leader:leaderScreen,skulls:blackSkullsRoom,commander,operations,ledger,threats,control,turtle,command,pace,afteraction,intel,targets,matchups,timeline,strategy,activity,history,assignments:orders,alerts:alertView,settings,diagnostics};
     const content=$('.ws-content',root);
     const scroll=content.scrollTop;
     if(previousDisclosureView){
@@ -7060,7 +7354,7 @@
         .map(name=>[name,active.getAttribute(name)]).find(([,value])=>value!==null),
       selection:typeof active.selectionStart==='number'?active.selectionStart:null
     }:null;
-    const form=state.tab==='settings'?Array.from(content.querySelectorAll('input,select,textarea')).map(x=>({id:x.id,checked:x.checked,value:x.value,type:x.type})):null;
+    const form=['settings','squad','brief','heatmap','flights'].includes(state.tab)?Array.from(content.querySelectorAll('input,select,textarea')).map(x=>({id:x.id,checked:x.checked,value:x.value,type:x.type})):null;
     const priorLeaderNote=state.tab==='command'&&$('#ws-leader-note',content)?$('#ws-leader-note',content).value:null;
     // Do not lose manually typed spy readings and notes when a refresh redraws
     // the same profile. Never carry a draft to a DIFFERENT opponent.
@@ -7118,6 +7412,9 @@
     if(state.open&&(state.tab!==tab||state.playerOpen))rememberRoute();
     state.tab=tab;state.open=true;state.playerOpen=false;state.selectedWar=0;
     root.style.display='block';render();
+    if(['squad','brief'].includes(tab)&&Date.now()-commandSync.attempt>30000)syncCommand();
+    if(tab==='heatmap'&&scouterPremiumActive())loadFactionScanner();
+    if(tab==='flights')checkSupplies();
     $('.ws-content',root).scrollTop=0;
     if(focus)setTimeout(()=>$('#ws-alert-'+focus,root)?.scrollIntoView({block:'center'}),100);
   }
@@ -7166,6 +7463,7 @@
     event('panel',{id:ID,open:false});
   }
   function handle(action){
+    if(action.startsWith('cmd-')){commandAction(action.slice(4));return;}
     if(action.startsWith('war-queue:')){const lane=action.slice(10);if(queueLanes.some(([id])=>lane===id)){queueLane=lane;render();}return;}
     if(action==='workspace-mission'){const id=positive(state.data.meta?.ownerId);if(id)handle('hitter:'+id);else navigate('matchups');return;}
     if(action==='workspace-back'){workspaceBack();return;}

@@ -46,7 +46,7 @@ function transition(room,now){
       if(a.primary===a.original||a.lock||claimed||now-(s.changed||0)<plan.holdMinutes*60000||
         status(ops.observations[a.original],t,now)!=='available'||loads[a.original]>0||
         Object.values(ops.claims).some(c=>c.hitter===a.original&&c.status==='claimed'))continue;
-      loads[a.primary]--;loads[a.original]=1;a.primary=a.original;s.changed=now;s.phase='ASSIGNED';s.reason='original available';
+      loads[a.primary]--;loads[a.original]=1;a.backups=[...new Set(a.backups.filter(i=>i!==a.original).concat(a.primary))];a.primary=a.original;s.changed=now;s.phase='ASSIGNED';s.reason='original available';
       events.push({target:Number(target),primary:a.primary,reason:s.reason});continue;
     }
     if(s.since==null)s.since=now;
@@ -127,7 +127,7 @@ export function commandMutation(room,cmd,actor,now){
   }else if(cmd.type==='policy'){
     need(capo,403,'Skull Capo permission required');
     need(['legacy','bse'].includes(cmd.metric)&&Number.isInteger(cmd.holdMinutes)&&cmd.holdMinutes>=5&&cmd.holdMinutes<=120&&Array.isArray(cmd.manual)&&cmd.manual.length<=100&&cmd.manual.every(id),400,'Invalid policy');
-    plan.policy=cmd.metric;plan.holdMinutes=cmd.holdMinutes;plan.manual=[...new Set(cmd.manual)];
+    plan.policySet=true;plan.policy=cmd.metric;plan.holdMinutes=cmd.holdMinutes;plan.manual=[...new Set(cmd.manual)];
   }else throw message(400,'Unknown coordination command');
   audit.changes=transition(room,now);
   return audit;
