@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      2.8.4
+// @version      2.8.5
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='2.8.4';
+  const id='war', version='2.8.5';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='2.8.4', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='2.8.5', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics','dashboard','scouting','archive','scouter'];
   const labels={scouter:'FFScouter Premium',overview:'Live war',enemy:'Players',reports:'Tools & reports',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics',dashboard:'Full dashboard',scouting:'Faction scouting',archive:'Detailed reports'};
@@ -201,6 +201,10 @@
   const apiKeyPda=typeof window.PDA_APIKEY==='string'?window.PDA_APIKEY:'###PDA-APIKEY###';
   const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,autoConceded:true,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},controlAssignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,warStripCompact:true,warStripScope:'contextual',nativeWarEnabled:true,nativeWarCountryGroups:true,nativeWarSort:'availability',nativeEnemyMetric:'points',nativeFriendlySort:'given',nativeFriendlyDesc:true,nativeWarFilter:'all',nativeFriendlyFilter:'all',nativeChainBubble:false,priorityNotifications:true,hitterRisk:{},heavyPolicy:{version:2,mode:'relative',percent:40,minBss:0},manualHeavyTargetsByEnemy:{},shared:{enabled:false,endpoint:'',token:'',canWrite:false},hidden:false};
   const cfg=Object.assign({},defaults,safeRead(CONFIG,{}));
+  if(cfg.nativeWarCountryGroups!==false){
+    if(cfg.nativeWarSort==='torn')cfg.nativeWarSort='availability';
+    if(cfg.nativeFriendlySort==='torn')cfg.nativeFriendlySort='given';
+  }
   cfg.assignments=cfg.assignments&&typeof cfg.assignments==='object'?cfg.assignments:{};
   cfg.ordersByEnemy=cfg.ordersByEnemy&&typeof cfg.ordersByEnemy==='object'?cfg.ordersByEnemy:{};
   // Treat existing local orders as belonging to the currently configured opponent.
@@ -1107,7 +1111,9 @@
       status:'now',priority:82,tab:'scouter'}]:[];
   }
   function pollScouterFlights(){
-    if(document.hidden||!scouterPremiumActive()||scouterExtra.busy||(!activeWarNow()&&!preparingWar())||!rosterFresh('enemies'))return;
+    if(document.hidden||!cfg.ffConsent||!cfg.ffEnabled||!ffApiKey()||scouterExtra.busy||(!activeWarNow()&&!preparingWar())||!rosterFresh('enemies'))return;
+    const registration=state.data.meta.ffRegistration;
+    if(registration&&!registration.premium&&Date.now()-n(registration.at)<HOUR)return;
     if(Date.now()-n(scouterExtra.attempts['flights:0'])<2*MIN)return;
     scouterRead('flights');
   }
@@ -7252,6 +7258,8 @@
     return Array.from(list?.children||[]).filter(el=>el.matches?.('li.enemy,li.your'));
   }
   function nativeWarPlayerId(row){
+    const nativeId=positive(row.getAttribute?.('data-player_id'));
+    if(nativeId)return nativeId;
     const anchor=row.querySelector('a[href*="profiles.php"]');
     if(!anchor)return 0;
     try{return positive(new URL(anchor.href,location.href).searchParams.get('XID'));}catch(_){return 0;}
@@ -7263,7 +7271,7 @@
   }
   function nativeWarActiveSortConflict(list){
     // Decoration (copy, last seen, hospital timer) is not an active sorter.
-    // Only an explicit sort/filter ownership marker blocks country grouping.
+    // Explicit ownership calls for visual ordering that preserves the external DOM order.
     return list?.getAttribute?.('data-ffscouter-active-filter')==='true'||
       list?.getAttribute?.('data-twse-active-sort')==='true'||
       Boolean(list?.querySelector?.('[data-ffscouter-active-sort="true"],[data-twse-active-sort="true"]'));
@@ -7333,14 +7341,15 @@
   function nativeWarSort(list,playerMap,mode){
     if(!list)return false;
     const priorHeaders=Array.from(list.querySelectorAll(':scope > li.wsnw-country-heading'));
-    if(nativeWarActiveSortConflict(list)){
-      // An external sorter wins. Remove only WarStaxx-generated group headings.
+    if(nativeWarActiveSortConflict(list)&&(cfg.nativeWarCountryGroups===false||mode==='torn')){
+      clearCountryOrder(list);
+      // In ungrouped mode, release the list to the external sorter.
       priorHeaders.forEach(h=>h.remove());
       return false;
     }
     const children=Array.from(list.children),all=children.filter(el=>!el.classList.contains('wsnw-country-heading')),
       rows=nativeWarRows(list);
-    if(!rows.length||all.length!==rows.length||rows.some(r=>!r.classList.contains('enemy'))){
+    if(!rows.length||rows.some(r=>!r.classList.contains('enemy'))){
       priorHeaders.forEach(h=>h.remove());
       return false;
     }
@@ -7348,7 +7357,7 @@
       nativeWarState.original.set(list,new Map(rows.map((r,i)=>[nativeWarPlayerId(r),i])));
     }
     const original=nativeWarState.original.get(list),own=nativeWarOwnLocation(),
-      grouping=!['torn','warpoints','warhits','warpace'].includes(mode)&&cfg.nativeWarCountryGroups!==false;
+      grouping=mode!=='torn'&&cfg.nativeWarCountryGroups!==false;
     const sorted=rows.slice().sort((a,b)=>{
       const pa=playerMap.get(nativeWarPlayerId(a)),pb=playerMap.get(nativeWarPlayerId(b));
       if(!pa||!pb)return (original.get(nativeWarPlayerId(a))??Infinity)-
@@ -7359,7 +7368,7 @@
         if(country)return country;
       }
       // Okay targets always precede hospitalised/jailed/flying players in each country.
-      if(mode!=='torn'&&mode!=='warpoints'&&mode!=='warhits'&&mode!=='warpace'){
+      if(grouping||!['torn','warpoints','warhits','warpace'].includes(mode)){
         const availability=nativeWarAvailabilityRank(pa)-nativeWarAvailabilityRank(pb);
         if(availability)return availability;
       }
@@ -7374,7 +7383,7 @@
     if(grouping){
       const counts=new Map();
       for(const row of sorted){
-        if(row.classList.contains('wsnw-filtered'))continue;
+        if(nativeCountryRowHidden(row))continue;
         const player=playerMap.get(nativeWarPlayerId(row));
         if(!player)continue;
         const info=nativeWarLocation(player),rec=counts.get(info.country)||{total:0,okay:0,flights:0};
@@ -7387,7 +7396,7 @@
       for(const row of sorted){
         const player=playerMap.get(nativeWarPlayerId(row)),
           country=player?nativeWarLocation(player).country:'Unknown';
-        if(!row.classList.contains('wsnw-filtered')&&country!==lastCountry&&counts.has(country)){
+        if(!nativeCountryRowHidden(row)&&country!==lastCountry&&counts.has(country)){
           let heading=headersByCountry.get(country);
           if(!heading){heading=el('li','wsnw-country-heading');heading.dataset.wsnwCountry=country;}
           const amount=counts.get(country);
@@ -7414,10 +7423,16 @@
           expected.push(heading);
         }
         expected.push(row);
-        if(!row.classList.contains('wsnw-filtered'))lastCountry=country;
+        if(!nativeCountryRowHidden(row))lastCountry=country;
       }
     }else expected.push(...sorted);
     for(const old of priorHeaders)if(!expected.includes(old))old.remove();
+    if(grouping&&(nativeWarActiveSortConflict(list)||rows.length!==all.length)){
+      applyCountryOrder(list,expected,rows);
+      return true;
+    }
+    clearCountryOrder(list);
+    if(rows.length!==all.length)return false;
     const existing=Array.from(list.children);
     if(existing.length!==expected.length||expected.some((row,i)=>row!==existing[i])){
       const frag=document.createDocumentFragment();
@@ -7433,13 +7448,14 @@
   function nativeWarSortFriendly(list,mode='given'){
     if(!list)return false;
     const priorHeaders=Array.from(list.querySelectorAll(':scope > li.wsnw-country-heading'));
-    if(nativeWarActiveSortConflict(list)){
+    if(nativeWarActiveSortConflict(list)&&(cfg.nativeWarCountryGroups===false||mode==='torn')){
+      clearCountryOrder(list);
       priorHeaders.forEach(h=>h.remove());
       return false;
     }
     const rows=nativeWarRows(list),
       all=Array.from(list.children).filter(el=>!el.classList.contains('wsnw-country-heading'));
-    if(!rows.length||rows.length!==all.length||rows.some(r=>!r.classList.contains('your'))){
+    if(!rows.length||rows.some(r=>!r.classList.contains('your'))){
       priorHeaders.forEach(h=>h.remove());
       return false;
     }
@@ -7480,7 +7496,7 @@
     if(grouping){
       const counts=new Map();
       for(const row of sorted){
-        if(row.classList.contains('wsnw-filtered'))continue;
+        if(nativeCountryRowHidden(row))continue;
         const player=players.get(nativeWarPlayerId(row));
         if(!player)continue;
         const info=nativeWarLocation(player),
@@ -7494,7 +7510,7 @@
       for(const row of sorted){
         const player=players.get(nativeWarPlayerId(row)),
           country=player?nativeWarLocation(player).country:'Unknown';
-        if(!row.classList.contains('wsnw-filtered')&&country!==lastCountry&&counts.has(country)){
+        if(!nativeCountryRowHidden(row)&&country!==lastCountry&&counts.has(country)){
           let heading=headersByCountry.get(country);
           if(!heading){heading=el('li','wsnw-country-heading');heading.dataset.wsnwCountry=country;}
           const amount=counts.get(country),
@@ -7520,10 +7536,16 @@
           expected.push(heading);
         }
         expected.push(row);
-        if(!row.classList.contains('wsnw-filtered'))lastCountry=country;
+        if(!nativeCountryRowHidden(row))lastCountry=country;
       }
     }else expected.push(...sorted);
     for(const old of priorHeaders)if(!expected.includes(old))old.remove();
+    if(grouping&&(nativeWarActiveSortConflict(list)||rows.length!==all.length)){
+      applyCountryOrder(list,expected,rows);
+      return true;
+    }
+    clearCountryOrder(list);
+    if(rows.length!==all.length)return false;
     const existing=Array.from(list.children);
     if(existing.length!==expected.length||expected.some((row,i)=>row!==existing[i])){
       const frag=document.createDocumentFragment();
@@ -7531,6 +7553,37 @@
       list.appendChild(frag);
     }
     return true;
+  }
+  // Use visual ordering when an add-on filters the native list or inserts sibling rows.
+  // Its own DOM order and player event handlers remain under its control.
+  function nativeCountryRowHidden(row){
+    return row.hidden||row.hasAttribute?.('data-ffscouter-hidden')||row.classList.contains('wsnw-filtered');
+  }
+  function applyCountryOrder(list,expected,rows){
+    const members=new Set(rows),companions=new Map();
+    let owner=null;
+    for(const child of list.children){
+      if(members.has(child)){owner=child;continue;}
+      if(child.classList.contains('wsnw-country-heading'))continue;
+      if(owner){
+        if(!companions.has(owner))companions.set(owner,[]);
+        companions.get(owner).push(child);
+      }
+    }
+    list.classList.add('wsnw-country-order');
+    let order=0;
+    for(const item of expected){
+      if(item.parentNode!==list)list.appendChild(item);
+      for(const node of [item,...(companions.get(item)||[])]){
+        const value=String(++order);
+        if(node.style.getPropertyValue('--wsnw-order')!==value)node.style.setProperty('--wsnw-order',value);
+      }
+    }
+  }
+  function clearCountryOrder(list){
+    if(!list.classList?.contains('wsnw-country-order'))return;
+    list.classList.remove('wsnw-country-order');
+    for(const node of list.children)node.style.removeProperty('--wsnw-order');
   }
     function nativeWarFilters(p,band,filter){
     if(filter==='okay')return rosterFresh('enemies')&&memberState(p)==='okay';
@@ -8118,6 +8171,8 @@
       '.faction-war ul.members-list li.wsnw-hospital-soon > .status{'+
         'box-shadow:inset 0 -4px #48df9b!important;outline:1px solid #319a74!important}';
     style.textContent+=
+      '.faction-war ul.members-list.wsnw-country-order:not([hidden]){display:flex!important;flex-direction:column!important}'+
+      '.faction-war ul.members-list.wsnw-country-order>*{order:var(--wsnw-order,0)!important}'+
       '.faction-war ul.members-list li.wsnw-enhanced.wsnw-flight-row:not(.wsnw-expanded){height:88px!important;min-height:88px!important}'+
       '.faction-war ul.members-list li.wsnw-flight-row>.wsnw-flight-line{position:absolute!important;bottom:0;left:0;right:0;padding:2px 6px;background:#102d40;color:#b1e6f1;font:600 11px/16px system-ui;text-align:left;touch-action:pan-y}';
     document.head.appendChild(style);
@@ -8186,6 +8241,7 @@
     document.getElementById('wsnw-toolbar')?.remove();
     document.querySelectorAll('.faction-war .wsnw-legend,.faction-war .wsnw-faction-summary').forEach(el=>el.remove());
     document.getElementById('wsnw-chain-bubble')?.remove();
+    document.querySelectorAll('.faction-war .wsnw-country-order').forEach(clearCountryOrder);
     for(const h of document.querySelectorAll('.faction-war ul.members-list li.wsnw-country-heading'))h.remove();
     for(const row of document.querySelectorAll('.faction-war ul.members-list li.wsnw-enhanced')){
       row.classList.remove('wsnw-enhanced','wsnw-recent','wsnw-hospital-soon','wsnw-hospital-warning','wsnw-filtered');
@@ -8436,6 +8492,9 @@
         (rosterFresh('enemies')?state.data.enemies.filter(p=>memberState(p)==='okay').length:'?')+
         '</button>'+
       '<button type="button" data-wsnw-action="war">War Room</button>'+
+        '<button type="button" data-wsnw-action="countries" aria-pressed="'+
+          (cfg.nativeWarCountryGroups!==false?'true':'false')+'">'+
+          (cfg.nativeWarCountryGroups!==false?'Countries ON':'Countries OFF')+'</button>'+
       '<button type="button" data-wsnw-action="more" aria-expanded="'+
         (nativeWarState.toolbarExpanded?'true':'false')+'">'+
         (nativeWarState.toolbarExpanded?'Close filters':'Sort / filters')+'</button>'+
@@ -8467,14 +8526,11 @@
         '<option value="'+x[0]+'" '+(filter===x[0]?'selected':'')+'>'+x[1]+'</option>').join('')+
       '</select></label></div>'+(nativeWarState.toolbarExpanded?pulseHtml:'')+
       (nativeWarState.toolbarExpanded?'<div class="wsnw-extra">'+
-        '<button type="button" data-wsnw-action="countries" aria-pressed="'+
-          (cfg.nativeWarCountryGroups!==false?'true':'false')+'">'+
-          (cfg.nativeWarCountryGroups!==false?'Countries ON':'Countries OFF')+'</button>'+
         '<button type="button" data-wsnw-action="skulls">Black Skulls</button>'+
         '<button type="button" data-wsnw-action="turtle">Turtle</button>'+
         '<button type="button" data-wsnw-action="hit">HIT</button>'+
         '<span>Tap a stat heading to sort. Tap a player info row for details.</span></div>':'')+
-      (conflict?'<div class="wsnw-note">Another script controls player order.</div>':'');
+      (conflict?'<div class="wsnw-note">External roster filter active.</div>':'');
     suppressWarStaxxTitles(toolbar);
   }
 
@@ -8487,6 +8543,7 @@
     if(!box||!box.parentNode)return;
     const lists=Array.from(box.querySelectorAll('ul.members-list'));
     if(!lists.length)return;
+    pollScouterFlights();
     nativeWarStyle();
     const enemyMap=new Map(state.data.enemies.map(p=>[p.id,p])),
       ourMap=new Map(state.data.ours.map(p=>[p.id,p])),
@@ -8568,7 +8625,7 @@
         let message='';
         if(enemy&&!fresh)message='STALE';
         else if(kind==='hospital')message=expanded?'HOSP '+hospitalCountdown(p.until,now):nativeWarHospitalShort(p.until,now);
-        else if(other)message=''; // Keep the external status for non-hospital states.
+        else if(other&&kind!=='away')message=''; // Keep the external status for non-hospital states.
         else if(kind==='away'){
           const place=nativeWarLocation(p);
           if(place.phase==='inbound')message='TO '+place.country+(place.eta?' '+flightCountdown(place.eta,now):'');
@@ -8577,13 +8634,18 @@
         }else if(kind==='okay')message=enemy?'READY':nativeWarLastSeen(p,now); // Readable readiness without a tooltip.
         if(recent)message=recent.kind+' | '+(message||'OKAY');
         const place=nativeWarLocation(p);
-        const flightTimer=kind==='away'&&(!enemy||fresh)&&!(place.eta>now)?premiumTravelTimer(p,place,now):'';
+        const flightTimer=kind==='away'&&(!enemy||fresh)?premiumTravelTimer(p,place,now):'';
         if(flightTimer)message=flightTimer;
         let flightLine=row.querySelector('.wsnw-flight-line');
         row.classList.toggle('wsnw-flight-row',Boolean(flightTimer)&&!expanded);
         if(flightTimer&&!expanded){
           if(!flightLine){flightLine=el('div','wsnw-flight-line');row.appendChild(flightLine);}
           const label=flightRouteLine(scouterExtra.flights[id].current);
+          if(flightLine.textContent!==label)flightLine.textContent=label;
+        }else if(!expanded&&kind==='away'&&place.phase!=='abroad'&&(!enemy||fresh)&&!(place.eta>now)){
+          if(!flightLine){flightLine=el('div','wsnw-flight-line');row.appendChild(flightLine);}
+          row.classList.add('wsnw-flight-row');
+          const label=scouterPremiumActive()?(scouterExtra.flights[id]?'FFScouter: no current landing estimate':'Awaiting FFScouter flight data'):'Flight ETA unavailable';
           if(flightLine.textContent!==label)flightLine.textContent=label;
         }else flightLine?.remove();
         const timer=chip('status',message,(kind==='hospital'&&(!enemy||fresh)?'wsnw-hospital ':'')+
@@ -8672,7 +8734,7 @@
           chip('earned',expanded?'EARNED '+earned:earned,'wsnw-earned',detail);
           chip('given',expanded?'GIVEN '+given:given,'wsnw-conceded',detail);
           chip('net',expanded?'NET '+net:net,
-            impact?.net===null?'wsnw-unknown':impact.net<0?'wsnw-net-negative':'wsnw-net-positive',
+            impact?.net==null?'wsnw-unknown':impact.net<0?'wsnw-net-negative':'wsnw-net-positive',
             'Net = earned minus given, a proxy, not an official personal war score. '+source);
           chip('share',expanded?'ENEMY SCORE SHARE '+share:share,'',
             'Observed share of the official live enemy faction score from attacks on this member. '+source);
@@ -8736,12 +8798,10 @@
           row.style?.setProperty?.('--wsnw-expanded-height',rowHeight+'px');
         }else row.style?.removeProperty?.('--wsnw-expanded-height');
       }
-      if(!nativeWarActiveSortConflict(list)){
-        if(rows.some(row=>row.classList.contains('enemy'))){
-          if(fresh)nativeWarSort(list,enemyMap,cfg.nativeWarSort||'availability');
-        }else if(rows.some(row=>row.classList.contains('your'))){
-          nativeWarSortFriendly(list,cfg.nativeFriendlySort||'given');
-        }
+      if(rows.some(row=>row.classList.contains('enemy'))){
+        nativeWarSort(list,enemyMap,cfg.nativeWarSort||'availability');
+      }else if(rows.some(row=>row.classList.contains('your'))){
+        nativeWarSortFriendly(list,cfg.nativeFriendlySort||'given');
       }
     }
     clearWarStaxxStickyTitles();
@@ -8752,7 +8812,7 @@
     },{passive:true});
   async function pollNativeWar(){
     if(!isNativeWarPage()||document.hidden||cfg.nativeWarEnabled===false||
-      !effectiveKey()||!positive(cfg.enemyId)||!activeWarNow()||
+      !effectiveKey()||!positive(cfg.enemyId)||(!activeWarNow()&&!preparingWar())||
       state.loading||nativeWarState.pollBusy)return;
     nativeWarState.pollBusy=true;
     const deskBefore=captureDeskSnapshot();
@@ -8762,10 +8822,10 @@
       const fresh=await call('/faction/'+cfg.enemyId+'/members','enemies',20000);
       if(fresh){
         const next=roster(fresh,prior);
-        if(oldAt&&Date.now()-oldAt<5*MIN)
+        if(activeWarNow()&&oldAt&&Date.now()-oldAt<5*MIN)
           observeNativeWarTransitions(prior,next,positive(state.data.war?.id));
         state.data.enemies=next;
-        if(oldAt&&Date.now()-oldAt<5*MIN)
+        if(activeWarNow()&&oldAt&&Date.now()-oldAt<5*MIN)
           recordAvailability(prior,next,positive(state.data.war?.id));
         save();publish();if(state.open)render();syncNativeWar();
       }
@@ -8776,6 +8836,7 @@
           if(ours){state.data.ours=roster(ours,state.data.ours);save();}
         }catch(_){}
       }
+      if(!activeWarNow()){syncNativeWar();return;}
       if(canCall('chain',30000)){
         try{
           const chain=await call('/faction/'+cfg.ourId+'/chain','chain',30000);
@@ -8943,7 +9004,7 @@
     const header=e.target?.closest?.(
       '.faction-war .white-grad .member,.faction-war .white-grad .level,'+
       '.faction-war .white-grad .points,.faction-war .white-grad .status');
-    if(!header||(cfg.nativeWarSort==='torn'&&cfg.nativeFriendlySort==='torn'))return;
+    if(!header||cfg.nativeWarCountryGroups!==false||(cfg.nativeWarSort==='torn'&&cfg.nativeFriendlySort==='torn'))return;
     cfg.nativeWarSort='torn';cfg.nativeFriendlySort='torn';saveCfg();
     setTimeout(()=>{
       const box=document.querySelector('.faction-war');
@@ -8958,11 +9019,11 @@
       metric=e.target?.closest?.('#wsnw-toolbar [data-wsnw-metric]'),
       friendlySort=e.target?.closest?.('#wsnw-toolbar [data-wsnw-friendly-sort]'),
       filter=e.target?.closest?.('#wsnw-toolbar [data-wsnw-filter]');
-    if(sort){cfg.nativeWarSort=String(sort.value);saveCfg();syncNativeWar();}
+    if(sort){cfg.nativeWarSort=String(sort.value);if(sort.value==='torn')cfg.nativeWarCountryGroups=false;saveCfg();syncNativeWar();}
     if(metric&&['points','pace','hits'].includes(metric.value)){
       cfg.nativeEnemyMetric=String(metric.value);saveCfg();syncNativeWar();
     }
-    if(friendlySort){cfg.nativeFriendlySort=String(friendlySort.value);cfg.nativeFriendlyDesc=true;saveCfg();syncNativeWar();}
+    if(friendlySort){cfg.nativeFriendlySort=String(friendlySort.value);if(friendlySort.value==='torn')cfg.nativeWarCountryGroups=false;cfg.nativeFriendlyDesc=true;saveCfg();syncNativeWar();}
     if(filter){cfg.nativeWarFilter=String(filter.value);saveCfg();syncNativeWar();}
   });
   function mountFactionShortcut(){
@@ -9024,7 +9085,7 @@
   const refreshTimer=setInterval(()=>{
     if(!document.hidden&&effectiveKey()&&!state.loading&&Date.now()-state.lastRefresh>cfg.refreshSeconds*1000)refresh(false);
   },30000);
-  window.addEventListener('beforeunload',()=>{clearInterval(refreshTimer);clearInterval(registrationTimer);clearInterval(warStripTimer);clearInterval(warRouteTimer);clearInterval(hospitalClockTimer);clearInterval(nativeWarTimer);clearInterval(nativeWarClock);clearInterval(nativeWarPolling);clearNativeWar();},{once:true});
+  window.addEventListener('beforeunload',()=>{clearInterval(refreshTimer);clearInterval(registrationTimer);clearInterval(warStripTimer);clearInterval(warRouteTimer);clearInterval(hospitalClockTimer);clearInterval(nativeWarTimer);clearInterval(nativeWarClock);clearInterval(scouterFlightTimer);clearInterval(nativeWarPolling);clearNativeWar();},{once:true});
   try{boot();}catch(err){
     window.__warStaxxReady=false;
     window.__warStaxxStartError='Startup failed ('+(err?.name||'Error')+')';
