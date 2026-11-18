@@ -35,7 +35,7 @@ function clean(input){
       [id,{mode:x?.mode}])),controlAssignments:input.controlAssignments||{},
     turtlePlan:{mode:rawPlan.mode||'balanced',members:rawPlan.members||{}},
     leaderDuties:input.leaderDuties||{},
-    heavyPolicy:{mode:rawHeavy.mode||'percent',
+    heavyPolicy:{version:2,mode:rawHeavy.mode||'percent',
       percent:rawHeavy.percent===undefined?40:rawHeavy.percent,
       minBss:rawHeavy.minBss===undefined?0:rawHeavy.minBss}};
   return validMap(data.assignments,'assign')&&validMap(data.blackSkulls,'black')&&
@@ -43,7 +43,8 @@ function clean(input){
     ['balanced','defensive','full'].includes(data.turtlePlan.mode)&&
     validMap(data.turtlePlan.members,'turtle')&&
     validMap(data.leaderDuties,'duty')&&
-    ['percent','min-bss'].includes(data.heavyPolicy.mode)&&
+    ['relative','percent','min-bss'].includes(data.heavyPolicy.mode)&&
+    (rawHeavy.version===undefined||rawHeavy.version===2)&&
     Number.isInteger(data.heavyPolicy.percent)&&
     data.heavyPolicy.percent>=5&&data.heavyPolicy.percent<=100&&
     Number.isFinite(data.heavyPolicy.minBss)&&
