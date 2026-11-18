@@ -73,11 +73,17 @@ export default {async fetch(request,env){
     /^\/v1\/factions\/([1-9][0-9]{0,9})\/wars\/([1-9][0-9]{0,9})\/orders$/);
   if(!match||!['GET','PUT'].includes(request.method))
     return reply({error:'not found'},404,origin);
-  const auth=request.headers.get('Authorization')||'',
-    token=auth.startsWith('Bearer ')?auth.slice(7):'',
+  const auth=request.headers.get('Authorization')||'';
+  // Distinguish missing native/WebView headers from a wrong configured value.
+  // Never echo credentials or reveal secret material in responses.
+  if(!auth.startsWith('Bearer ')||!auth.slice(7))
+    return reply({error:'Authorization Bearer header missing',code:'auth_header_missing'},401,origin);
+  if(!env.SHARED_WRITE_TOKEN||!env.SHARED_READ_TOKEN)
+    return reply({error:'Worker access secrets are not configured on this deployment',code:'worker_secrets_missing'},503,origin);
+  const token=auth.slice(7),
     writer=secureEqual(token,env.SHARED_WRITE_TOKEN),
     reader=writer||secureEqual(token,env.SHARED_READ_TOKEN);
-  if(!reader)return reply({error:'invalid shared token'},401,origin);
+  if(!reader)return reply({error:'invalid shared token',code:'invalid_token'},401,origin);
   if(request.method==='PUT'&&!writer)return reply({error:'write permission required'},403,origin);
   if(!env.DB)return reply({error:'D1 database unavailable'},503,origin);
   const faction=Number(match[1]),war=Number(match[2]);
