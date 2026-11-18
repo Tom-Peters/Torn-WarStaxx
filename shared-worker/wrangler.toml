@@ -5,8 +5,8 @@ compatibility_date = "2026-10-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "warstaxx-shared"
-database_id = "YOUR_D1_DATABASE_ID"
+# D1 is automatically provisioned by Wrangler on first deploy (Wrangler >= 4.45).
 migrations_dir = "migrations"
 
 [vars]
-FACTION_ID = "REPLACE_WITH_YOUR_FACTION_ID"
+FACTION_ID = "57819"
