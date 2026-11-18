@@ -25,7 +25,7 @@
     const rows=pairRows(hitter.id,enemy.id),ev=pairEvidence(rows,hitter.id,Date.now(),ratio);
     return {...ev,ratio,last:rows.reduce((a,r)=>Math.max(a,r.at),0)};
   }
-  function travelRanking({method,book,enemies,at,overseas}){
+  function travelRanking({method,book,enemies,at,overseas,coverMinutes=90,gear=null}){
     const i=flyMethods.indexOf(method);
     return flightTable.map(([country,cost,normal,withBook])=>{
       const possibilities=(book==='yes'?[withBook]:book==='no'?[normal]:[normal,withBook])
@@ -44,7 +44,11 @@
       const risk=!eligible?(known?'Flight too short':'Choose method and active book'):
         coverage<1?'Enemy locations incomplete':danger.length?'Unproven opponent at or inbound to destination':
         before?'Enemy could arrive before you':incoming.length?'Enemy due after landing':here.length?'Exposed after landing':'Enemies may move after observation';
-      const score=(safe?100:0)+(offensive?60:0)+Math.min(180,min)/10-15*danger.length-5*incoming.length-5*unknown;
+      const interval=Math.min(1,min/coverMinutes),excess=Math.max(0,min-coverMinutes);
+      const yieldWeight=overseas==null?0:Math.min(3,Math.max(0,overseas));
+      const score=(safe?100:0)+(offensive?60+yieldWeight*favourable.length:0)+15*interval-
+        Math.min(12,excess/18)-15*danger.length-5*incoming.length-5*unknown-(i===0?cost/20000:0)-
+        (offensive&&gear!==true?3:0);
       return {country,cost,min,max,known,eligible,safe,offensive,here,incoming,before,favourable,coverage,risk,score};
     }).sort((a,b)=>b.score-a.score||a.country.localeCompare(b.country));
   }
@@ -66,7 +70,8 @@
     if(expected?.observed&&at-expected.observed<30*MIN&&expected.members>enemies.length){
       for(let i=enemies.length;i<Math.min(100,expected.members);i++)enemies.push({known:false});
     }
-    return travelRanking({method:cfg.flightMethod,book:cfg.flightBook,enemies,at,overseas:localWarRules().overseas});
+    const cover=turtleWindow(at).minutes||90;
+    return travelRanking({coverMinutes:cover,method:cfg.flightMethod,book:cfg.flightBook,enemies,at,overseas:localWarRules().overseas});
   }
   function suggestedAssignments(){
     const bands=enemyRoleBands(),loads={},assignments=commandRoom()?.plan.assignments||{};
@@ -132,11 +137,35 @@
     if(preparingWar())return 'Pre-war';
     if(!activeWarNow()||!rosterFresh('ours')||!rosterFresh('enemies'))return 'Recovery';
     const chain=chainStatus();
-    if(chain.fresh&&chain.count>=10&&chain.remaining>0&&chain.remaining<=80)return 'Chain focus';
+    if(localWarRules().chainOn!=='no'&&chain.fresh&&chain.count>=10&&chain.remaining>0&&chain.remaining<=80)return 'Chain focus';
     const room=commandRoom();
     if(Object.values(room?.ops.states||{}).some(s=>['LOCKED_UNAVAILABLE','REASSIGNMENT_READY'].includes(s.phase)))return 'Black Skull suppression';
     const exposed=protectionPriorities().filter(x=>x.exposed&&x.feedFresh&&x.impact.underFire);
     if(exposed.length)return 'Defensive turtling';
     const pace=warPace();if(pace?.measurable&&Date.now()-pace.last.at<5*MIN&&pace.netRate>0)return 'Aggressive scoring';
     return 'Balanced';
+  }
+  function templateAssessment(w,score,manual,at=Date.now()){
+    const mode=['net','own','unknown'].includes(manual.mode)?manual.mode:'unknown';
+    const official=w?.target>0?w.target:null,base=manual.opening>0?manual.opening:null;
+    const step=base&&manual.decay!=null&&manual.after!=null&&w?.start>0?
+      Math.max(0,Math.floor((at-w.start*1000)/HOUR)-manual.after+1):null;
+    const modeled=step===null?null:Math.max(0,base*(1-step*manual.decay/100));
+    const target=official??modeled,progress=mode==='net'?score?.net:mode==='own'?score?.our:null;
+    return {mode,target,modeled,source:official!==null?'Official current target':modeled!==null?'Manual template model':'Unknown',
+      remaining:target!==null&&Number.isFinite(progress)?Math.max(0,target-progress):null,chain:manual.chainOn!=='no'};
+  }
+  function defensivePriorities(){
+    const room=commandRoom(),bands=enemyRoleBands();
+    return protectionPriorities().filter(z=>z.feedFresh).map(z=>{
+      const p=z.player,loc=currentLocation(p),fresh=rosterFresh('ours'),duty=room?.plan.duties[p.id]?.duty;
+      const orders=Object.values(room?.plan.assignments||{}).filter(a=>a.primary===p.id).length;
+      const opportunities=rosterFresh('enemies')?state.data.enemies.filter(e=>['present','abroad'].includes(currentLocation(e).phase)&&currentLocation(e).country===loc.country&&
+        ['okay','away'].includes(memberState(e))&&roleAllows(p,e,bands)&&commandMatch(p,e).category==='Proven favourable matchup').length:null;
+      const exposed=fresh&&['okay','away'].includes(memberState(p))&&['present','abroad'].includes(loc.phase);
+      const repeat=z.impact.underFire,net=z.impact.net,contributes=net!==null&&net>0;
+      const priority=exposed&&repeat&&!orders&&duty!=='strike'&&!contributes&&opportunities===0?'Protect now':
+        exposed&&repeat?'Coordinate relief':exposed&&net!==null&&net<0?'Watch exposure':'Monitor';
+      return {...z,priority,orders,opportunities,country:loc.country,exposed};
+    }).sort((a,b)=>['Protect now','Coordinate relief','Watch exposure','Monitor'].indexOf(a.priority)-['Protect now','Coordinate relief','Watch exposure','Monitor'].indexOf(b.priority)||b.impact.in30-a.impact.in30);
   }

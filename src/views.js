@@ -30,13 +30,13 @@
   }
   function flightScreen(){
     const me=state.data.ours.find(p=>p.id===state.data.meta.ownerId),available=me?hitterReadiness(me):null;
-    const self=me&&protectionPriorities().find(x=>x.player.id===me.id&&x.exposed&&x.feedFresh&&x.impact.underFire);
+    const self=me&&defensivePriorities().find(x=>x.player.id===me.id&&x.exposed&&x.feedFresh&&x.impact.underFire);
     const routes=travelPlan(),safe=routes.filter(r=>r.safe),offense=routes.filter(r=>r.offensive),local=me?currentLocation(me):null;
     const med=medicalSupplies?.owner===me?.id&&medicalSupplies&&Date.now()-medicalSupplies.at<=20*MIN?medicalSupplies:null;
     const duty=commandRoom()?.plan.duties[me?.id],assigned=Object.values(commandRoom()?.plan.assignments||{}).some(a=>a.primary===me?.id);
     const decision=!me||!rosterFresh('ours')?'Refresh your own status before planning protection.':
       memberState(me)==='hospital'?'Already in hospital. Review discharge time and revive settings.':
-      assigned||duty?.duty==='strike'?'Coordinate cover for your attacking duty before leaving.':
+      assigned||duty?.duty==='strike'||self?.opportunities>0?'Coordinate cover for your attacking duty before leaving.':
       !self?'No fresh repeat-hit evidence for personal protection. Review the route comparison if leadership requests cover.':
       local?.country!=='Torn'?'You are away from Torn. Check local exposure and your return journey.':
       safe.length?'Consider flying to '+safe[0].country+' for approximately '+safe[0].min+' minutes each way. Check enemy locations again before departure.':
@@ -60,11 +60,11 @@
   function briefScreen(){
     const w=state.data.war;if(!w)return empty('No confirmed scheduled or active war.');
     const plans=suggestedAssignments(),room=commandRoom(),rules=localWarRules(),score=warScore();
-    const risks=protectionPriorities().filter(x=>x.exposed&&x.feedFresh);
-    const losses=risks.map(z=>'<p>'+esc(z.player.name)+' / '+z.impact.in30+' incoming in 30m / '+fmt(z.impact.given)+' captured respect conceded / '+fmt(z.impact.earned)+' earned / '+(z.impact.underFire?'repeat pressure':'monitor')+'</p>').join('');
+    const assessment=templateAssessment(w,score,rules),risks=defensivePriorities().filter(x=>x.exposed);
+    const losses=risks.map(z=>'<p>'+esc(z.player.name+' / '+z.priority+' / '+z.country)+' / '+z.impact.in30+' incoming in 30m / '+fmt(z.impact.given)+' captured respect conceded / '+fmt(z.impact.earned)+' earned / '+(z.impact.underFire?'repeat pressure':'monitor')+' / '+fmt(z.opportunities)+' proven offensive options / '+z.orders+' primary duties</p>').join('');
     const roll=room?.ops.roll||{},member=room?.actor.id;
     return card(preparingWar()?'Opening plan':'Tactical briefing',esc(w.opponentName+' / '+commandPosture())+'<p>'+esc(stamp(epochMs(w.start)))+
-      ' / score '+(score?fmt(score.our)+' - '+fmt(score.enemy):'unknown')+' / official target '+fmt(w.target||null)+'</p>'+
+      ' / score '+(score?fmt(score.our)+' - '+fmt(score.enemy):'unknown')+' / official target '+fmt(w.target||null)+'</p><p>'+esc(assessment.source)+' / '+(assessment.remaining===null?'Winning margin needs confirmed rules.':fmt(assessment.remaining)+' points to the configured winning condition.')+'</p>'+
       '<p>'+plans.length+' heavy targets / '+plans.filter(x=>!x.primary).length+' need matchup evidence. '+state.data.ours.filter(p=>!roll[p.id]).length+' members have no roll-call response.</p>'+
       b('Allocate hitters','tab:squad')+b('Regular matchups','tab:matchups')+b('Review opponent history','tab:scouting'))+
       card('Voluntary roll call',Object.entries(roll).map(([i,x])=>'<p>'+esc(playerName(Number(i))+' / '+x.choice+(x.from?' / '+stamp(x.from):'')+(x.until?' to '+stamp(x.until):''))+'</p>').join('')+
@@ -73,7 +73,7 @@
         '<p>A member-bound credential is required to respond.</p>'))+
       openingEvidence()+forecastCard()+card('Defensive priorities',losses||empty('No fresh, captured scoring losses and exposure to report.'))+
       foldCommand('rules','Weekly war rules', '<p>Torn reports a target and scores. Enter any additional conditions shown on this war\'s enlistment panel.</p>'+
-      '<label>Winning condition<input maxlength="100" id="ws-cmd-condition" value="'+esc(rules.condition||'')+'"></label>'+
+      commandOption('mode',[['unknown','Unknown'],['net','Lead over opponent'],['own','Own score threshold']],rules.mode||'unknown','Winning condition type')+'<label>Initial threshold<input type="number" min="1" id="ws-cmd-opening" value="'+esc(rules.opening??'')+'"></label><label>Reduction starts after hours<input type="number" min="0" id="ws-cmd-after" value="'+esc(rules.after??'')+'"></label>'+commandOption('chainon',[['unknown','Unknown'],['yes','Counts'],['no','Does not count']],rules.chainOn||'unknown','Chain contribution')+'<label>Weekly condition<input maxlength="100" id="ws-cmd-condition" value="'+esc(rules.condition||'')+'"></label>'+
       '<label>Threshold reduction per hour (%)<input type="number" min="0" max="100" id="ws-cmd-decay" value="'+esc(rules.decay??'')+'"></label>'+
       '<label>Overseas score multiplier<input type="number" min="0" max="100" step=".01" id="ws-cmd-overseas" value="'+esc(rules.overseas??'')+'"></label>'+
       '<label>Chain conditions<input maxlength="100" id="ws-cmd-chain" value="'+esc(rules.chain||'')+'"></label>'+
@@ -92,18 +92,6 @@
     return card('Your matchup',esc(ev.category)+'<p>You attacked: '+counts(ev.offense)+'<br>You defended: '+counts(ev.defense)+'</p><p>Most recent '+esc(stamp(ev.last))+' / '+history.length+' captured encounters. Current buffs can change a matchup.</p>'+
       (person?'<p>Observed memberships: '+esc(person.memberships.map(m=>'#'+m.faction+' ('+stamp(m.first)+' to '+stamp(m.last)+')').join(', '))+'</p>':'')+
       b('Player activity grid','cmd-player:'+p.id));
-  }
-  async function olderPersonal(){
-    if(document.hidden||!effectiveKey()||!idKey(state.data.meta.ownerId))return;
-    const owner=state.data.meta.ownerId,meta=state.data.meta,cursors=meta.commandCursors||(meta.commandCursors={});
-    if(cursors[owner]===0){meta.historyMessage='Reached the end of the accessible personal feed.';return;}
-    const before=cursors[owner]||Math.floor(Date.now()/1000),body=await call('/user/attacks?sort=DESC&limit=100&to='+before,'command-backfill',MIN);
-    if(!body||state.data.meta.ownerId!==owner)return;
-    const rows=attacks(body);await keepFights(rows,'Torn personal');
-    const oldest=Math.min(...(body.attacks||[]).map(a=>a.ended).filter(Number.isFinite));
-    if(body.attacks?.length<100)cursors[owner]=0;
-    else if(oldest<before)cursors[owner]=oldest;
-    meta.historyMessage=body.attacks?.length===100&&oldest>=before?'Overlapping timestamp page could not advance. Coverage remains partial.':rows.length+' identifiable records checked.';save();
   }
   async function commandAction(action){
     const [kind,value]=action.split(':'),target=Number(value),ids=v=>String(v||'').split(',').filter(x=>x.trim()).map(Number);
@@ -129,8 +117,8 @@
       else if(kind==='rules'){
         const num=k=>cmdValue(k)===''?null:Number(cmdValue(k)),decay=num('decay'),overseas=num('overseas');
         if([decay,overseas].some(v=>v!==null&&(!Number.isFinite(v)||v<0||v>100)))throw Error('Use a number from 0 to 100 or leave the field empty.');
-        (cfg.commandRules||={})[state.data.war.id]={condition:cmdValue('condition'),chain:cmdValue('chain'),overseas,decay,at:Date.now()};saveCfg();
-      }else if(kind==='history')await olderPersonal();
+        (cfg.commandRules||={})[state.data.war.id]={mode:cmdValue('mode'),opening:num('opening'),after:num('after'),condition:cmdValue('condition'),chain:cmdValue('chain'),chainOn:cmdValue('chainon'),overseas,decay,at:Date.now()};saveCfg();
+      }else if(kind==='history')await historicalPage('user');
       else if(kind==='export'){await archiveReady;if(!combatArchive.ready)throw Error('Archive unavailable.');
         fileDownload('warstaxx-combat.json','application/json',JSON.stringify({schema:1,exportedAt:Date.now(),fights:await readArchiveStore('fights'),people:await readArchiveStore('people')}));}
       else if(kind==='import'){

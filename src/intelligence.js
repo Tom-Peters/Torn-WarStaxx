@@ -3,9 +3,11 @@
   const idKey = v => Number.isSafeInteger(v) && v>0 && v<=9999999999;
   const pairKey = (a,b) => Math.min(a,b)+'/'+Math.max(a,b);
   function indexFight(row){
+    combatArchive.fights.set(row.id,row);
+    if(!row.attacker||!row.defender)return;
     const key=pairKey(row.attacker,row.defender);
     if(!combatArchive.pairs.has(key))combatArchive.pairs.set(key,new Map());
-    combatArchive.pairs.get(key).set(row.id,row);combatArchive.fights.set(row.id,row);
+    combatArchive.pairs.get(key).set(row.id,row);
   }
   function pairRows(a,b){return Array.from(combatArchive.pairs.get(pairKey(a,b))?.values()||[]);}
   function fightOutcome(result){
@@ -30,9 +32,9 @@
   }
   const archiveNumbers=['at','startedAt','endedAt','attackerFaction','defenderFaction','warId','ff','respect','respectLoss','chain','chainBonus','modifierWar','modifierRetaliation','modifierOverseas','modifierGroup','modifierWarlord'];
   function cleanFight(raw){
-    if(!raw||![raw.id,raw.attacker,raw.defender].every(idKey)||raw.attacker===raw.defender||
+    if(!raw||!idKey(raw.id)||(!idKey(raw.attacker)&&!idKey(raw.defender))||raw.attacker===raw.defender||
       !Number.isSafeInteger(raw.at)||raw.at<1e12||raw.at>Date.now()+60000)return null;
-    const row={id:raw.id,attacker:raw.attacker,defender:raw.defender};
+    const row={id:raw.id};if(idKey(raw.attacker))row.attacker=raw.attacker;if(idKey(raw.defender))row.defender=raw.defender;
     for(const k of archiveNumbers)if(typeof raw[k]==='number'&&Number.isFinite(raw[k])&&raw[k]>=0&&(!['attackerFaction','defenderFaction','warId','startedAt','endedAt'].includes(k)||raw[k]>0))row[k]=raw[k];
     for(const k of ['result','attackerName','defenderName'])if(typeof raw[k]==='string'&&raw[k])row[k]=raw[k].slice(0,80);
     if(typeof raw.ranked==='boolean')row.ranked=raw.ranked;
@@ -59,16 +61,17 @@
   async function keepFights(rows,source){
     await archiveReady;
     if(!combatArchive.db||!rows.length)return;
-    const staged=new Map();let newCount=0;
+    const staged=new Map();let newCount=0,existingCount=0;
     await transact('fights',store=>{
+      const total=store.count();total.onsuccess=()=>{existingCount=total.result;};
       for(const raw of rows){
         const row=cleanFight(raw);if(!row||staged.has(row.id))continue;
         staged.set(row.id,null);
         const req=store.get(row.id);
         req.onsuccess=()=>{
           const old=req.result;
-          if(old&&(old.attacker!==row.attacker||old.defender!==row.defender))return;
-          if(!old&&combatArchive.fights.size+newCount>=40000){combatArchive.error='Combat archive capacity reached. Export your archive before collecting more.';return;}
+          if(old&&['attacker','defender'].some(k=>old[k]&&row[k]&&old[k]!==row[k]))return;
+          if(!old&&existingCount+newCount>=40000){combatArchive.error='Combat archive capacity reached. Export your archive before collecting more.';return;}
           if(!old)newCount++;
           const sources=[...new Set([...(old?.sources||[]),...(source==='Local import'?(raw.sources||[]).filter(x=>permittedSources.includes(x)):[]),source])];
           const merged={...row,...old,sources,capturedAt:old?.capturedAt||(source==='Local import'&&Number.isSafeInteger(raw.capturedAt)?Math.min(Date.now(),raw.capturedAt):Date.now())};
@@ -127,4 +130,31 @@
         };
       }
     });staged.forEach(p=>combatArchive.people.set(p.id,p));
+  }
+  function attributedWar(row){
+    if(row.ranked!==true||!row.attackerFaction||!row.defenderFaction)return null;
+    const wars=new Set([state.data.war?.id,...state.data.ourWars.map(w=>w.id)].filter(Boolean)),matches=[];
+    for(const id of wars){
+      const w=warAttackWindow(id);if(w?.start&&w.end>=row.at&&row.at>=w.start&&
+        ((row.attackerFaction===w.ourId&&row.defenderFaction===w.enemyId)||(row.attackerFaction===w.enemyId&&row.defenderFaction===w.ourId)))matches.push(id);
+    }
+    return matches.length===1?matches[0]:null;
+  }
+  async function historicalPage(feed){
+    const personal=feed==='user',owner=positive(personal?state.data.meta.ownerId:cfg.ourId),meta=state.data.meta;
+    if(!owner||!effectiveKey()||document.hidden||(!personal&&!cfg.enableAttacks))return;
+    const cursors=meta.commandCursors||(meta.commandCursors={}),key=feed+'/'+owner;
+    if(cursors[key]===0){meta.historyMessage='Reached the end of this authorised attack feed.';return;}
+    const before=cursors[key]||Math.floor(Date.now()/1000);
+    const body=await call('/'+feed+'/attacks?sort=DESC&limit=100&to='+before,'command-history-'+key,5*MIN);
+    if(!Array.isArray(body?.attacks)||owner!==positive(personal?state.data.meta.ownerId:cfg.ourId))return;
+    const rows=attacks(body,true).map(a=>({...a,warId:attributedWar(a)}));
+    await keepFights(rows,personal?'Torn personal':'Torn faction');
+    if(!combatArchive.ready||combatArchive.error)return;
+    const times=body.attacks.map(a=>a.ended).filter(t=>Number.isSafeInteger(t)&&t>0);
+    const oldest=times.length?Math.min(...times):0;
+    if(body.attacks.length<100)cursors[key]=0;
+    else if(oldest>0&&oldest<before)cursors[key]=oldest;
+    meta.historyMessage=body.attacks.length===100&&(!oldest||oldest>=before)?'Inclusive timestamp page did not advance. Coverage remains partial.':
+      rows.length+' '+feed+' attack records checked.';save();
   }

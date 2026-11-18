@@ -9,7 +9,7 @@ const modules=names.map(n=>readFileSync(new URL('../src/'+n+'.js',import.meta.ur
 const hour=3600000,day=24*hour,now=Date.UTC(2026,10,18,14);
 function functions(extra=''){
   return runInNewContext("const HOUR=3600000,MIN=60000,positive=v=>Number(v)||0;const state={data:{war:null,ourWars:[],enemyWars:[],meta:{}}};const cfg={};const spy=()=>null,bsScore=()=>null;const scouterPremiumActive=()=>true;"+modules+
-    '\n'+extra+';({pairEvidence,cleanFight,travelRanking,forecastWindows,activityCells,combatArchive,weightedCells})');
+    '\n'+extra+';({templateAssessment,pairEvidence,cleanFight,travelRanking,forecastWindows,activityCells,combatArchive,weightedCells})');
 }
 test('release sources, probe and package version agree',()=>{
   assert.equal(installer.match(/@version\s+(\S+)/)[1],pkg.version);
@@ -72,4 +72,12 @@ test('all routes, strict duration boundary, modifiers and uncertain travel',()=>
   assert.equal(inCanada([weak,{...weak,proven:false}]).offensive,false);
   const inbound={...weak,inbound:true,earliest:now+hour,latest:now+hour};assert.equal(inCanada([inbound]).offensive,false);
   assert.equal(inCanada([{...inbound,earliest:now+1000,latest:now+2000}]).offensive,true);
+});
+
+test('official target takes precedence, unknown templates never invent a remaining score',()=>{
+  const t=functions().templateAssessment,w={target:800,start:(now-26*hour)/1000};
+  assert.equal(t(w,{net:20},{},now).remaining,null);
+  const manual={mode:'net',opening:1000,after:24,decay:1,chainOn:'no'};
+  const a=t(w,{net:20},manual,now);assert.equal(a.remaining,780);assert.equal(a.chain,false);
+  assert.equal(t({...w,target:null},{net:20},manual,now).remaining,950);
 });

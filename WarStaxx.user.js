@@ -269,9 +269,11 @@
   const idKey = v => Number.isSafeInteger(v) && v>0 && v<=9999999999;
   const pairKey = (a,b) => Math.min(a,b)+'/'+Math.max(a,b);
   function indexFight(row){
+    combatArchive.fights.set(row.id,row);
+    if(!row.attacker||!row.defender)return;
     const key=pairKey(row.attacker,row.defender);
     if(!combatArchive.pairs.has(key))combatArchive.pairs.set(key,new Map());
-    combatArchive.pairs.get(key).set(row.id,row);combatArchive.fights.set(row.id,row);
+    combatArchive.pairs.get(key).set(row.id,row);
   }
   function pairRows(a,b){return Array.from(combatArchive.pairs.get(pairKey(a,b))?.values()||[]);}
   function fightOutcome(result){
@@ -296,9 +298,9 @@
   }
   const archiveNumbers=['at','startedAt','endedAt','attackerFaction','defenderFaction','warId','ff','respect','respectLoss','chain','chainBonus','modifierWar','modifierRetaliation','modifierOverseas','modifierGroup','modifierWarlord'];
   function cleanFight(raw){
-    if(!raw||![raw.id,raw.attacker,raw.defender].every(idKey)||raw.attacker===raw.defender||
+    if(!raw||!idKey(raw.id)||(!idKey(raw.attacker)&&!idKey(raw.defender))||raw.attacker===raw.defender||
       !Number.isSafeInteger(raw.at)||raw.at<1e12||raw.at>Date.now()+60000)return null;
-    const row={id:raw.id,attacker:raw.attacker,defender:raw.defender};
+    const row={id:raw.id};if(idKey(raw.attacker))row.attacker=raw.attacker;if(idKey(raw.defender))row.defender=raw.defender;
     for(const k of archiveNumbers)if(typeof raw[k]==='number'&&Number.isFinite(raw[k])&&raw[k]>=0&&(!['attackerFaction','defenderFaction','warId','startedAt','endedAt'].includes(k)||raw[k]>0))row[k]=raw[k];
     for(const k of ['result','attackerName','defenderName'])if(typeof raw[k]==='string'&&raw[k])row[k]=raw[k].slice(0,80);
     if(typeof raw.ranked==='boolean')row.ranked=raw.ranked;
@@ -325,16 +327,17 @@
   async function keepFights(rows,source){
     await archiveReady;
     if(!combatArchive.db||!rows.length)return;
-    const staged=new Map();let newCount=0;
+    const staged=new Map();let newCount=0,existingCount=0;
     await transact('fights',store=>{
+      const total=store.count();total.onsuccess=()=>{existingCount=total.result;};
       for(const raw of rows){
         const row=cleanFight(raw);if(!row||staged.has(row.id))continue;
         staged.set(row.id,null);
         const req=store.get(row.id);
         req.onsuccess=()=>{
           const old=req.result;
-          if(old&&(old.attacker!==row.attacker||old.defender!==row.defender))return;
-          if(!old&&combatArchive.fights.size+newCount>=40000){combatArchive.error='Combat archive capacity reached. Export your archive before collecting more.';return;}
+          if(old&&['attacker','defender'].some(k=>old[k]&&row[k]&&old[k]!==row[k]))return;
+          if(!old&&existingCount+newCount>=40000){combatArchive.error='Combat archive capacity reached. Export your archive before collecting more.';return;}
           if(!old)newCount++;
           const sources=[...new Set([...(old?.sources||[]),...(source==='Local import'?(raw.sources||[]).filter(x=>permittedSources.includes(x)):[]),source])];
           const merged={...row,...old,sources,capturedAt:old?.capturedAt||(source==='Local import'&&Number.isSafeInteger(raw.capturedAt)?Math.min(Date.now(),raw.capturedAt):Date.now())};
@@ -393,6 +396,33 @@
         };
       }
     });staged.forEach(p=>combatArchive.people.set(p.id,p));
+  }
+  function attributedWar(row){
+    if(row.ranked!==true||!row.attackerFaction||!row.defenderFaction)return null;
+    const wars=new Set([state.data.war?.id,...state.data.ourWars.map(w=>w.id)].filter(Boolean)),matches=[];
+    for(const id of wars){
+      const w=warAttackWindow(id);if(w?.start&&w.end>=row.at&&row.at>=w.start&&
+        ((row.attackerFaction===w.ourId&&row.defenderFaction===w.enemyId)||(row.attackerFaction===w.enemyId&&row.defenderFaction===w.ourId)))matches.push(id);
+    }
+    return matches.length===1?matches[0]:null;
+  }
+  async function historicalPage(feed){
+    const personal=feed==='user',owner=positive(personal?state.data.meta.ownerId:cfg.ourId),meta=state.data.meta;
+    if(!owner||!effectiveKey()||document.hidden||(!personal&&!cfg.enableAttacks))return;
+    const cursors=meta.commandCursors||(meta.commandCursors={}),key=feed+'/'+owner;
+    if(cursors[key]===0){meta.historyMessage='Reached the end of this authorised attack feed.';return;}
+    const before=cursors[key]||Math.floor(Date.now()/1000);
+    const body=await call('/'+feed+'/attacks?sort=DESC&limit=100&to='+before,'command-history-'+key,5*MIN);
+    if(!Array.isArray(body?.attacks)||owner!==positive(personal?state.data.meta.ownerId:cfg.ourId))return;
+    const rows=attacks(body,true).map(a=>({...a,warId:attributedWar(a)}));
+    await keepFights(rows,personal?'Torn personal':'Torn faction');
+    if(!combatArchive.ready||combatArchive.error)return;
+    const times=body.attacks.map(a=>a.ended).filter(t=>Number.isSafeInteger(t)&&t>0);
+    const oldest=times.length?Math.min(...times):0;
+    if(body.attacks.length<100)cursors[key]=0;
+    else if(oldest>0&&oldest<before)cursors[key]=oldest;
+    meta.historyMessage=body.attacks.length===100&&(!oldest||oldest>=before)?'Inclusive timestamp page did not advance. Coverage remains partial.':
+      rows.length+' '+feed+' attack records checked.';save();
   }
   // END bundled intelligence.js
   // BEGIN bundled activity.js
@@ -620,7 +650,7 @@
     const rows=pairRows(hitter.id,enemy.id),ev=pairEvidence(rows,hitter.id,Date.now(),ratio);
     return {...ev,ratio,last:rows.reduce((a,r)=>Math.max(a,r.at),0)};
   }
-  function travelRanking({method,book,enemies,at,overseas}){
+  function travelRanking({method,book,enemies,at,overseas,coverMinutes=90,gear=null}){
     const i=flyMethods.indexOf(method);
     return flightTable.map(([country,cost,normal,withBook])=>{
       const possibilities=(book==='yes'?[withBook]:book==='no'?[normal]:[normal,withBook])
@@ -639,7 +669,11 @@
       const risk=!eligible?(known?'Flight too short':'Choose method and active book'):
         coverage<1?'Enemy locations incomplete':danger.length?'Unproven opponent at or inbound to destination':
         before?'Enemy could arrive before you':incoming.length?'Enemy due after landing':here.length?'Exposed after landing':'Enemies may move after observation';
-      const score=(safe?100:0)+(offensive?60:0)+Math.min(180,min)/10-15*danger.length-5*incoming.length-5*unknown;
+      const interval=Math.min(1,min/coverMinutes),excess=Math.max(0,min-coverMinutes);
+      const yieldWeight=overseas==null?0:Math.min(3,Math.max(0,overseas));
+      const score=(safe?100:0)+(offensive?60+yieldWeight*favourable.length:0)+15*interval-
+        Math.min(12,excess/18)-15*danger.length-5*incoming.length-5*unknown-(i===0?cost/20000:0)-
+        (offensive&&gear!==true?3:0);
       return {country,cost,min,max,known,eligible,safe,offensive,here,incoming,before,favourable,coverage,risk,score};
     }).sort((a,b)=>b.score-a.score||a.country.localeCompare(b.country));
   }
@@ -661,7 +695,8 @@
     if(expected?.observed&&at-expected.observed<30*MIN&&expected.members>enemies.length){
       for(let i=enemies.length;i<Math.min(100,expected.members);i++)enemies.push({known:false});
     }
-    return travelRanking({method:cfg.flightMethod,book:cfg.flightBook,enemies,at,overseas:localWarRules().overseas});
+    const cover=turtleWindow(at).minutes||90;
+    return travelRanking({coverMinutes:cover,method:cfg.flightMethod,book:cfg.flightBook,enemies,at,overseas:localWarRules().overseas});
   }
   function suggestedAssignments(){
     const bands=enemyRoleBands(),loads={},assignments=commandRoom()?.plan.assignments||{};
@@ -727,13 +762,37 @@
     if(preparingWar())return 'Pre-war';
     if(!activeWarNow()||!rosterFresh('ours')||!rosterFresh('enemies'))return 'Recovery';
     const chain=chainStatus();
-    if(chain.fresh&&chain.count>=10&&chain.remaining>0&&chain.remaining<=80)return 'Chain focus';
+    if(localWarRules().chainOn!=='no'&&chain.fresh&&chain.count>=10&&chain.remaining>0&&chain.remaining<=80)return 'Chain focus';
     const room=commandRoom();
     if(Object.values(room?.ops.states||{}).some(s=>['LOCKED_UNAVAILABLE','REASSIGNMENT_READY'].includes(s.phase)))return 'Black Skull suppression';
     const exposed=protectionPriorities().filter(x=>x.exposed&&x.feedFresh&&x.impact.underFire);
     if(exposed.length)return 'Defensive turtling';
     const pace=warPace();if(pace?.measurable&&Date.now()-pace.last.at<5*MIN&&pace.netRate>0)return 'Aggressive scoring';
     return 'Balanced';
+  }
+  function templateAssessment(w,score,manual,at=Date.now()){
+    const mode=['net','own','unknown'].includes(manual.mode)?manual.mode:'unknown';
+    const official=w?.target>0?w.target:null,base=manual.opening>0?manual.opening:null;
+    const step=base&&manual.decay!=null&&manual.after!=null&&w?.start>0?
+      Math.max(0,Math.floor((at-w.start*1000)/HOUR)-manual.after+1):null;
+    const modeled=step===null?null:Math.max(0,base*(1-step*manual.decay/100));
+    const target=official??modeled,progress=mode==='net'?score?.net:mode==='own'?score?.our:null;
+    return {mode,target,modeled,source:official!==null?'Official current target':modeled!==null?'Manual template model':'Unknown',
+      remaining:target!==null&&Number.isFinite(progress)?Math.max(0,target-progress):null,chain:manual.chainOn!=='no'};
+  }
+  function defensivePriorities(){
+    const room=commandRoom(),bands=enemyRoleBands();
+    return protectionPriorities().filter(z=>z.feedFresh).map(z=>{
+      const p=z.player,loc=currentLocation(p),fresh=rosterFresh('ours'),duty=room?.plan.duties[p.id]?.duty;
+      const orders=Object.values(room?.plan.assignments||{}).filter(a=>a.primary===p.id).length;
+      const opportunities=rosterFresh('enemies')?state.data.enemies.filter(e=>['present','abroad'].includes(currentLocation(e).phase)&&currentLocation(e).country===loc.country&&
+        ['okay','away'].includes(memberState(e))&&roleAllows(p,e,bands)&&commandMatch(p,e).category==='Proven favourable matchup').length:null;
+      const exposed=fresh&&['okay','away'].includes(memberState(p))&&['present','abroad'].includes(loc.phase);
+      const repeat=z.impact.underFire,net=z.impact.net,contributes=net!==null&&net>0;
+      const priority=exposed&&repeat&&!orders&&duty!=='strike'&&!contributes&&opportunities===0?'Protect now':
+        exposed&&repeat?'Coordinate relief':exposed&&net!==null&&net<0?'Watch exposure':'Monitor';
+      return {...z,priority,orders,opportunities,country:loc.country,exposed};
+    }).sort((a,b)=>['Protect now','Coordinate relief','Watch exposure','Monitor'].indexOf(a.priority)-['Protect now','Coordinate relief','Watch exposure','Monitor'].indexOf(b.priority)||b.impact.in30-a.impact.in30);
   }
   // END bundled planning.js
   // BEGIN bundled coordination.js
@@ -916,13 +975,13 @@
   }
   function flightScreen(){
     const me=state.data.ours.find(p=>p.id===state.data.meta.ownerId),available=me?hitterReadiness(me):null;
-    const self=me&&protectionPriorities().find(x=>x.player.id===me.id&&x.exposed&&x.feedFresh&&x.impact.underFire);
+    const self=me&&defensivePriorities().find(x=>x.player.id===me.id&&x.exposed&&x.feedFresh&&x.impact.underFire);
     const routes=travelPlan(),safe=routes.filter(r=>r.safe),offense=routes.filter(r=>r.offensive),local=me?currentLocation(me):null;
     const med=medicalSupplies?.owner===me?.id&&medicalSupplies&&Date.now()-medicalSupplies.at<=20*MIN?medicalSupplies:null;
     const duty=commandRoom()?.plan.duties[me?.id],assigned=Object.values(commandRoom()?.plan.assignments||{}).some(a=>a.primary===me?.id);
     const decision=!me||!rosterFresh('ours')?'Refresh your own status before planning protection.':
       memberState(me)==='hospital'?'Already in hospital. Review discharge time and revive settings.':
-      assigned||duty?.duty==='strike'?'Coordinate cover for your attacking duty before leaving.':
+      assigned||duty?.duty==='strike'||self?.opportunities>0?'Coordinate cover for your attacking duty before leaving.':
       !self?'No fresh repeat-hit evidence for personal protection. Review the route comparison if leadership requests cover.':
       local?.country!=='Torn'?'You are away from Torn. Check local exposure and your return journey.':
       safe.length?'Consider flying to '+safe[0].country+' for approximately '+safe[0].min+' minutes each way. Check enemy locations again before departure.':
@@ -946,11 +1005,11 @@
   function briefScreen(){
     const w=state.data.war;if(!w)return empty('No confirmed scheduled or active war.');
     const plans=suggestedAssignments(),room=commandRoom(),rules=localWarRules(),score=warScore();
-    const risks=protectionPriorities().filter(x=>x.exposed&&x.feedFresh);
-    const losses=risks.map(z=>'<p>'+esc(z.player.name)+' / '+z.impact.in30+' incoming in 30m / '+fmt(z.impact.given)+' captured respect conceded / '+fmt(z.impact.earned)+' earned / '+(z.impact.underFire?'repeat pressure':'monitor')+'</p>').join('');
+    const assessment=templateAssessment(w,score,rules),risks=defensivePriorities().filter(x=>x.exposed);
+    const losses=risks.map(z=>'<p>'+esc(z.player.name+' / '+z.priority+' / '+z.country)+' / '+z.impact.in30+' incoming in 30m / '+fmt(z.impact.given)+' captured respect conceded / '+fmt(z.impact.earned)+' earned / '+(z.impact.underFire?'repeat pressure':'monitor')+' / '+fmt(z.opportunities)+' proven offensive options / '+z.orders+' primary duties</p>').join('');
     const roll=room?.ops.roll||{},member=room?.actor.id;
     return card(preparingWar()?'Opening plan':'Tactical briefing',esc(w.opponentName+' / '+commandPosture())+'<p>'+esc(stamp(epochMs(w.start)))+
-      ' / score '+(score?fmt(score.our)+' - '+fmt(score.enemy):'unknown')+' / official target '+fmt(w.target||null)+'</p>'+
+      ' / score '+(score?fmt(score.our)+' - '+fmt(score.enemy):'unknown')+' / official target '+fmt(w.target||null)+'</p><p>'+esc(assessment.source)+' / '+(assessment.remaining===null?'Winning margin needs confirmed rules.':fmt(assessment.remaining)+' points to the configured winning condition.')+'</p>'+
       '<p>'+plans.length+' heavy targets / '+plans.filter(x=>!x.primary).length+' need matchup evidence. '+state.data.ours.filter(p=>!roll[p.id]).length+' members have no roll-call response.</p>'+
       b('Allocate hitters','tab:squad')+b('Regular matchups','tab:matchups')+b('Review opponent history','tab:scouting'))+
       card('Voluntary roll call',Object.entries(roll).map(([i,x])=>'<p>'+esc(playerName(Number(i))+' / '+x.choice+(x.from?' / '+stamp(x.from):'')+(x.until?' to '+stamp(x.until):''))+'</p>').join('')+
@@ -959,7 +1018,7 @@
         '<p>A member-bound credential is required to respond.</p>'))+
       openingEvidence()+forecastCard()+card('Defensive priorities',losses||empty('No fresh, captured scoring losses and exposure to report.'))+
       foldCommand('rules','Weekly war rules', '<p>Torn reports a target and scores. Enter any additional conditions shown on this war\'s enlistment panel.</p>'+
-      '<label>Winning condition<input maxlength="100" id="ws-cmd-condition" value="'+esc(rules.condition||'')+'"></label>'+
+      commandOption('mode',[['unknown','Unknown'],['net','Lead over opponent'],['own','Own score threshold']],rules.mode||'unknown','Winning condition type')+'<label>Initial threshold<input type="number" min="1" id="ws-cmd-opening" value="'+esc(rules.opening??'')+'"></label><label>Reduction starts after hours<input type="number" min="0" id="ws-cmd-after" value="'+esc(rules.after??'')+'"></label>'+commandOption('chainon',[['unknown','Unknown'],['yes','Counts'],['no','Does not count']],rules.chainOn||'unknown','Chain contribution')+'<label>Weekly condition<input maxlength="100" id="ws-cmd-condition" value="'+esc(rules.condition||'')+'"></label>'+
       '<label>Threshold reduction per hour (%)<input type="number" min="0" max="100" id="ws-cmd-decay" value="'+esc(rules.decay??'')+'"></label>'+
       '<label>Overseas score multiplier<input type="number" min="0" max="100" step=".01" id="ws-cmd-overseas" value="'+esc(rules.overseas??'')+'"></label>'+
       '<label>Chain conditions<input maxlength="100" id="ws-cmd-chain" value="'+esc(rules.chain||'')+'"></label>'+
@@ -978,18 +1037,6 @@
     return card('Your matchup',esc(ev.category)+'<p>You attacked: '+counts(ev.offense)+'<br>You defended: '+counts(ev.defense)+'</p><p>Most recent '+esc(stamp(ev.last))+' / '+history.length+' captured encounters. Current buffs can change a matchup.</p>'+
       (person?'<p>Observed memberships: '+esc(person.memberships.map(m=>'#'+m.faction+' ('+stamp(m.first)+' to '+stamp(m.last)+')').join(', '))+'</p>':'')+
       b('Player activity grid','cmd-player:'+p.id));
-  }
-  async function olderPersonal(){
-    if(document.hidden||!effectiveKey()||!idKey(state.data.meta.ownerId))return;
-    const owner=state.data.meta.ownerId,meta=state.data.meta,cursors=meta.commandCursors||(meta.commandCursors={});
-    if(cursors[owner]===0){meta.historyMessage='Reached the end of the accessible personal feed.';return;}
-    const before=cursors[owner]||Math.floor(Date.now()/1000),body=await call('/user/attacks?sort=DESC&limit=100&to='+before,'command-backfill',MIN);
-    if(!body||state.data.meta.ownerId!==owner)return;
-    const rows=attacks(body);await keepFights(rows,'Torn personal');
-    const oldest=Math.min(...(body.attacks||[]).map(a=>a.ended).filter(Number.isFinite));
-    if(body.attacks?.length<100)cursors[owner]=0;
-    else if(oldest<before)cursors[owner]=oldest;
-    meta.historyMessage=body.attacks?.length===100&&oldest>=before?'Overlapping timestamp page could not advance. Coverage remains partial.':rows.length+' identifiable records checked.';save();
   }
   async function commandAction(action){
     const [kind,value]=action.split(':'),target=Number(value),ids=v=>String(v||'').split(',').filter(x=>x.trim()).map(Number);
@@ -1015,8 +1062,8 @@
       else if(kind==='rules'){
         const num=k=>cmdValue(k)===''?null:Number(cmdValue(k)),decay=num('decay'),overseas=num('overseas');
         if([decay,overseas].some(v=>v!==null&&(!Number.isFinite(v)||v<0||v>100)))throw Error('Use a number from 0 to 100 or leave the field empty.');
-        (cfg.commandRules||={})[state.data.war.id]={condition:cmdValue('condition'),chain:cmdValue('chain'),overseas,decay,at:Date.now()};saveCfg();
-      }else if(kind==='history')await olderPersonal();
+        (cfg.commandRules||={})[state.data.war.id]={mode:cmdValue('mode'),opening:num('opening'),after:num('after'),condition:cmdValue('condition'),chain:cmdValue('chain'),chainOn:cmdValue('chainon'),overseas,decay,at:Date.now()};saveCfg();
+      }else if(kind==='history')await historicalPage('user');
       else if(kind==='export'){await archiveReady;if(!combatArchive.ready)throw Error('Archive unavailable.');
         fileDownload('warstaxx-combat.json','application/json',JSON.stringify({schema:1,exportedAt:Date.now(),fights:await readArchiveStore('fights'),people:await readArchiveStore('people')}));}
       else if(kind==='import'){
@@ -1145,7 +1192,7 @@
     const v=Number(value);
     return Number.isFinite(v)&&v>1e9?(v>1e12?v:v*1000):0;
   };
-  function attacks(j){
+  function attacks(j,includePartial=false){
     return parseArray(unpack(j,'attacks')).map(a=>{
       const rawFF=a.modifiers?.fair_fight??a.modifiers?.fairfight??a.fair_fight;
       const rawGain=a.respect_gain??a.respect;
@@ -1174,7 +1221,7 @@
         modifierGroup:officialNumber(a.modifiers?.group??a.modifiers?.group_attack),
         specialBonus:Boolean(Number(a.modifiers?.warlord??a.modifiers?.warlord_bonus)>1),
         code:'api'};
-    }).filter(a=>a.id&&a.at&&a.attacker&&a.defender);
+    }).filter(a=>a.id&&a.at&&(includePartial?(a.attacker||a.defender):a.attacker&&a.defender));
   }
   // Attack attribution is conservative: only explicitly ranked-war hits with
   // faction IDs and a matching official war time window enter the ledger.
@@ -1417,9 +1464,9 @@
     if(kind==='away'){
       const to=desc.match(/\bto\s+([^.,;|]+)/i);
       const dest=explicit||nativeCountryName(to?.[1]);
-      if(dest)return {country:dest,phase:'inbound',eta:positive(p.until),source:'Torn flight destination'};
       if(/\b(?:returning from|flying back from|flight back|flying back|back to torn)\b/i.test(desc))
         return {country:'Torn',phase:'inbound',eta:positive(p.until),source:'Torn return flight'};
+      if(dest)return {country:dest,phase:'inbound',eta:positive(p.until),source:'Torn flight destination'};
       if(/^abroad$/i.test(String(p.status||''))){
         const where=current||nativeCountryName(desc);
         if(where)return {country:where,phase:'abroad',source:'Torn abroad status'};
@@ -3258,7 +3305,7 @@
       const j=await call('/faction/attacks?limit=100','attacks',3*MIN);
       if(!j)return;
       const seen=new Map((state.data.attacks||[]).map(a=>[a.id,a]));
-      const parsed=attacks(j);await keepFights(parsed,'Torn faction').catch(archiveFailure);
+      const parsed=attacks(j);await keepFights(attacks(j,true),'Torn faction').catch(archiveFailure);
       for(const a of parsed)seen.set(a.id,a);
       state.data.attacks=[...seen.values()].sort((a,b)=>a.at-b.at).slice(-1000);
     }catch(e){state.data.errors.attacks=String(e.message||e);}
@@ -3301,7 +3348,15 @@
       if(urgentReport)state.data.meta.lastDebriefAttempt=Date.now();
       await refreshHistory(force||urgentReport);
       await refreshAttacks();
-      if(state.open&&state.data.war)await checkPersonalFights();
+      if(state.open&&state.data.war){
+        await checkPersonalFights();
+        if(Date.now()-n(state.data.meta.lastCommandBackfill)>15*MIN){
+          state.data.meta.lastCommandBackfill=Date.now();
+          const feed=cfg.enableAttacks&&state.data.meta.commandLastFeed!=='faction'?'faction':'user';
+          state.data.meta.commandLastFeed=feed;
+          await historicalPage(feed).catch(()=>{state.data.meta.historyMessage='History read unavailable. Latest local evidence retained.';});
+        }
+      }
       await refreshWarConcessions(force);
       try{
         const chain=await call('/faction/'+cfg.ourId+'/chain','chain',30*1000);
@@ -5572,7 +5627,7 @@
           'concessions',0);
         if(!response)break;
         const source=parseArray(unpack(response,'attacks')),parsed=attacks(response);
-        await keepFights(parsed.map(a=>a.ranked&&a.at>=w.start&&a.at<=w.end&&[a.attackerFaction,a.defenderFaction].sort().join() === [w.ourId,w.enemyId].sort().join()?{...a,warId:w.id}:a),'Torn ranked attacks').catch(archiveFailure);
+        await keepFights(attacks(response,true).map(a=>a.ranked&&a.at>=w.start&&a.at<=w.end&&[a.attackerFaction,a.defenderFaction].sort().join() === [w.ourId,w.enemyId].sort().join()?{...a,warId:w.id}:a),'Torn ranked attacks').catch(archiveFailure);
         captureConcessionAttacks(rec,parsed);
         rec.fetches++;rec.lastFetch=Date.now();rec.error='';
         if(source.length<100){
@@ -9126,7 +9181,7 @@
       if(cache!==personalFightCache())return;
       if(!Array.isArray(body?.attacks))throw Error('No personal attack records returned');
       cache.rows=attacks(body).filter(a=>a.attacker===cache.owner||a.defender===cache.owner);
-      await keepFights(cache.rows,'Torn personal').catch(archiveFailure);
+      await keepFights(attacks(body,true).filter(a=>a.attacker===cache.owner||a.defender===cache.owner),'Torn personal').catch(archiveFailure);
       cache.count=body.attacks.length;cache.checked=Date.now();cache.error='';
     }catch(e){cache.error='Personal history unavailable. Check that your Torn key can read personal attacks.';}
     finally{cache.busy=false;if(cache===personalFightCache()&&nativeWarState.expandedId)syncNativeWar();}

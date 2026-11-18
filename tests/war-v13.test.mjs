@@ -20,7 +20,7 @@ test('Torn API v2 ranked attack format and older logs are both recognised',()=>{
    'const epochMs=v=>Number(v)*1000;',
    'const validFF=v=>v===null||v===undefined?null:Number(v);'
  ].join('\n');
- const f=fixture(setup,'  function attacks(j){',
+ const f=fixture(setup,'  function attacks(j,includePartial=false){',
    '  // Attack attribution is conservative:','({attacks})');
  const raw={attacks:[
    {id:555,started:1730000000,ended:1730000060,is_ranked_war:true,

@@ -2,6 +2,7 @@
 import json
 import os
 import shutil
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -27,6 +28,15 @@ def open_view(page, view):
 with sync_playwright() as pw:
     browser=pw.chromium.launch(executable_path=os.environ.get("CHROMIUM") or shutil.which("google-chrome") or shutil.which("chromium"),args=["--no-sandbox"])
     context=browser.new_context(viewport={"width":360,"height":780},is_mobile=True,has_touch=True)
+    worker=subprocess.Popen(["node",str(ROOT/"tests/browser/worker-fixture.mjs")],stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
+    def endpoint(request):
+        if "fixture.workers.dev" not in request["url"]:
+            return {"status":503,"responseText":"{}"}
+        worker.stdin.write(json.dumps(request)+"\n");worker.stdin.flush()
+        return json.loads(worker.stdout.readline())
+    context.expose_function("offlineWorker",endpoint)
+    context.add_init_script("""window.PDA_httpGet=(url,headers)=>window.offlineWorker({url,method:'GET',headers});window.PDA_httpPut=(url,headers,body)=>window.offlineWorker({url,method:'PUT',headers,body});""")
+    cfg['shared']={"enabled":True,"endpoint":"https://fixture.workers.dev","token":"fixture-writer","canWrite":True}
     errors=[]
     page=context.new_page()
     page.on("pageerror",lambda exc:errors.append(str(exc)))
@@ -63,10 +73,36 @@ with sync_playwright() as pw:
     assert page.locator('#ws-cmd-method').input_value()=='Airstrip'
     open_view(page,'combat')
     assert '1 unique attacks' in page.locator('.ws-content').inner_text()
+    # The role is resolved from the bearer by the Worker, never by a UI role label.
+    open_view(page,'squad')
+    page.locator('details[data-ws-disclosure="target-3"] summary').click()
+    page.get_by_role('button',name='Publish assignment').wait_for()
+    page.get_by_role('button',name='Publish assignment').click()
+    page.get_by_role('button',name='Lock',exact=True).wait_for()
+    page.get_by_role('button',name='Lock',exact=True).click()
+    page.get_by_role('button',name='Unlock',exact=True).wait_for()
+    page.evaluate("""()=>{const c=JSON.parse(localStorage.getItem('warstaxx-config-v1'));c.shared.token='fixture-hitter';c.shared.canWrite=false;localStorage.setItem('warstaxx-config-v1',JSON.stringify(c));}""")
+    page.reload();inject();open_view(page,'squad')
+    page.locator('details[data-ws-disclosure="target-3"] summary').click()
+    page.get_by_role('button',name='Claim for 3 minutes').click()
+    page.get_by_role('button',name='Release claim').wait_for()
+    assert page.get_by_role('button',name='Unlock',exact=True).count()==0
+    page.get_by_role('button',name='Release claim').click()
+    page.get_by_role('button',name='Claim for 3 minutes').wait_for()
+    open_view(page,'combat')
+    backup={"schema":1,"people":[{"id":3,"at":NOW,"name":"Renamed opponent","memberships":[{"faction":20,"first":NOW-600000,"last":NOW}]}],
+            "fights":[dict(data['attacks'][0],ff=2.1),dict(id=123457,attacker=3,defender=1,at=NOW-200000,result='Lost')]}
+    page.locator('#ws-cmd-import').set_input_files({"name":"fixture.json","mimeType":"application/json","buffer":json.dumps(backup).encode()})
+    page.get_by_role('button',name='Merge backup').click()
+    page.get_by_text('2 unique attacks',exact=False).first.wait_for()
+    open_view(page,'enemy');page.locator('[data-action="player:3"]').first.click()
+    assert 'stalemates' in page.locator('.ws-content').inner_text().lower()
     page.goto('https://www.torn.com/loader.php?sid=attack&user2ID=3')
     inject()
     assert page.locator('#warstaxx-root').is_hidden()
     assert page.locator('#native').is_visible()
     assert not errors, errors
     print('360px Chromium passed: 8 hub routes, installer reinjection, archive reload, country order, inline expansion, horizontal grid, filters, flight settings and attack-page entry.')
+    worker.stdin.close();worker.wait(timeout=5)
+    print("SQLite Worker + installed client passed: grant discovery, assignment, leadership lock, own claim/release, directional archive import and duplicate ID.")
     browser.close()
