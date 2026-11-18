@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      2.7.1
+// @version      2.8.0
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='2.7.1';
+  const id='war', version='2.8.0';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='2.7.1', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='2.8.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics','dashboard','scouting','archive','scouter'];
   const labels={scouter:'FFScouter Premium',overview:'Live war',enemy:'Players',reports:'Tools & reports',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics',dashboard:'Full dashboard',scouting:'Faction scouting',archive:'Detailed reports'};
@@ -6392,6 +6392,44 @@
       'There is not enough evidence for a suitable hit. You do not need to force one; update the information or inspect possible targets.',
       'Check again','refresh');
   }
+  const queueLanes=[['coverage','Skull cover'],['watch','Watched & assigned'],['expiry','Hospital exits']];
+  let queueLane='coverage';
+  function warQueueRows(lane,players,heavy,watch,owners,at){
+    const rows=[];
+    for(const player of players){
+      const kind=memberState(player),assigned=owners.get(player.id)||[];
+      const release=kind==='hospital'&&player.until>at&&player.until<=at+30*MIN;
+      if(lane==='expiry'&&!release)continue;
+      if(lane==='watch'&&!watch.has(player.id))continue;
+      if(lane==='coverage'&&(!heavy.has(player.id)||assigned.some(h=>cfg.blackSkulls[h.id])||!(kind==='okay'||release)))continue;
+      rows.push({player,kind,release,assigned});
+    }
+    const order=row=>row.kind==='okay'?0:row.release?1:2;
+    return rows.sort((a,b)=>order(a)-order(b)||(a.release&&b.release?a.player.until-b.player.until:0)||a.player.name.localeCompare(b.player.name)||a.player.id-b.player.id);
+  }
+  function liveQueueCard(){
+    if(!activeWarNow())return '';
+    if(!rosterFresh('ours')||!rosterFresh('enemies'))return card('War queues','<p>Refresh both rosters to check assignments and release times.</p>'+b('Refresh rosters','refresh'));
+    const owners=new Map();
+    for(const hitter of state.data.ours){
+      const id=positive(cfg.assignments[hitter.id]);if(!id)continue;
+      if(!owners.has(id))owners.set(id,[]);owners.get(id).push(hitter);
+    }
+    const at=Date.now(),heavy=enemyRoleBands().heavy,watched=watchedTargetIds();
+    const queues=new Map(queueLanes.map(([lane])=>[lane,warQueueRows(lane,state.data.enemies,heavy,watched,owners,at)]));
+    const rows=queues.get(queueLane);
+    const line=row=>{
+      const p=row.player,place=nativeWarLocation(p),expiry=row.release?'Hospital ~'+Math.ceil((p.until-at)/MIN)+'m':p.status||'Unknown';
+      const owner=row.assigned.length?'Assigned: '+row.assigned.map(h=>h.name).join(', '):'Unassigned';
+      return '<div class="ws-note"><div class="ws-player-heading">'+infoButton(p.name,p.id)+'<strong>'+esc(expiry)+'</strong></div><small>'+esc(place.country+' / '+owner)+'</small></div>';
+    };
+    const descriptions={coverage:'Black Skull targets currently Okay or due out within 30 minutes without an assigned Black Skull.',watch:'Your watched opponents and current faction assignments.',expiry:'Enemy hospital timers ending in the next 30 minutes, earliest first.'};
+    return card('War queues',workspaceTabs(queueLanes.map(([lane,name])=>[lane,name+' ('+queues.get(lane).length+')']),queueLane,'war-queue:')+
+      '<p class="ws-small">'+descriptions[queueLane]+'</p>'+rows.slice(0,3).map(line).join('')+
+      (rows.length>3?'<details data-ws-disclosure="queue-'+queueLane+'"><summary>Show '+(rows.length-3)+' more</summary>'+rows.slice(3).map(line).join('')+'</details>':'')+
+      (!rows.length?'<p>No matching opponents in the latest roster.</p>':'')+
+      (queueLane==='coverage'&&rows.length?b('Manage assignments','tab:command'):''));
+  }
   function warWorkspace(){
     const next=nextWarStep(),live=activeWarNow(),score=live?warScore():null;
     const situation=score?(score.net>=0?'Leading by ':'Behind by ')+fmt(Math.abs(score.net))+' points':'No confirmed live score';
@@ -6403,7 +6441,7 @@
       '<p>'+esc(next.reason)+'</p><button class="ws-primary-action" type="button" data-action="'+esc(next.action)+'" '+
       (state.loading?'disabled':'')+'>'+esc(state.loading?'Updating...':next.label)+' <span aria-hidden="true">\u2192</span></button></section>'+
       '<p class="ws-focus-freshness">'+(state.loading?'Checking Torn now...':live?'Roster checked '+esc(age(Math.min(n(state.data.updated.ours),n(state.data.updated.enemies)))):'Connect / refresh to check current conditions.')+'</p>'+
-      '<details class="ws-focus-extra" data-ws-disclosure="war-evidence"><summary>Show the wider picture</summary>'+
+      liveQueueCard()+'<details class="ws-focus-extra" data-ws-disclosure="war-evidence"><summary>Show the wider picture</summary>'+
       '<div class="ws-toolbar">'+b('Squad command','tab:leader')+b('My mission','workspace-mission')+b('All operations','tab:operations')+'</div>'+
       (live?deskChangesCard()+warPlanningCard():b('Past wars','tab:history'))+'</details></div>';
   }
@@ -6432,6 +6470,7 @@
       a==='Unknown'?1:b==='Unknown'?-1:a.localeCompare(b);
     const rank={okay:0,hospital:1,away:2,jail:3,fallen:4,unknown:5};
     const strengthOrder=workspace.sort==='lowest'||workspace.sort==='highest';
+    if(workspace.sort==='ffs')for(const row of selected){const source=ffscouter(row.player.id);row.personalFF=source&&!ffIsStale(source)&&Number.isFinite(source.ff)?source.ff:Infinity;}
     if(strengthOrder)for(const row of selected)row.total=nativeWarStrength(row.player).total;
     selected.sort((a,b)=>{
       const group=countryOrder(a.location.country,b.location.country);if(a.location.country!==b.location.country)return group;
@@ -6440,7 +6479,8 @@
         const aKnown=Number.isFinite(a.total),bKnown=Number.isFinite(b.total);
         order=Number(bKnown)-Number(aKnown);
         if(aKnown&&bKnown)order=(workspace.sort==='lowest'?1:-1)*(a.total-b.total);
-      }else if(workspace.sort==='name')order=a.player.name.localeCompare(b.player.name);
+      }else if(workspace.sort==='ffs')order=a.personalFF===b.personalFF?0:a.personalFF-b.personalFF;
+      else if(workspace.sort==='name')order=a.player.name.localeCompare(b.player.name);
       else if(workspace.sort==='recent')order=n(b.player.lastAt)-n(a.player.lastAt);
       else if(workspace.sort==='points')order=(b.impact.given??b.impact.scored??-1)-(a.impact.given??a.impact.scored??-1);
       else if(workspace.sort==='net')order=(b.impact.net??-Infinity)-(a.impact.net??-Infinity);
@@ -6459,7 +6499,7 @@
     return '<article class="ws-player-row"><div class="ws-player-heading">'+
       infoButton(p.name,p.id)+(row.skull?'<span class="ws-skull-mark" aria-label="Black Skull">\u2620</span>':'')+
       '<span class="ws-player-status '+tone+'">'+esc(fresh?p.status:'Cached: '+p.status)+(timer?' / '+timer:'')+'</span></div>'+
-      '<p class="ws-player-glance">'+esc(own?'Given '+(!impact.complete&&impact.given!==null?'at least ':'')+scoreLabel(impact.given)+' captured points':strength.short)+'</p>'+
+      '<p class="ws-player-glance">'+esc(own?'Given '+(!impact.complete&&impact.given!==null?'at least ':'')+scoreLabel(impact.given)+' captured points':strength.short)+(workspace.sort==='ffs'?' / FFS '+(Number.isFinite(row.personalFF)?row.personalFF.toFixed(2):'unknown'):'')+'</p>'+
       '<details data-ws-disclosure="roster-'+side+'-'+p.id+'"><summary>Details and actions</summary>'+
       (scouterDistributionText(p.id)?'<p class="ws-small">'+esc(scouterDistributionText(p.id))+'</p>':'')+
       '<div class="ws-player-metrics">'+(own?metric('Earned',impact.earned)+metric('Given',impact.given)+metric('Net*',impact.net):
@@ -6480,7 +6520,7 @@
       workspaceTabs([['enemies','Opponents'],['ours','Our faction']],data.side,'workspace-side:')+
       '<div class="ws-roster-controls"><input id="ws-roster-query" type="search" value="'+esc(workspace.query)+'" placeholder="Find name or ID" aria-label="Search roster">'+
       options('ws-roster-country',[['all','All countries'],...data.countries.map(x=>[x,x])],workspace.country)+
-      options('ws-roster-sort',[['status','Okay first'],['hospital','Hospital expiry'],['name','Name A-Z'],['recent','Recent activity'],['lowest','Lowest total stats'],['highest','Highest total stats'],['points',own?'Most points given':'Most points scored'],...(own?[['net','Best net']]:[])],workspace.sort)+'</div>'+
+      options('ws-roster-sort',[['status','Okay first'],['hospital','Hospital expiry'],['name','Name A-Z'],['recent','Recent activity'],['lowest','Lowest total stats'],['highest','Highest total stats'],...(!own?[['ffs','Lowest personal FFS']]:[]),['points',own?'Most points given':'Most points scored'],...(own?[['net','Best net']]:[])],workspace.sort)+'</div>'+
       workspaceTabs([['all','All'],['okay','Okay'],['hospital','Hospital'],['away','Away'],['here','Here'],['releasing','Hospital within 15m'],['skulls','Skulls'],['watched','Watched']],workspace.filter,'workspace-filter:')+
       '<div class="ws-live-meta"><span>'+data.rows.length+' / '+data.total+' players | '+(data.fresh?'Roster '+esc(age(state.data.updated[data.side])):'STALE ROSTER')+'</span>'+b('Reset filters','workspace-reset')+'</div>'+
       '<p class="ws-small">Points are captured ranked-war attack respect, not official member scores. Partial values are minimums; net* is uncertain when either side is incomplete.</p>';
@@ -6659,13 +6699,14 @@
     event('panel',{id:ID,open:false});
   }
   function handle(action){
+    if(action.startsWith('war-queue:')){const lane=action.slice(10);if(queueLanes.some(([id])=>lane===id)){queueLane=lane;render();}return;}
     if(action==='workspace-mission'){const id=positive(state.data.meta?.ownerId);if(id)handle('hitter:'+id);else navigate('matchups');return;}
     if(action==='workspace-back'){workspaceBack();return;}
     if(action.startsWith('workspace-lane:')){
       const value=action.slice(15);if(['priorities','mission','skulls','defence'].includes(value)){workspace.lane=value;render();}return;
     }
     if(action.startsWith('workspace-side:')){
-      const value=action.slice(15);if(['ours','enemies'].includes(value)){workspace.side=value;workspace.country='all';if(value==='enemies'&&workspace.sort==='net')workspace.sort='points';render();}return;
+      const value=action.slice(15);if(['ours','enemies'].includes(value)){workspace.side=value;workspace.country='all';if(value==='ours'&&workspace.sort==='ffs')workspace.sort='status';if(value==='enemies'&&workspace.sort==='net')workspace.sort='points';render();}return;
     }
     if(action.startsWith('workspace-filter:')){
       const value=action.slice(17);if(['all','okay','hospital','away','here','releasing','skulls','watched'].includes(value)){workspace.filter=value;render();}return;
@@ -8179,6 +8220,8 @@
           !impact?.known?'Awaiting API capture':impact.complete?'Current scan caught up':
           'Partial data \u00b7 counts are minimums'+(impact.error?' \u00b7 '+impact.error:''));
     }
+    const flight=scouterPremiumActive()?scouterFlightText(p.id):'';
+    if(flight)html+=field('Flight observation',flight);
     const distribution=scouterDistributionText(p.id);
     if(distribution)html+=field('FFScouter distribution',distribution);
     return '<div class="wsnw-expanded-detail" aria-label="Detailed player intelligence">'+
