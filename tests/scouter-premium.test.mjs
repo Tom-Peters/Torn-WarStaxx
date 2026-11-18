@@ -11,7 +11,8 @@ function fixture(response){
   cfg:{ffEnabled:true,ffConsent:true,ffKey:'fixture'},MIN:60000,HOUR:3600000,
   state:{data:{meta:{ffRegistration:{premium:true,at:Date.now()}},ffstats:{},enemies:[],ours:[]}}};
  const code=part('  const scouterExtra=','  // Fair Fight from FFScouter')+part('  const ffApiKey=','  function matchup(')+
- ';({scouterExtra,parseFFRows,ffscouter,parseScouterFlights,parseScouterActivity,scouterRead,scouterScreen,scouterPremiumActive,scouterArrivalAlerts,scouterDistributionText,pollScouterFlights})';
+ part('  function flightCountdown(', '  function inboundReturns(')+
+ ';({flightRouteLine,premiumTravelTimer,scouterFlightText,scouterExtra,parseFFRows,ffscouter,parseScouterFlights,parseScouterActivity,scouterRead,scouterScreen,scouterPremiumActive,scouterArrivalAlerts,scouterDistributionText,pollScouterFlights})';
  return {...runInNewContext(code,scope),scope,calls};
 }
 test('OpenAPI 1.20.0 selected estimate, distribution and spy provenance remain separate',()=>{
@@ -69,4 +70,19 @@ test('Expanded distribution preserves missing stats and entitlement',()=>{
  assert.match(f.scouterDistributionText(11),/STR 70% \/ SPD 30%/);
  assert.doesNotMatch(f.scouterDistributionText(11),/DEF 0/);
  f.scope.cfg.ffConsent=false;assert.equal(f.scouterDistributionText(11),'');
+});
+
+test('Premium return flight shows countdown, TCT landing and window on a mobile roster',()=>{
+ const f=fixture(),time=t=>Date.parse('2026-01-01T'+t+'Z'),now=time('14:45:35');
+ const trip={description:'Traveling from South Africa to Torn',method:'PI',
+  earliest:time('17:20:00'),latest:time('17:35:00'),approx:0};
+ const place={country:'Torn',phase:'inbound'};
+ f.scope.nativeWarLocation=()=>place;
+ f.scouterExtra.flights[12]={at:now,current:trip};
+ assert.equal(f.flightRouteLine(trip),'South Africa → Torn / ~17:28 TCT');
+ assert.equal(f.premiumTravelTimer({id:12},place,now),'~2h 42m');
+ assert.match(f.scouterFlightText(12),/PI.*17:28 TCT.*17:20 to 17:35 TCT/);
+ trip.approx=time('17:25:00');
+ assert.equal(f.flightRouteLine(trip),'South Africa → Torn / ~17:25 TCT');
+ assert.equal(f.premiumTravelTimer({id:12},place,now+4*60000),'');
 });

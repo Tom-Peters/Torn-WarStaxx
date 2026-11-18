@@ -10,11 +10,11 @@ function region(start,end){
   return source.slice(a,b);
 }
 
-test('all three Torn PDA version surfaces match 2.8.3 and script remains parser safe',()=>{
+test('all three Torn PDA version surfaces match 2.8.4 and script remains parser safe',()=>{
   assert.ok(source.startsWith('// ==UserScript==\n'));
-  assert.match(source,/^\/\/ @version\s+2\.8\.3$/m);
-  assert.match(source,/const id='war', version='2\.8\.3'/);
-  assert.match(source,/const ID='war', VER='2\.8\.3'/);
+  assert.match(source,/^\/\/ @version\s+2\.8\.4$/m);
+  assert.match(source,/const id='war', version='2\.8\.4'/);
+  assert.match(source,/const ID='war', VER='2\.8\.4'/);
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
 });

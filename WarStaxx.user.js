@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      2.8.3
+// @version      2.8.4
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -70,7 +70,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='2.8.3';
+  const id='war', version='2.8.4';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +183,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='2.8.3', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='2.8.4', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics','dashboard','scouting','archive','scouter'];
   const labels={scouter:'FFScouter Premium',overview:'Live war',enemy:'Players',reports:'Tools & reports',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics',dashboard:'Full dashboard',scouting:'Faction scouting',archive:'Detailed reports'};
@@ -1086,7 +1086,7 @@
     if(f.unknown)return old+'FFScouter flight not reported; location unknown.';
     if(!f.current)return old+'FFScouter reports no current trip; this does not establish location.';
     const x=f.current;
-    return old+'FFScouter: '+x.description+' / '+x.method+(x.earliest?' / estimated arrival window '+stamp(x.earliest)+' to '+stamp(x.latest):' / arrival window unknown')+' / checked '+age(f.at);
+    return old+'FFScouter: '+x.description+' / '+x.method+(flightLandingEstimate(x)?' / landing ~'+flightClock(flightLandingEstimate(x))+' TCT':'')+(x.earliest?' / estimated arrival window '+flightClock(x.earliest)+' to '+flightClock(x.latest)+' TCT':' / arrival window unknown')+' / checked '+age(f.at);
   }
   function scouterDistributionText(id){
     if(!scouterPremiumActive())return '';
@@ -1107,7 +1107,7 @@
       status:'now',priority:82,tab:'scouter'}]:[];
   }
   function pollScouterFlights(){
-    if(document.hidden||cfg.scouterFlightAlerts===false||!scouterPremiumActive()||scouterExtra.busy||(!activeWarNow()&&!preparingWar())||!rosterFresh('enemies'))return;
+    if(document.hidden||!scouterPremiumActive()||scouterExtra.busy||(!activeWarNow()&&!preparingWar())||!rosterFresh('enemies'))return;
     if(Date.now()-n(scouterExtra.attempts['flights:0'])<2*MIN)return;
     scouterRead('flights');
   }
@@ -1117,13 +1117,19 @@
     if(!trip||observation.at>at||at-observation.at>3*MIN)return '';
     const dest=nativeWarLocation({status:'Traveling',statusText:trip.description}).country;
     if(place.country!=='Unknown'&&dest!=='Unknown'&&place.country!==dest)return '';
-    const minutes=t=>Math.max(0,Math.ceil((t-at)/MIN));
-    if(trip.latest&&trip.latest<at)return '';
-    if(trip.earliest&&trip.latest){
-      const low=minutes(trip.earliest),high=minutes(trip.latest);
-      return 'FFS ~'+(low===high?high:low+'-'+high)+'m';
-    }
-    return trip.approx>at?'FFS ~'+minutes(trip.approx)+'m':'';
+    const estimate=flightLandingEstimate(trip);
+    if(!estimate||(trip.latest||estimate)<at)return '';
+    return estimate<=at?'Landing window':'~'+flightCountdown(estimate,at);
+  }
+  function flightLandingEstimate(trip){
+    return trip.approx||((trip.earliest&&trip.latest)?(trip.earliest+trip.latest)/2:0);
+  }
+  function flightClock(ms){
+    return new Date(Math.round(ms/MIN)*MIN).toISOString().slice(11,16);
+  }
+  function flightRouteLine(trip){
+    const route=trip.description.replace(/^travel(?:l)?ing from /i,'').replace(/ to /i,' \u2192 ');
+    return route+' / ~'+flightClock(flightLandingEstimate(trip))+' TCT';
   }
   function scouterStrengthHTML(id){
     const x=ffscouter(id);if(!x)return '<p>No cached strength estimate. Check stats to load this player.</p>';
@@ -3029,7 +3035,7 @@
       (state.data.errors.ffscouter?'<div class="ws-note ws-warn">FFScouter: '+esc(state.data.errors.ffscouter)+'</div>':'')+
       '<div class="ws-toolbar">'+b('Refresh FF','refresh-ff')+b('Check registered key','check-ff-key')+
       b('FF settings','tab:settings')+b('Premium intelligence','tab:scouter')+
-      '<label><input type="checkbox" id="ws-ff-flight-alerts" '+(cfg.scouterFlightAlerts!==false?'checked':'')+'> Flight arrival alerts: check preparation and live war rosters every two minutes while Torn is visible. Show estimated windows within 15 minutes; hide observations older than three minutes.</label>'+'</div>'+
+      '<label><input type="checkbox" id="ws-ff-flight-alerts" '+(cfg.scouterFlightAlerts!==false?'checked':'')+'> Notify me when a Premium flight could land within 15 minutes. Flight times on the roster update independently.</label>'+'</div>'+
       '<p class="ws-small">FFScouter calculated FF can exceed 3.00: that means an increasingly tough opponent, NOT bonus respect above 3.00. Torn awarded FF stays between 1.00 and 3.00; logged attacks are labelled observed.</p>');
   }
   async function manualFFCheck(onlyCheck=false){
@@ -7749,7 +7755,13 @@
     });
     if(!anchor){box?.remove();return;}
     const p=state.data[side].find(p=>p.id===id),strength=nativeWarStrength(p),fresh=rosterFresh(side);
-    const text=(fresh?'':'Cached roster / ')+nativeWarLocation(p).country+' / '+p.status+' / '+strength.short;
+    const place=nativeWarLocation(p),now=Date.now();
+    if(memberState(p)==='away'&&place.phase!=='abroad'&&scouterPremiumActive()&&!scouterExtra.busy&&
+      now-Math.max(n(scouterExtra.flights[id]?.at),n(scouterExtra.attempts['flights:'+id]))>=2*MIN)
+      scouterRead('flights',id);
+    const timer=premiumTravelTimer(p,place,now);
+    const travel=timer?flightRouteLine(scouterExtra.flights[id].current)+' / '+timer:place.country+' / '+p.status;
+    const text=(fresh?'':'Cached roster / ')+travel+' / '+strength.short;
     const signature=JSON.stringify([id,text,strength.detail,side]);
     if(box?.dataset.signature===signature&&box.previousElementSibling===anchor)return;
     box?.remove();box=document.createElement('details');box.id='warstaxx-profile-detail';box.dataset.signature=signature;
@@ -8105,6 +8117,9 @@
         'box-shadow:inset 0 -4px #ffb44e!important;outline:1px solid #b37a37!important}'+
       '.faction-war ul.members-list li.wsnw-hospital-soon > .status{'+
         'box-shadow:inset 0 -4px #48df9b!important;outline:1px solid #319a74!important}';
+    style.textContent+=
+      '.faction-war ul.members-list li.wsnw-enhanced.wsnw-flight-row:not(.wsnw-expanded){height:88px!important;min-height:88px!important}'+
+      '.faction-war ul.members-list li.wsnw-flight-row>.wsnw-flight-line{position:absolute!important;bottom:0;left:0;right:0;padding:2px 6px;background:#102d40;color:#b1e6f1;font:600 11px/16px system-ui;text-align:left;touch-action:pan-y}';
     document.head.appendChild(style);
   }
   // An opt-in small, draggable chain indicator. Never mounted over an attack page.
@@ -8176,7 +8191,8 @@
       row.classList.remove('wsnw-enhanced','wsnw-recent','wsnw-hospital-soon','wsnw-hospital-warning','wsnw-filtered');
       row.classList.remove('wsnw-heavy-target','wsnw-newly-okay','wsnw-expanded','wsnw-under-fire','wsnw-has-skull',
         'wsnw-net-up','wsnw-net-down','wsnw-enemy-scorer');
-      row.querySelectorAll('.wsnw-intel,.wsnw-detail,.wsnw-badge,.wsnw-copy').forEach(el=>el.remove());
+      row.classList.remove('wsnw-flight-row');
+      row.querySelectorAll('.wsnw-flight-line,.wsnw-intel,.wsnw-detail,.wsnw-badge,.wsnw-copy').forEach(el=>el.remove());
     }
   }
   function nativeWarDetailHTML(p,enemy,kind,place,band,orders){
@@ -8563,6 +8579,13 @@
         const place=nativeWarLocation(p);
         const flightTimer=kind==='away'&&(!enemy||fresh)&&!(place.eta>now)?premiumTravelTimer(p,place,now):'';
         if(flightTimer)message=flightTimer;
+        let flightLine=row.querySelector('.wsnw-flight-line');
+        row.classList.toggle('wsnw-flight-row',Boolean(flightTimer)&&!expanded);
+        if(flightTimer&&!expanded){
+          if(!flightLine){flightLine=el('div','wsnw-flight-line');row.appendChild(flightLine);}
+          const label=flightRouteLine(scouterExtra.flights[id].current);
+          if(flightLine.textContent!==label)flightLine.textContent=label;
+        }else flightLine?.remove();
         const timer=chip('status',message,(kind==='hospital'&&(!enemy||fresh)?'wsnw-hospital ':'')+
           (enemy&&kind==='okay'&&fresh?'wsnw-ready ':'')+hospitalTier,'Torn roster observed '+age(state.data.updated[enemy?'enemies':'ours'])+
           ' | '+place.country+' ('+place.source+')');
@@ -8713,7 +8736,7 @@
           row.style?.setProperty?.('--wsnw-expanded-height',rowHeight+'px');
         }else row.style?.removeProperty?.('--wsnw-expanded-height');
       }
-      if(!conflict){
+      if(!nativeWarActiveSortConflict(list)){
         if(rows.some(row=>row.classList.contains('enemy'))){
           if(fresh)nativeWarSort(list,enemyMap,cfg.nativeWarSort||'availability');
         }else if(rows.some(row=>row.classList.contains('your'))){
