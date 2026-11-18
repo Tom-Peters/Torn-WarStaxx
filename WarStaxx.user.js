@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      2.8.6
+// @version      2.8.7
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -12,6 +12,7 @@
 // @grant        GM_xmlhttpRequest
 // @connect      api.torn.com
 // @connect      ffscouter.com
+// @connect      *.workers.dev
 // @updateURL    https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js
 // @downloadURL  https://raw.githubusercontent.com/Tom-Peters/Torn-WarStaxx/main/WarStaxx.user.js
 // ==/UserScript==
@@ -70,7 +71,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='2.8.6';
+  const id='war', version='2.8.7';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -183,7 +184,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='2.8.6', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='2.8.7', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics','dashboard','scouting','archive','scouter'];
   const labels={scouter:'FFScouter Premium',overview:'Live war',enemy:'Players',reports:'Tools & reports',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics',dashboard:'Full dashboard',scouting:'Faction scouting',archive:'Detailed reports'};
@@ -3352,13 +3353,49 @@
       'Accept':'application/json'};
     if(method==='PUT'){headers['Content-Type']='application/json';
       headers['If-Match']=String(revision);}
-    // Deliberately uses CORS fetch: never sends the Torn API key or credentials.
+    const body=method==='PUT'?JSON.stringify({data:payload}):undefined;
+    const parseTransport=response=>{
+      const status=Number(response?.status);
+      if(!Number.isFinite(status)||status<100)
+        throw new Error('Worker native transport returned no HTTP status');
+      let result;
+      try{result=JSON.parse(String(response?.responseText??''));}
+      catch(_){result={error:'Invalid JSON response from Worker'};}
+      return {ok:status>=200&&status<300,status,result};
+    };
+    // Torn PDA native HTTP bridges cross-origin GET/PUT, avoiding WebView CORS.
+    const pdaTransport=method==='GET'?typeof PDA_httpGet==='function':
+      method==='PUT'?typeof PDA_httpPut==='function':false;
+    if(pdaTransport){
+      let timer;
+      try{
+        return await Promise.race([
+          Promise.resolve().then(()=>method==='GET'?PDA_httpGet(url,headers):
+            PDA_httpPut(url,headers,body)).then(parseTransport),
+          new Promise((_,reject)=>{timer=setTimeout(()=>
+            reject(new Error('Worker native HTTP request timed out')),12000);})
+        ]);
+      }catch(e){
+        const reason=/timed out/i.test(String(e?.message||e))?'timed out':
+          'could not complete request';
+        throw new Error('Worker Torn PDA connection '+reason+'. Check the Worker URL and PDA network access.');
+      }finally{clearTimeout(timer);}
+    }
+    if(typeof GM_xmlhttpRequest==='function'){
+      return await new Promise((resolve,reject)=>GM_xmlhttpRequest({
+        method,url,headers,...(body===undefined?{}:{data:body}),timeout:12000,
+        onload:r=>{try{resolve(parseTransport(r));}catch(e){reject(e);}},
+        onerror:()=>reject(new Error('Worker GM cross-origin connection failed')),
+        ontimeout:()=>reject(new Error('Worker GM request timed out'))
+      }));
+    }
+    // Browser fallback for contexts where neither privileged bridge exists.
     const controller=typeof AbortController==='function'?new AbortController():null;
     const timer=setTimeout(()=>controller?.abort(),12000);
     try{
       const response=await fetch(url,{method,mode:'cors',credentials:'omit',cache:'no-store',
         headers,...(controller?{signal:controller.signal}:{}),
-        ...(method==='PUT'?{body:JSON.stringify({data:payload})}:{})});
+        ...(body===undefined?{}:{body})});
       let result;try{result=await response.json();}catch(_){result={error:'Invalid server response'};}
       return {ok:response.ok,status:response.status,result};
     }finally{clearTimeout(timer);}

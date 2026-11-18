@@ -1,3 +1,7 @@
+## 2.8.7 - Shared Cloudflare orders from Torn PDA
+
+WarStaxx now sends Cloudflare shared-order GET and PUT requests through Torn PDA's native HTTP bridge when available, with GM userscript HTTP support and browser fetch as the final fallback. This addresses the WebView `Failed to fetch` error and preserves HTTPS, existing bearer-token authentication, revision-conflict protection, local settings and saved orders. Worker secrets remain in Cloudflare and are never passed through TornStaxx hub events. Live Torn PDA connectivity and configured account permissions still require device verification.
+
 ## 2.7.1 - expanded distributions and arrival alerts
 
 Expanded players in both the main roster and Torn native ranked-war rows now show supplied Premium STR/SPD/DEF/DEX percentages with age and estimate labels. Unknown stats are omitted.
