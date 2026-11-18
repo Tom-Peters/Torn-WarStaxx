@@ -70,7 +70,7 @@ test('Torn PDA: compact rows keep the native player/status cells intact',()=>{
   };
   const code=section('  function syncNativeWar(){','  async function pollNativeWar(){');
   const render=runInNewContext(code+';syncNativeWar',context);
-  render();render();
+  render();context.activeWarNow=()=>false;context.preparingWar=()=>true;render();
   assert.equal(member.children.length,0,'Member image and name cell must not receive labels');
   assert.equal(status.children.length,0,'Torn status cell must remain untouched');
   assert.equal(row.children.length,1,'One intel subrow even after repeated refreshes');
