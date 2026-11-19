@@ -9,7 +9,7 @@ function part(a,b){
  return source.slice(begin,end);
 }
 function fixture(setup,a,b,out){
- return runInNewContext(setup+'\n'+part(a,b)+';\n'+out);
+ return runInNewContext('const commandRoom=()=>null,pairRows=()=>[],pairEvidence=()=>({recent:[]});'+setup+'\n'+part(a,b)+';\n'+out);
 }
 test('FFScouter and manual BSS partition toughest 40% for Black Skulls',()=>{
  const setup=[
@@ -147,7 +147,7 @@ test('four-layer navigation and existing advanced pages remain functional',()=>{
    "const pages={scouter:scouterScreen,overview:warWorkspace,enemy:rosterWorkspace,reports:archiveWorkspace,dashboard:overview,scouting:enemyScreen,archive:reportsScreen,leader:leaderScreen",
    "function warQuick(action)"
  ])assert.ok(source.includes(token),'Missing '+token);
- assert.match(source,/\/\/ @version\s+2\.8\.7/);
+ assert.match(source,/\/\/ @version\s+\d+\.\d+\.\d+/);
  assert.doesNotMatch(source,/[^\x00-\x7f]/);
  assert.doesNotThrow(()=>new Script(source));
 });

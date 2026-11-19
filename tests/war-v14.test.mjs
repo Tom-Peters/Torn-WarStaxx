@@ -151,7 +151,7 @@ test('similar-strength cohort compares same hitter across two previous wars and 
 });
 test('new interface is wired without automatic attack or chat post',()=>{
  for(const marker of [
-  "const ID='war', VER='2.8.8'",
+  "const ID='war', VER='3.0.0'",
   "function heavyTargetPriorities(",
   "function skullChatBrief(",
   "function captureAttackBssObservations(",

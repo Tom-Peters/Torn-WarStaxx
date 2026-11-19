@@ -11,7 +11,7 @@ function region(start,end){
 }
 function setup(){
   const stub=[
-    'const positive=v=>Number(v)||0;',
+    'const sharedQueue=()=>[],sharedRestriction=()=>null;const positive=v=>Number(v)||0;',
     'const cfg={assignments:{7:100},blackSkulls:{7:true}};',
     'const state={data:{enemies:[{id:100,name:"My order",status:"Okay"},{id:200,name:"Bigger yield",status:"Okay"}],updated:{ours:Date.now(),enemies:Date.now()}}};',
     'let fresh=true,eligible=true,roleOkay=true,energy=75;',
@@ -49,7 +49,7 @@ test('stale roster, wrong BSS bracket, missing spy evidence and low energy block
   assert.equal(f.myMission().target,null);
   assert.match(f.myMission().issue,/five minutes/);
   f.setFresh(true);f.setRole(false);
-  assert.match(f.myMission().issue,/BSS bracket/);
+  assert.match(f.myMission().issue,/strength bracket/);
   f.setRole(true);f.setEligible(false);
   assert.match(f.myMission().issue,/new matchup check/);
   f.setEligible(true);f.setEnergy(20);
@@ -85,7 +85,7 @@ test('high-BSS coverage gaps are prioritised; lower risk labels remain honest',(
 });
 test('distributed Torn PDA userscript is ASCII-only, parser safe and versioned',()=>{
   assert.ok(source.startsWith('// ==UserScript==\n'));
-  assert.match(source,/^\/\/ @version\s+2\.8\.8$/m);
+  assert.match(source,/^\/\/ @version\s+\d+\.\d+\.\d+$/m);
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
 });

@@ -1,5 +1,8 @@
 # WarStaxx optional shared orders service
 
+For the 3.0 command endpoint, additive D1 migration, member credentials and safe release sequence, see the [3.0 operator guide](../docs/RELEASE-3.0.md).
+
+
 This Cloudflare Worker and D1 database store only seven per-war shared planning fields: faction war assignments, Black Skulls membership, individual hitter risk modes, hospital-control watchers, turtle posture/member duties, leader duty statuses, and the Black Skulls strength cutoff policy. No Torn API keys, manual spies, notes, medical readings or private player statistics are uploaded.
 
 Deployment:

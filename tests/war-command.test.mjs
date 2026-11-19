@@ -20,7 +20,7 @@ function scoreFixture(){
     "const memberState=p=>String(p.status||'unknown').toLowerCase();",
     "const isOnline=p=>Boolean(p.online);"
   ].join('\n');
-  return runInNewContext(setup+extract('  function trimWarLogs(){','  function snapshot(')+
+  return runInNewContext('const commandRoom=()=>null,pairRows=()=>[],pairEvidence=()=>({recent:[]});'+setup+extract('  function trimWarLogs(){','  function snapshot(')+
     '; ({cfg,state,recordWarScore,warPace,recordWarObservation,warSamples,trimWarLogs})');
 }
 function targetFixture(){
@@ -44,7 +44,7 @@ function targetFixture(){
     'const hitterRisk=()=>({mode:"balanced",maxRatio:.70,minWins:0});',
     "const matchup=(friend,enemy)=>enemy.ratio===null?{known:false,ratio:null,ff:null}:{known:true,ratio:enemy.ratio,ff:2.2,exact:[101,103].includes(enemy.id),confidence:'model'};"
   ].join('\n');
-  return runInNewContext(setup+extract('  function rosterFresh(','  function assignments(){')+
+  return runInNewContext('const commandRoom=()=>null,pairRows=()=>[],pairEvidence=()=>({recent:[]});'+setup+extract('  function rosterFresh(','  function assignments(){')+
     '; ({cfg,state,matchEvidence,personalShortlist,hitterPlanKey,hitterPlanStatus,leadershipSummary,suggestedDraft})');
 }
 test('official war score snapshots produce true observed point rates',()=>{

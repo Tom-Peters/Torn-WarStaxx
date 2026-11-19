@@ -9,7 +9,7 @@ function slice(start,end){
  return source.slice(a,b);
 }
 function fixture(setup,start,end,out){
- return runInNewContext(setup+'\n'+slice(start,end)+';\n'+out);
+ return runInNewContext('const commandRoom=()=>null,pairRows=()=>[],pairEvidence=()=>({recent:[]});'+setup+'\n'+slice(start,end)+';\n'+out);
 }
 test('Torn API v2 ranked attack format and older logs are both recognised',()=>{
  const setup=[
@@ -20,7 +20,7 @@ test('Torn API v2 ranked attack format and older logs are both recognised',()=>{
    'const epochMs=v=>Number(v)*1000;',
    'const validFF=v=>v===null||v===undefined?null:Number(v);'
  ].join('\n');
- const f=fixture(setup,'  function attacks(j){',
+ const f=fixture(setup,'  function attacks(j,includePartial=false){',
    '  // Attack attribution is conservative:','({attacks})');
  const raw={attacks:[
    {id:555,started:1730000000,ended:1730000060,is_ranked_war:true,
@@ -191,7 +191,7 @@ test('Black Skulls and regular-member reports have separate copyable, source-lab
 });
 test('Skull Capo screen, custom controls and dual after-action reports are wired',()=>{
  for(const token of [
-  "const ID='war', VER='2.8.8'",
+  "const ID='war', VER='3.0.0'",
   "leader:'Skull Capo command'",
   "SKULL CAPO | BLACK SKULLS COMMAND",
   "id=\"ws-heavy-mode\"","id=\"ws-heavy-percent\"","id=\"ws-heavy-bss\"",

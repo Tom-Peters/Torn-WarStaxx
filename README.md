@@ -1,3 +1,9 @@
+## 3.0 release candidate
+
+The Live war screen, country-grouped Players view and TornStaxx hub open the new command rooms, activity forecasts, defensive travel planner and private combat archive. The current production installer continues to follow main while this branch is under review.
+
+[Operator guide, permissions, migration, deployment and rollback](docs/RELEASE-3.0.md)
+
 ## 2.8.8 - Shared Black Skull policy sync compatibility
 
 Fixes shared-orders PUT 400 when WarStaxx's v2 Black Skull targeting uses `relative` mode (strongest regular member plus recorded winning attacks), previously rejected by the Cloudflare Worker. The Worker now accepts and retains this policy with schema version 2 and continues to support legacy `percent` and `min-bss`. WarStaxx accepts the same mode on shared GET. No keys, assignments or local history are reset. After deployment, test Publish then Pull; live Torn PDA connectivity still requires verification.

@@ -12,3 +12,18 @@ jobs:
         with:
           node-version: '22'
       - run: npm test
+      - name: Verify migration and competing writes on local D1
+        run: |
+          npm install --prefix "$RUNNER_TEMP/war-runtime" --no-audit --no-fund wrangler@4.165.0
+          NODE_PATH="$RUNNER_TEMP/war-runtime/node_modules" node tests/worker/d1-runtime.mjs
+      - name: Check out the supported TornStaxx hub for integration testing
+        uses: actions/checkout@v4
+        with:
+          repository: Tom-Peters/TornStaxx
+          ref: 0756ac2b7d26ea9b845eee154fff3564eaf0eac4
+          path: hub-fixture
+          persist-credentials: false
+      - name: Test installed userscript and hub at 360px in Chrome
+        run: |
+          python -m pip install playwright==1.56.0
+          python tests/browser/command_mobile.py hub-fixture/TornStaxx.user.js

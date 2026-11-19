@@ -10,3 +10,6 @@ migrations_dir = "migrations"
 
 [vars]
 FACTION_ID = "57819"
+
+[triggers]
+crons = ["17 * * * *"]

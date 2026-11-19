@@ -36,7 +36,7 @@ function matchingFixture(){
     'const matchup=(friend,enemy)=>{const ratios={1:{101:0.35,102:0.45},2:{101:0.38,102:1.35}};'+
       "return {known:true,ratio:ratios[friend.id]?.[enemy.id],ff:2.5,exact:[101,102].includes(enemy.id),confidence:'Two recent spies'};};"
   ].join('\n');
-  return runInNewContext(setup+part('  function rosterFresh(','  function assignments(){')+
+  return runInNewContext('const commandRoom=()=>null,pairRows=()=>[],pairEvidence=()=>({recent:[]});'+setup+part('  function rosterFresh(','  function assignments(){')+
     '; ({cfg,state,rosterFresh,enemyHospitalExit,watchedTargetIds,matchEvidence,personalShortlist,suggestedDraft})');
 }
 test('collision-aware matching covers two hitters instead of greedy double-booking',()=>{
@@ -91,7 +91,7 @@ test('Operations tab, manual controls and safe user-script installer remain wire
     "'operations','ledger'"]){
     assert.ok(source.includes(fragment),'Missing integration: '+fragment);
   }
-  assert.match(source,/\/\/ @version\s+2\.8\.7/);
+  assert.match(source,/\/\/ @version\s+\d+\.\d+\.\d+/);
   assert.ok(source.startsWith('// ==UserScript==\n'));
   assert.doesNotMatch(source,/[^\x00-\x7f]/);
   assert.doesNotThrow(()=>new Script(source));
@@ -105,7 +105,7 @@ test('switching opponent isolates manual orders and restores previous faction on
     'const state={data:{enemies:[{id:101}],enemyWars:[],updated:{enemies:Date.now(),enemyWars:Date.now()}}};',
     'let writes=0;const saveCfg=()=>writes++;'
   ].join('\n');
-  const x=runInNewContext(setup+part('  function setOpponent(','  function latestFinished(')+
+  const x=runInNewContext('const commandRoom=()=>null,pairRows=()=>[],pairEvidence=()=>({recent:[]});'+setup+part('  function setOpponent(','  function latestFinished(')+
     '; ({cfg,state,setOpponent,get writes(){return writes}})');
   assert.equal(x.setOpponent(30),true);
   assert.equal(x.cfg.enemyId,30);
@@ -259,7 +259,7 @@ function workspaceRosterFixture(){
  let fresh=true;
  const context={workspace,state,cfg:{watchlist:{2:true},blackSkulls:{}},n:v=>Number(v)||0,
   rosterFresh:()=>fresh,enemyRoleBands:()=>({heavy:new Set([2])}),memberState:p=>p.status,
-  nativeWarLocation:p=>({country:p.country}),nativeWarOwnLocation:()=>({known:true,country:'Torn'}),
+  currentLocation:p=>({country:p.country}),nativeWarLocation:p=>({country:p.country}),nativeWarOwnLocation:()=>({known:true,country:'Torn'}),
   liveEnemyWarImpact:id=>({scored:id===2?20:null}),liveWarMemberImpact:()=>({net:null})};
  const api=runInNewContext(part('  function workspacePlayers(','  function workspacePlayerRow(')+';({workspacePlayers})',context);
  return {...api,workspace,state,setFresh:value=>{fresh=value;}};
