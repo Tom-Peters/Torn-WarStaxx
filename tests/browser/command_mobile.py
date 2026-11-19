@@ -20,6 +20,9 @@ data = dict(ours=[player(1,"Hitter","Torn"), player(2,"Regular","Canada","Abroad
             war=dict(id=7,start=NOW//1000-3600,opponentId=20,opponentName="Rivals",factions=[dict(id=10,score=45),dict(id=20,score=35)],target=500,status="active",observed=NOW),
             attacks=[dict(id=123456,attacker=1,defender=3,attackerFaction=10,defenderFaction=20,at=NOW-300000,result="Stalemate")])
 
+fixture_hour = (NOW // 86400000 - 1) * 24 + 6
+data['activity'] = {'enemies:3': {'hours': {str(fixture_hour): {'online': 3, 'count': 4}}}}
+
 def open_view(page, view):
     page.evaluate("(section)=>document.dispatchEvent(new CustomEvent('staxx:open',{detail:{id:'war',section}}))",view)
     page.wait_for_selector("#warstaxx-root .ws-content:visible")
@@ -56,10 +59,23 @@ with sync_playwright() as pw:
         assert expected.lower() in text.lower(),(view,text[:600])
         assert page.locator(".ws-content").evaluate("e=>e.scrollWidth<=e.clientWidth+2"),(view,"horizontal overflow")
     assert "1 unique attacks" in page.locator(".ws-content").inner_text()
+    # The legacy Activity route in PDA must expose the opponent even without friendly samples.
+    open_view(page, "activity")
+    assert 'Visitor' in page.locator('.ws-content').inner_text()
+    assert 'in Canada' in page.locator('.ws-content').inner_text()
+    cell = page.locator('[data-action="hour:6"]')
+    assert '75%' in cell.inner_text()
+    cell.click()
+    detail = page.locator('#ws-enemy-hour-detail')
+    assert '06:00-06:59 TCT' in detail.inner_text()
+    assert 'Objective' in detail.inner_text()
+    detail.get_by_role('button', name='Objective').click()
+    assert 'stalemates' in page.locator('.ws-content').inner_text().lower()
     open_view(page,"enemy")
     assert page.locator('.ws-country-title').all_text_contents()==["Torn","Canada"]
     page.locator('.ws-roster-grid details summary').first.click()
     assert page.locator('.ws-roster-grid details[open]').count()==1
+    assert 'Your attack / Stalemate' in page.locator('.ws-roster-grid details[open]').inner_text()
     open_view(page,'heatmap')
     scroll=page.locator('.ws-hour-scroll').first
     assert scroll.evaluate("e=>{e.scrollLeft=140;return e.scrollLeft>0}")

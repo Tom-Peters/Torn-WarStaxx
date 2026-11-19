@@ -1,5 +1,6 @@
   const activityPrefs={days:7,period:'all',player:0,source:'roster'};
-  let activitySweep=0,scannerAttempt=0,scannerBusy=false,scannerError='';
+  let activitySweep=0,scannerBusy=false,scannerError='';
+  let scannerScope='',scannerAttempts=new Map();
   function warAt(faction,at){
     const current=state.data.war;
     if(current&&[cfg.ourId,current.opponentId].includes(faction)&&at>=epochMs(current.start)&&at<=n(current.observed))return current.id;
@@ -70,20 +71,31 @@
     await transact('hours',s=>rows.forEach(r=>s.put(r)));rows.forEach(r=>combatArchive.hours.set(r.id,r));
   }
   async function loadFactionScanner(){
-    if(scannerBusy||document.hidden||Date.now()-scannerAttempt<15*MIN||!cfg.ffConsent||!cfg.ffEnabled)return;
-    const key=ffApiKey(),factions=[...new Set([cfg.ourId,cfg.enemyId].filter(idKey))];
-    if(!key||!factions.length)return;
-    scannerBusy=true;scannerAttempt=Date.now();scannerError='';
+    if(scannerBusy||document.hidden||!cfg.ffConsent||!cfg.ffEnabled)return;
+    const key=ffApiKey(),owner=positive(state.data.meta.ownerId);
+    const factions=[...new Set([cfg.enemyId,cfg.ourId].filter(idKey))];
+    if(!key||!owner||!factions.length)return;
+    if(scannerScope!==key+'/'+owner){scannerScope=key+'/'+owner;scannerAttempts.clear();scannerError='';}
+    const due=factions.filter(f=>Date.now()-(scannerAttempts.get(f)||0)>=15*MIN);
+    if(!due.length)return;
+    scannerBusy=true;scannerError='';
+    const valid=()=>cfg.ffConsent&&cfg.ffEnabled&&ffApiKey()===key&&positive(state.data.meta.ownerId)===owner&&!document.hidden;
     try{
-      await checkFFRegistration();if(!scouterPremiumActive())throw Error('Premium entitlement required');
-      for(const faction of factions){
+      await checkFFRegistration();
+      if(!valid())return;
+      if(!scouterPremiumActive()){for(const f of due)scannerAttempts.set(f,Date.now());return;}
+      for(const faction of due){
+        if(!valid()||![cfg.ourId,cfg.enemyId].includes(faction))continue;
+        scannerAttempts.set(faction,Date.now());
         const end=Math.floor(Date.now()/HOUR)*3600;
         const q=new URLSearchParams({key,faction_id:faction,start:end-30*86400,end,bucket:3600});
-        const body=await ffRequest('https://ffscouter.com/api/v1/activity/faction?'+q);
-        if(key!==ffApiKey()||!scouterPremiumActive()||document.hidden)return;
-        await captureScanner(body,faction);
+        try{
+          const body=await ffRequest('https://ffscouter.com/api/v1/activity/faction?'+q);
+          if(!valid()||!scouterPremiumActive())return;
+          await captureScanner(body,faction);
+        }catch{if(valid())scannerError+=(faction===cfg.enemyId?'Enemy':'Own')+' scanner history unavailable. ';}
       }
-    }catch{scannerError='Scanner history unavailable. Check Premium entitlement and provider coverage.';}
+    }catch{if(valid()){for(const f of due)scannerAttempts.set(f,Date.now());scannerError='Scanner registration unavailable.';}}
     finally{scannerBusy=false;if(state.open)render();}
   }
   function activityCells(faction,options=activityPrefs,at=Date.now()){

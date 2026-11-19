@@ -1,3 +1,7 @@
+## 3.0.1 – Enemy activity intelligence
+
+The Activity screen now reads enemy faction Premium history when enabled and shows enemy evidence even when our own coverage is missing. Select an hour to see observed players and captured attackers. The enemy briefing uses current roster status, dated strength estimates and the last official war scorecard.
+
 ## 3.0 release candidate
 
 The Live war screen, country-grouped Players view and TornStaxx hub open the new command rooms, activity forecasts, defensive travel planner and private combat archive. The current production installer continues to follow main while this branch is under review.
