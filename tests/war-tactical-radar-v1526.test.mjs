@@ -64,7 +64,7 @@ test('published script, loader, application and package share one release versio
   assert.match(source,/^\/\/ @version\s+\d+\.\d+\.\d+$/m);
   assert.match(source,/const id='war', version='\d+\.\d+\.\d+';/);
   assert.match(source,/const ID='war', VER='\d+\.\d+\.\d+'/);
-  assert.equal(packageJson.version,'3.0.0');
+  assert.equal(source.match(/@version\s+(\S+)/)[1],packageJson.version);
   assert.doesNotMatch(source,/[^\x00-\x7f]/,'Torn PDA must parse ASCII-only userscript source');
   assert.doesNotThrow(()=>new Script(source));
 });

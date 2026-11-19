@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      3.0.0
+// @version      3.0.1
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -71,7 +71,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='3.0.0';
+  const id='war', version='3.0.1';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -184,7 +184,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='3.0.0', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='3.0.1', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics','dashboard','scouting','archive','scouter','squad','brief','heatmap','flights','combat'];
   const labels={scouter:'FFScouter Premium',overview:'Live war',enemy:'Players',reports:'Tools & reports',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics',dashboard:'Full dashboard',scouting:'Faction scouting',archive:'Detailed reports',squad:'Black Skull command',brief:'War briefing',heatmap:'Activity and forecasts',flights:'Defensive travel',combat:'Combat archive'};
@@ -427,7 +427,8 @@
   // END bundled intelligence.js
   // BEGIN bundled activity.js
   const activityPrefs={days:7,period:'all',player:0,source:'roster'};
-  let activitySweep=0,scannerAttempt=0,scannerBusy=false,scannerError='';
+  let activitySweep=0,scannerBusy=false,scannerError='';
+  let scannerScope='',scannerAttempts=new Map();
   function warAt(faction,at){
     const current=state.data.war;
     if(current&&[cfg.ourId,current.opponentId].includes(faction)&&at>=epochMs(current.start)&&at<=n(current.observed))return current.id;
@@ -498,20 +499,31 @@
     await transact('hours',s=>rows.forEach(r=>s.put(r)));rows.forEach(r=>combatArchive.hours.set(r.id,r));
   }
   async function loadFactionScanner(){
-    if(scannerBusy||document.hidden||Date.now()-scannerAttempt<15*MIN||!cfg.ffConsent||!cfg.ffEnabled)return;
-    const key=ffApiKey(),factions=[...new Set([cfg.ourId,cfg.enemyId].filter(idKey))];
-    if(!key||!factions.length)return;
-    scannerBusy=true;scannerAttempt=Date.now();scannerError='';
+    if(scannerBusy||document.hidden||!cfg.ffConsent||!cfg.ffEnabled)return;
+    const key=ffApiKey(),owner=positive(state.data.meta.ownerId);
+    const factions=[...new Set([cfg.enemyId,cfg.ourId].filter(idKey))];
+    if(!key||!owner||!factions.length)return;
+    if(scannerScope!==key+'/'+owner){scannerScope=key+'/'+owner;scannerAttempts.clear();scannerError='';}
+    const due=factions.filter(f=>Date.now()-(scannerAttempts.get(f)||0)>=15*MIN);
+    if(!due.length)return;
+    scannerBusy=true;scannerError='';
+    const valid=()=>cfg.ffConsent&&cfg.ffEnabled&&ffApiKey()===key&&positive(state.data.meta.ownerId)===owner&&!document.hidden;
     try{
-      await checkFFRegistration();if(!scouterPremiumActive())throw Error('Premium entitlement required');
-      for(const faction of factions){
+      await checkFFRegistration();
+      if(!valid())return;
+      if(!scouterPremiumActive()){for(const f of due)scannerAttempts.set(f,Date.now());return;}
+      for(const faction of due){
+        if(!valid()||![cfg.ourId,cfg.enemyId].includes(faction))continue;
+        scannerAttempts.set(faction,Date.now());
         const end=Math.floor(Date.now()/HOUR)*3600;
         const q=new URLSearchParams({key,faction_id:faction,start:end-30*86400,end,bucket:3600});
-        const body=await ffRequest('https://ffscouter.com/api/v1/activity/faction?'+q);
-        if(key!==ffApiKey()||!scouterPremiumActive()||document.hidden)return;
-        await captureScanner(body,faction);
+        try{
+          const body=await ffRequest('https://ffscouter.com/api/v1/activity/faction?'+q);
+          if(!valid()||!scouterPremiumActive())return;
+          await captureScanner(body,faction);
+        }catch{if(valid())scannerError+=(faction===cfg.enemyId?'Enemy':'Own')+' scanner history unavailable. ';}
       }
-    }catch{scannerError='Scanner history unavailable. Check Premium entitlement and provider coverage.';}
+    }catch{if(valid()){for(const f of due)scannerAttempts.set(f,Date.now());scannerError='Scanner registration unavailable.';}}
     finally{scannerBusy=false;if(state.open)render();}
   }
   function activityCells(faction,options=activityPrefs,at=Date.now()){
@@ -947,13 +959,13 @@
     const player=activityPrefs.player,choices=[...state.data.ours,...state.data.enemies].map(p=>[p.id,p.name]);
     if(player&&!choices.some(x=>x[0]===player))choices.push([player,playerName(player)]);
     const opts=activityPrefs;
-    let html=card('Activity / TCT',commandOption('days',choiceItems([3,7,14,30]),opts.days,'Days')+
+    let html=card('Enemy intelligence',enemyActivityBrief(Date.now()))+card('Activity / TCT',commandOption('days',choiceItems([3,7,14,30]),opts.days,'Days')+
       commandOption('period',[['all','All observations'],['war','Wartime'],['peace','Peacetime']],opts.period,'Period')+
       commandOption('source',[['roster','Confirmed online samples'],['recent','Last action within 15m'],['scanner','Premium scanner score'],['attack','Recorded attacking hits']],opts.source,'Evidence')+
       commandOption('player',[[0,'All members'],...choices],player,'Player')+b('Apply filters','cmd-filters')+b('Export CSV','cmd-csv')+
       b('Refresh Premium history','cmd-scanner')+'<p>Percentages describe sampled statuses. A scanner score counts provider observations. '+esc(scannerError)+'</p>');
     for(const [f,title] of [[cfg.ourId,'Our faction'],[cfg.enemyId,'Enemy faction']])if(f)html+=gridTable(f,title,opts);
-    return html+forecastCard()+foldCommand('old-activity','Observation summaries',activity());
+    return html+forecastCard()+foldCommand('old-activity','Observation summaries',activity(false));
   }
   function forecastCard(){
     const {windows,context:c}=forecastReport();
@@ -1101,6 +1113,146 @@
     }).join(''));
   }
   // END bundled views.js
+  // BEGIN bundled enemy-activity.js
+  // Aggregates from Premium have no identities. Attribute names only to a
+  // scoped roster observation or an identified attacker in a captured record.
+  let selectedEnemyHour=null,selectedEnemyFaction=0;
+  function enemyHours({faction,ourFaction,owner,players,observations,fights,legacy={},premium,at}){
+    const hours=Array.from({length:24},()=>({online:new Map(),localCount:0,localOnline:0,localDates:new Set(),lastActions:[],attackers:new Map(),attacks:0,againstUs:0,
+      scannerPartial:false,scannerTotal:0,scannerDates:0,scannerLatest:0,scannerScore:0,scoreDates:0}));
+    if(!faction)return hours;
+    const scoped=new Set(),current=new Set(players.map(p=>p.id)),cutoff=Math.floor(at/(24*HOUR))*24*HOUR-13*24*HOUR;
+    for(const r of observations){
+      if(r.faction!==faction||r.hour<cutoff||r.hour>at)continue;
+      const h=hours[new Date(r.hour).getUTCHours()];
+      if(r.source==='roster'&&current.has(r.player)){
+        scoped.add(r.player+'/'+r.hour);
+        const known=r.samples-r.unknown;
+        if(known>0&&r.online>=0&&r.online<=known){
+          h.localCount+=known;h.localOnline+=r.online;h.localDates.add(r.hour);
+        }
+        if(r.online>0)h.online.set(r.player,(h.online.get(r.player)||0)+r.online);
+      }else if(premium&&owner&&r.owner===owner&&r.source==='scanner'&&r.player===0){
+        if(r.partial)h.scannerPartial=true;
+        if(Number.isFinite(r.active)&&r.active>=0){h.scannerTotal+=r.active;h.scannerDates++;}
+        if(Number.isFinite(r.score)&&r.score>=0){h.scannerScore+=r.score;h.scoreDates++;}
+        h.scannerLatest=Math.max(h.scannerLatest,r.hour);
+      }
+    }
+    // Older installations stored enemy-side hourly records by player ID.
+    // Include members of the current roster once per hour across both stores.
+    for(const p of players){
+      if(Number.isFinite(p.lastAt)&&p.lastAt>=cutoff&&p.lastAt<=at)
+        hours[new Date(p.lastAt).getUTCHours()].lastActions.push(p);
+      for(const [bucket,sample] of Object.entries(legacy['enemies:'+p.id]?.hours||{})){
+        const time=Number(bucket)*HOUR;
+        if(!Number.isSafeInteger(time)||time<cutoff||time>at||!Number.isFinite(sample?.online)||sample.online<0||scoped.has(p.id+'/'+time))continue;
+        const h=hours[new Date(time).getUTCHours()];
+        if(sample.count>0&&sample.online<=sample.count){
+          h.localCount+=sample.count;h.localOnline+=sample.online;h.localDates.add(time);
+        }
+        if(sample.online>0)h.online.set(p.id,(h.online.get(p.id)||0)+sample.online);
+      }
+    }
+    for(const r of fights){
+      if(r.attackerFaction!==faction||r.at<cutoff||r.at>at)continue;
+      const h=hours[new Date(r.at).getUTCHours()];h.attacks++;
+      if(ourFaction&&r.defenderFaction===ourFaction)h.againstUs++;
+      if(current.has(r.attacker))h.attackers.set(r.attacker,(h.attackers.get(r.attacker)||0)+1);
+    }
+    return hours;
+  }
+  function enemyScannerLabel(h){
+    if(h.scannerDates)return fmt(Math.round(h.scannerTotal/h.scannerDates*10)/10)+' avg seen';
+    if(h.scoreDates)return fmt(Math.round(h.scannerScore/h.scoreDates*10)/10)+' avg score';
+    return '';
+  }
+  function enemyActivityRange(hours){
+    const select=(qualified,measure)=>hours.map((h,i)=>({hour:i,value:qualified(h)?measure(h):null}))
+      .filter(r=>r.value!==null).sort((a,b)=>a.value-b.value||a.hour-b.hour);
+    let sampled=select(h=>!h.scannerPartial&&h.scannerDates>=2,h=>h.scannerTotal/h.scannerDates);
+    let units=' members seen by Premium';
+    if(sampled.length<2){
+      sampled=select(h=>h.localDates.size>=2&&h.localCount>0,h=>100*h.localOnline/h.localCount);
+      units='% of enemy roster checks online';
+    }
+    if(sampled.length<2)return '';
+    const low=sampled[0],high=sampled.at(-1),rounded=v=>Math.round(v*10)/10;
+    if(rounded(low.value)===rounded(high.value))return '';
+    const show=x=>String(x.hour).padStart(2,'0')+':00 ('+rounded(x.value)+units+')';
+    return 'Highest observed: '+show(high)+'. Lowest observed: '+show(low)+'. Compared '+sampled.length+' TCT hours with at least two sampled dates each.';
+  }
+  function hourMemberLinks(counts){
+    return [...counts].sort((a,b)=>b[1]-a[1]||a[0]-b[0]).slice(0,5)
+      .map(([id,count])=>infoButton(playerName(id),id)+' ('+count+')').join(' ');
+  }
+  function enemyHourDetail(hour,h){
+    const scanner=enemyScannerLabel(h);
+    let body='<p><b>'+String(hour).padStart(2,'0')+':00-'+String(hour).padStart(2,'0')+':59 TCT</b> over the last 14 UTC dates.</p>';
+    if(scanner)body+='<p>FFScouter: '+scanner+' over '+(h.scannerDates||h.scoreDates)+' sampled date(s). '+(h.scannerPartial?'Provider returned partial history. ':'')+'Latest bucket '+esc(stamp(h.scannerLatest))+'.</p>';
+    if(h.online.size)body+='<p>Current members observed online (checks): '+hourMemberLinks(h.online)+'</p>';
+    if(h.lastActions.length){
+      const recent=[...h.lastActions].sort((a,b)=>b.lastAt-a.lastAt);
+      body+='<p>Torn last actions in this hour: '+recent.slice(0,5).map(p=>infoButton(p.name,p.id)+' '+esc(stamp(p.lastAt))).join(' / ')+'</p>';
+    }
+    if(h.attacks)body+='<p>'+h.attacks+' captured enemy attack(s), '+h.againstUs+' against our faction.'+
+      (h.attackers.size?' Identified current members: '+hourMemberLinks(h.attackers):'')+'</p>';
+    if(!h.online.size&&!h.lastActions.length&&!h.attackers.size)body+='<p>No named enemy activity recorded for this hour.</p>';
+    return body;
+  }
+  function enemyActivityBrief(at){
+    const players=state.data.enemies||[];
+    if(!players.length)return empty('Enemy roster unavailable. Refresh to load the scheduled or current opponent.');
+    const name=p=>infoButton(p.name,p.id),fresh=rosterFresh('enemies',at);
+    const names=list=>list.slice(0,4).map(name).join(' ');
+    const lines=[],online=players.filter(isOnline);
+    if(fresh&&online.length)lines.push('Online at last check: '+names(online)+(online.length>4?' +'+(online.length-4)+' more':''));
+    if(!fresh||!online.length){
+      const recent=players.filter(p=>p.lastAt>0&&p.lastAt<=at).sort((a,b)=>b.lastAt-a.lastAt).slice(0,3);
+      if(recent.length)lines.push('Latest Torn actions: '+recent.map(p=>name(p)+' '+esc(age(p.lastAt))).join(' / '));
+    }
+    const strong=players.map(p=>({p,bse:reliableBse(p)})).filter(x=>x.bse.value)
+      .sort((a,b)=>b.bse.value-a.bse.value).slice(0,2);
+    if(strong.length)lines.push('Highest known FFScouter estimates: '+strong.map(x=>name(x.p)+' ~'+esc(nativeCompactTotal(x.bse.value))+' BSE ('+esc(age(x.bse.at))+')').join(' / '));
+    const currentWar=state.data.war;
+    if(currentWar?.opponentId===cfg.enemyId&&activeWarNow()){
+      const impact=concessionSnapshot(currentWar.id,at);
+      const leaders=players.map(p=>({p,scored:impact?.enemyAttackers?.[p.id]?.enemyScore}))
+        .filter(x=>Number.isFinite(x.scored)&&x.scored>0).sort((a,b)=>b.scored-a.scored).slice(0,3);
+      if(leaders.length)lines.push('Scoring against us this war: '+leaders.map(x=>name(x.p)+' '+(impact.complete?'':'at least ')+fmt(x.scored)+' captured respect').join(' / ')+
+        ' ('+esc(age(impact.lastFetch))+')');
+    }
+    const last=state.data.enemyWars.filter(w=>w.end&&state.data.reports[w.id]?.factions?.some(f=>f.id===cfg.enemyId&&f.members?.length))
+      .sort((a,b)=>b.end-a.end)[0];
+    const report=last&&state.data.reports[last.id].factions.find(f=>f.id===cfg.enemyId);
+    if(report){
+      const current=new Map(players.map(p=>[p.id,p]));
+      const scorers=(report.members||[]).filter(m=>current.has(m.id)&&Number.isFinite(m.score)&&m.score>0)
+        .sort((a,b)=>b.score-a.score).slice(0,3);
+      if(scorers.length)lines.push(b('Latest stored scorecard #'+last.id,'war:'+last.id)+' top returning scorers: '+
+        scorers.map(m=>name(current.get(m.id))+' '+fmt(m.score)+' pts').join(' / '));
+    }
+    if(fresh){
+      const movements=players.map(p=>({p,place:currentLocation(p,at)}))
+        .filter(x=>['inbound','abroad'].includes(x.place.phase)&&x.place.country!=='Unknown')
+        .sort((a,b)=>(a.place.eta||Infinity)-(b.place.eta||Infinity)).slice(0,3);
+      if(movements.length)lines.push('Travel: '+movements.map(({p,place})=>name(p)+' '+(place.phase==='inbound'?'to ':'in ')+esc(place.country)+
+        (place.phase==='inbound'&&place.eta>at?' ~'+esc(flightClock(place.eta))+' TCT':'')).join(' / '));
+      const release=players.filter(p=>memberState(p)==='hospital'&&p.until>at).sort((a,b)=>a.until-b.until)[0];
+      if(release)lines.push('Next hospital exit: '+name(release)+' ~'+esc(flightClock(release.until))+' TCT');
+    }
+    return (lines.length?lines.map(line=>'<p>'+line+'</p>').join(''):empty('No named online, strength, travel or scoring evidence available yet.'))+
+      '<small>Enemy roster: '+players.length+' members / '+esc(age(state.data.updated.enemies))+'.</small>';
+  }
+
+  function latestPersonalEncounter(player){
+    const me=positive(state.data.meta.ownerId);
+    if(!me)return '';
+    const latest=pairRows(me,player.id).filter(x=>x.result&&x.at<=Date.now())
+      .reduce((last,row)=>!last||row.at>last.at?row:last,null);
+    return latest?'<p class="ws-small">'+esc((latest.attacker===me?'Your attack':'Their attack on you')+' / '+latest.result+' / '+stamp(latest.at))+'</p>':'';
+  }
+  // END bundled enemy-activity.js
   const effectiveKey=()=>String(cfg.key||'').trim()||(apiKeyPda.includes('PDA-APIKEY')?'':apiKeyPda);
   const saveCfg=()=>{try{localStorage.setItem(CONFIG,JSON.stringify(cfg));return true;}catch(_){state.localKeyError=true;return false;}};
   const save=()=>{try{localStorage.setItem(DATA,JSON.stringify(state.data));return true;}catch(_){
@@ -3367,6 +3519,7 @@
       await refreshBattleIntel();
       await refreshPublicIntel(activeWarNow()?3:2);
       await refreshFF();
+      if(state.open&&['activity','heatmap'].includes(state.tab))loadFactionScanner();
       if(!document.hidden&&sharedEndpoint()&&sharedScope()){sharedPull(false);await syncCommand(null,true);}
       refreshCommandSignals();
       state.lastRefresh=Date.now();
@@ -7046,18 +7199,18 @@
       '<div class="ws-row"><span><b>5. Maintain energy and reserves</b><br><small>Review training and energy in the separate module.</small></span>'+b('Training','tool:happy')+'</div>');
     return html;
   }
-  function activity(){
+  function activity(showBrief=true){
     // Avoid claiming individual player sleep schedules from sparse local observations.
     const ours=sideActivity('ours'),them=sideActivity('enemies'),o=hourlyEvidence('ours'),e=hourlyEvidence('enemies');
     const both=o.map((x,i)=>({hour:i,o:x,e:e[i],difference:x.pct===null||e[i].pct===null?null:x.pct-e[i].pct,
       enough:x.samples>=3&&e[i].samples>=3}));
     const summary=(state.data.enemies||[]).map(p=>({p,pat:pattern('enemies',p.id)}))
       .sort((a,b)=>b.pat.online-a.pat.online||b.pat.count-a.pat.count);
-    let html=statusNote()+
-      '<div class="ws-lead"><span class="ws-data-label">ACTIVITY INTELLIGENCE | 14-DAY OBSERVATIONS</span>'+
-      '<h2>When are they actually active?</h2>'+
-      '<p>Current online flags and last-action timestamps come from Torn. The hour-by-hour grid uses only samples collected while this script is running in the foreground.</p>'+
-      '<div class="ws-toolbar">'+b('Enemy player intel','tab:targets')+b('Plan around activity','tab:strategy')+'</div></div>'+
+    const now=Date.now(),hours=enemyHours({faction:cfg.enemyId,ourFaction:cfg.ourId,owner:positive(state.data.meta.ownerId),
+      players:state.data.enemies,observations:combatArchive.hours.values(),fights:combatArchive.fights.values(),
+      legacy:state.data.activity,premium:scouterPremiumActive(),at:now});
+    const selected=selectedEnemyFaction===cfg.enemyId&&selectedEnemyHour!==null?selectedEnemyHour:new Date(now).getUTCHours();
+    let html=statusNote()+(showBrief?card('Enemy intelligence',enemyActivityBrief(now)):'')+
       '<div class="ws-grid">'+
       stat('Our active in 24h',ours.total?ours.active24+' / '+ours.total:'\u2014','Official last-action timestamps')+
       stat('Enemy active in 24h',them.total?them.active24+' / '+them.total:'\u2014','Official last-action timestamps')+
@@ -7065,18 +7218,28 @@
       stat('Enemy online now',rosterFresh('enemies')?them.online+' / '+them.total:'Stale','Snapshot '+age(them.last))+
       stat('Enemies away',rosterFresh('enemies')?fmt(them.away):'Stale','Travelling / abroad in last snapshot')+
       stat('Enemies hospitalised',rosterFresh('enemies')?fmt(them.hospital):'Stale','Last observed state')+'</div>';
-    html+=card('24-hour online coverage | our faction vs enemy',
-      '<p>Tap individual hourly cells to see the comparative evidence below. Green means more of our checks were online; red means more of theirs. Faded cells lack sufficient samples.</p>'+
-      '<div class="ws-hour-grid">'+both.map(x=>'<button type="button" data-action="hour:'+x.hour+'" class="ws-hour '+(!x.enough?'unknown':x.difference>0?'positive':x.difference<0?'negative':'')+
-      '" title="TCT '+x.hour+':00 | Us '+scoreLabel(x.o.pct)+'% ('+x.o.samples+' samples) | Them '+scoreLabel(x.e.pct)+'% ('+x.e.samples+' samples)">'+
-      '<b>'+String(x.hour).padStart(2,'0')+'</b><small>'+(!x.enough?'?':(x.difference>0?'+':'')+x.difference+'%')+'</small></button>').join('')+'</div>'+
-      '<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Hour TCT</th><th>Us: online / samples</th><th>Them: online / samples</th><th>Advantage</th></tr></thead><tbody>'+
-      both.map(x=>'<tr id="ws-hour-row-'+x.hour+'"><td>'+String(x.hour).padStart(2,'0')+':00</td><td>'+
-        (x.o.pct===null?'Not observed':x.o.pct+'% | '+x.o.samples+' checks')+'</td><td>'+
-        (x.e.pct===null?'Not observed':x.e.pct+'% | '+x.e.samples+' checks')+'</td><td>'+
-        (x.enough?((x.difference>0?'+':'')+x.difference+' points'):'Not enough data')+'</td></tr>').join('')+
-      '</tbody></table></div>'+
-      '<p class="ws-small">Each check contributes once per member; this is not a continuous online record or a verified prediction of sleep. Both rosters need samples in the same hour for comparison.</p>');
+    const range=enemyActivityRange(hours);
+    html+=card('Enemy activity by hour | TCT',
+      (range?'<p>'+esc(range)+'</p>':'')+
+      '<p>~ shows the average number seen by Premium. % shows enemy checks online. A dot means other enemy evidence. Tap an hour for names and attacks.</p>'+
+      '<div class="ws-hour-grid">'+both.map(x=>{
+        const h=hours[x.hour],metric=enemyScannerLabel(h)||(x.e.pct!==null?x.e.pct+'% online':h.attacks?h.attacks+' attacks':h.lastActions.length?h.lastActions.length+' acted':'?');
+        const cell=h.scannerDates?'~'+fmt(Math.round(h.scannerTotal/h.scannerDates*10)/10):x.e.pct!==null?x.e.pct+'%':metric==='?'?'?':'\u2022';
+        return '<button type="button" data-action="hour:'+x.hour+'" aria-label="'+esc(String(x.hour).padStart(2,'0')+':00 TCT / '+metric)+'" aria-pressed="'+(selected===x.hour)+'" class="ws-hour '+
+          (!x.enough?'unknown':x.difference>0?'positive':x.difference<0?'negative':'')+'"><b>'+
+          String(x.hour).padStart(2,'0')+'</b><small>'+esc(cell)+'</small></button>';
+      }).join('')+'</div><div id="ws-enemy-hour-detail" aria-live="polite">'+enemyHourDetail(selected,hours[selected])+'</div>'+
+      (scannerError?'<p>'+esc(scannerError)+'</p>':'')+
+      '<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Hour TCT</th><th>Enemy evidence</th><th>Our checks</th><th>Online gap</th></tr></thead><tbody>'+
+      both.map(x=>{const scan=enemyScannerLabel(hours[x.hour]);
+        const enemy=[scan?'Premium: '+scan:'',x.e.pct!==null?x.e.pct+'% online / '+x.e.samples+' checks':'',
+          hours[x.hour].attacks?hours[x.hour].attacks+' captured attacks':'',hours[x.hour].lastActions.length?hours[x.hour].lastActions.length+' last actions':''].filter(Boolean);
+        return '<tr><td>'+String(x.hour).padStart(2,'0')+':00</td><td>'+esc(enemy.join(' | ')||'No observations')+'</td><td>'+
+          (x.o.pct===null?'No observations':x.o.pct+'% / '+x.o.samples+' checks')+'</td><td>'+
+          (x.enough?((x.difference>0?'+':'')+x.difference+' pp'):'-')+'</td></tr>';
+      }).join('')+'</tbody></table></div>'+
+      '<p class="ws-small">Green or red compares our sampled online rate with theirs. Premium counts are scanner observations. A gap means coverage is missing.</p>'+
+      b('Compare dates and forecasts','tab:heatmap'));
     html+=card('Player-by-player activity and travel',
       summary.length?'<div class="ws-table-wrap"><table><thead><tr><th>Opponent</th><th>Online checks</th><th>General travel</th><th>War travel</th><th>Peak observed hour</th><th>Coverage</th><th>Intel</th></tr></thead><tbody>'+
       summary.map(x=>'<tr><td>'+infoButton(x.p.name,x.p.id)+' '+ffBadge(x.p.id)+'</td><td>'+
@@ -7445,6 +7608,7 @@
       '<span class="ws-player-status '+tone+'">'+esc(fresh?p.status:'Cached: '+p.status)+(timer?' / '+timer:'')+'</span></div>'+
       '<p class="ws-player-glance">'+esc(own?'Given '+(!impact.complete&&impact.given!==null?'at least ':'')+scoreLabel(impact.given)+' captured points':strength.short)+(workspace.sort==='ffs'?' / FFS '+(Number.isFinite(row.personalFF)?row.personalFF.toFixed(2):'unknown'):'')+'</p>'+
       '<details data-ws-disclosure="roster-'+side+'-'+p.id+'"><summary>Details and actions</summary>'+
+      (own?'':latestPersonalEncounter(p))+
       (scouterDistributionText(p.id)?'<p class="ws-small">'+esc(scouterDistributionText(p.id))+'</p>':'')+
       '<div class="ws-player-metrics">'+(own?metric('Earned',impact.earned)+metric('Given',impact.given)+metric('Net*',impact.net):
         metric('Scored',impact.scored)+metric('Hits',impact.hits)+'<span><small>STRENGTH</small><b>'+esc(strength.short)+'</b></span>')+'</div>'+
@@ -7597,7 +7761,7 @@
     state.tab=tab;state.open=true;state.playerOpen=false;state.selectedWar=0;
     root.style.display='block';render();
     if(['squad','brief'].includes(tab)&&Date.now()-commandSync.attempt>30000)syncCommand();
-    if(tab==='heatmap'&&scouterPremiumActive())loadFactionScanner();
+    if(['activity','heatmap'].includes(tab))loadFactionScanner();
     if(tab==='flights')checkSupplies();
     $('.ws-content',root).scrollTop=0;
     if(focus)setTimeout(()=>$('#ws-alert-'+focus,root)?.scrollIntoView({block:'center'}),100);
@@ -7880,7 +8044,13 @@
     if(action.startsWith('watch:')){const id=positive(action.slice(6));if(id){if(cfg.watchlist[id])delete cfg.watchlist[id];else cfg.watchlist[id]=true;saveCfg();render();}return;}
     if(action==='war-list'){state.selectedWar=0;navigate('history');return;}
     if(action==='deep-scan'){cfg.historyLimit=20;saveCfg();navigate('history');refresh(true);return;}
-    if(action.startsWith('hour:')){const h=Number(action.slice(5));if(Number.isInteger(h)&&h>=0&&h<24){const tr=$('#ws-hour-row-'+h,root);if(tr){tr.scrollIntoView({block:'center'});tr.style.outline='2px solid #54d7fa';}}return;}
+    if(action.startsWith('hour:')){
+      const hour=Number(action.slice(5));
+      if(!Number.isInteger(hour)||hour<0||hour>23)return;
+      selectedEnemyHour=hour;selectedEnemyFaction=cfg.enemyId;render();
+      const detail=$('#ws-enemy-hour-detail',root);if(detail)detail.scrollIntoView({block:'nearest'});
+      return;
+    }
     if(action.startsWith('war:')){navigate('intel');state.selectedWar=positive(action.slice(4));render();return;}
     if(action.startsWith('load-report:')){loadWarReport(positive(action.slice(12)));return;}
     if(action.startsWith('public:')){loadPublicIntel(positive(action.slice(7)));return;}

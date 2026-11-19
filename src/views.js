@@ -2,13 +2,13 @@
     const player=activityPrefs.player,choices=[...state.data.ours,...state.data.enemies].map(p=>[p.id,p.name]);
     if(player&&!choices.some(x=>x[0]===player))choices.push([player,playerName(player)]);
     const opts=activityPrefs;
-    let html=card('Activity / TCT',commandOption('days',choiceItems([3,7,14,30]),opts.days,'Days')+
+    let html=card('Enemy intelligence',enemyActivityBrief(Date.now()))+card('Activity / TCT',commandOption('days',choiceItems([3,7,14,30]),opts.days,'Days')+
       commandOption('period',[['all','All observations'],['war','Wartime'],['peace','Peacetime']],opts.period,'Period')+
       commandOption('source',[['roster','Confirmed online samples'],['recent','Last action within 15m'],['scanner','Premium scanner score'],['attack','Recorded attacking hits']],opts.source,'Evidence')+
       commandOption('player',[[0,'All members'],...choices],player,'Player')+b('Apply filters','cmd-filters')+b('Export CSV','cmd-csv')+
       b('Refresh Premium history','cmd-scanner')+'<p>Percentages describe sampled statuses. A scanner score counts provider observations. '+esc(scannerError)+'</p>');
     for(const [f,title] of [[cfg.ourId,'Our faction'],[cfg.enemyId,'Enemy faction']])if(f)html+=gridTable(f,title,opts);
-    return html+forecastCard()+foldCommand('old-activity','Observation summaries',activity());
+    return html+forecastCard()+foldCommand('old-activity','Observation summaries',activity(false));
   }
   function forecastCard(){
     const {windows,context:c}=forecastReport();

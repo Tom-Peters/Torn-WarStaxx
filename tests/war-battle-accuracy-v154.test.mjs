@@ -48,7 +48,7 @@ test('attack refresh does not use a stale cached war ID',()=>{
  const code=region('  async function refreshAttacks(){','  async function refresh(force=false){');
  assert.match(code,/!activeWarNow\(\)/);
 });
-test('userscript metadata and probes agree at v3.0.0',()=>{
+test('userscript metadata and probes agree across release surfaces',()=>{
  assert.match(source,/^\/\/ @version\s+\d+\.\d+\.\d+$/m);
  assert.match(source,/const id='war', version='\d+\.\d+\.\d+'/);
  assert.match(source,/const ID='war', VER='\d+\.\d+\.\d+'/);
