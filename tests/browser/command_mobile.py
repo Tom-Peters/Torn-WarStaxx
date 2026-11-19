@@ -104,7 +104,23 @@ with sync_playwright() as pw:
     page.locator('#ws-cmd-idle').uncheck()
     assert enemy_cell.inner_text()=='4'
     page.get_by_role('button',name='Heavy hitters',exact=True).click()
-    page.locator('#ws-heavy-date').select_option(str(midnight))
+    span=page.locator('#ws-cmd-heavy-span')
+    assert span.input_value()=='14' and grid.locator('tbody tr').count()==14
+    assert grid.locator('thead th').count()==25
+    span.select_option('7')
+    assert grid.locator('tbody tr').count()==7
+    assert grid.evaluate("e=>e.scrollWidth>e.clientWidth && e.parentElement.scrollWidth<=e.parentElement.clientWidth+2")
+    page.locator('#ws-cmd-heavy-player').select_option('3')
+    key_hour=f'[data-action="cmd-heavycell:range/{(fixture_hour+1)*3600000}"]'
+    page.wait_for_function("(selector)=>document.querySelector(selector)?.textContent==='1'",arg=key_hour)
+    grid.locator(key_hour).click()
+    assert 'Objective' in grid.locator('.ws-grid-detail').inner_text()
+    assert 'Individual scanner activity' in grid.locator('.ws-grid-detail').inner_text()
+    page.locator('#ws-cmd-heavy-evidence').select_option('online')
+    assert grid.locator(key_hour).inner_text()=='\u2013'
+    assert grid.locator(f'[data-action="cmd-heavycell:range/{fixture_hour*3600000}"]').inner_text()=='1'
+    grid.locator(f'[data-action="cmd-heavyday:{midnight}"]').click()
+    assert span.input_value()=='day' and page.locator('#ws-heavy-date').input_value()==str(midnight)
     row=grid.locator('tbody tr').first
     assert 'Objective' in row.inner_text() and 'Visitor' not in grid.inner_text()
     observed=row.locator(f'[data-action="cmd-heavycell:3/{fixture_hour*3600000}"]')
@@ -159,7 +175,8 @@ with sync_playwright() as pw:
     assert '1 unique attacks' in page.locator('.ws-content').inner_text()
     open_view(page,'squad')
     page.get_by_role('button',name='Heavy hitter activity').click()
-    page.locator('#ws-heavy-date').wait_for()
+    assert page.locator('#ws-cmd-heavy-span').input_value()=='7'
+    assert grid.locator('tbody tr').count()==7
     page.get_by_text('last full hour for 1 / 1 targets',exact=False).wait_for()
     assert history_reads==[3]
     # The role is resolved from the bearer by the Worker, never by a UI role label.

@@ -1,4 +1,4 @@
-  const heavyView={date:0,selection:'',scope:'',timer:0,busy:false,next:0,pause:0,error:''};
+  const heavyView={single:false,player:0,onlineOnly:false,date:0,selection:'',scope:'',timer:0,busy:false,next:0,pause:0,error:''};
   function heavyTargets(){
     if(!cfg.enemyId)return [];
     const bands=enemyRoleBands(),targets=new Map(),roster=new Map(state.data.enemies.map(p=>[p.id,p]));
@@ -146,15 +146,54 @@
       (hours.length?'<p>Recent online hours (TCT) '+esc(hours.slice(0,6).map(([h])=>new Date(h).toISOString().slice(5,13).replace('T',' ')+'h').join(', '))+'</p>':'')+
       (t.latest?b('Show latest online hour','cmd-heavylatest:'+t.id+'/'+t.latest.hour):'')+infoButton('Open player dossier',t.id);
   }
-  function heavyActivityScreen(tabs,at=Date.now()){
-    const faction=cfg.enemyId,day=24*HOUR,today=Math.floor(at/day)*day;
-    const scope=[cfg.ourId,faction,state.data.war?.id||0].join('/');
-    if(scope!==heavyView.scope){heavyView.scope=scope;heavyView.selection='';heavyView.date=0;heavyView.error='';}
-    const date=heavyView.date>=today-13*day&&heavyView.date<=today?heavyView.date:today;
-    const targets=heavyTargets(),hist=heavyHistory(targets,faction,at);
-    const dates=Array.from({length:14},(_,i)=>{const d=today-i*day;return '<option value="'+d+'" '+(date===d?'selected':'')+'>'+esc((i===0?'Today / ':'')+new Date(d).toISOString().slice(0,10))+'</option>';}).join('');
-    const data=[...hist.values()].sort((a,b)=>(b.latest?.hour??0)-(a.latest?.hour??0)||(b.latest?.exact??0)-(a.latest?.exact??0)||a.name.localeCompare(b.name));
+  function heavyPeriodRows(players,days,onlineOnly,at){
+    const day=24*HOUR,today=Math.floor(at/day)*day,start=today-(days-1)*day,cells=new Map();
+    for(const t of players){
+      for(const [hour,e] of t.hours){
+        if(hour<start||hour>at)continue;
+        const roster=!!(e.online||e.checks);
+        const seen=!!(e.online||(!onlineOnly&&(e.action||e.attacks||e.score>0)));
+        if(!roster&&!seen&&(onlineOnly||e.score==null))continue;
+        if(!cells.has(hour))cells.set(hour,{hits:[],sampled:0,partial:false});
+        const c=cells.get(hour);c.sampled++;
+        if(!onlineOnly&&e.partial)c.partial=true;
+        if(seen)c.hits.push({t,e});
+      }
+    }
+    return Array.from({length:days},(_,i)=>{
+      const date=today-i*day;
+      return {date,hours:Array.from({length:24},(_,h)=>cells.get(date+h*HOUR))};
+    });
+  }
+  function heavyPeriodTable(players,days,at){
+    const rows=heavyPeriodRows(players,days,heavyView.onlineOnly,at),period=gridCalendar(cfg.enemyId,at);
+    const peak=Math.max(1,...rows.flatMap(r=>r.hours.map(c=>c?.hits.length||0)));
+    const body=rows.map(({date,hours})=>{
+      const utc=new Date(date),label=gridWeekdays[utc.getUTCDay()]+' '+utc.toISOString().slice(5,10);
+      let detail='';
+      const cells=hours.map((c,h)=>{
+        const hour=date+h*HOUR,key='range/'+hour,selected=heavyView.selection===key;
+        const value=c?String(c.hits.length):'\u2013',partial=c&&(c.partial||c.sampled<players.length);
+        const tone=c?period(hour)+' lvl'+Math.ceil(4*c.hits.length/peak)+(partial?' partial':''):'gap';
+        const title=label+' '+heavyClock(hour)+' TCT';
+        if(selected){
+          const names=c?.hits.map(({t,e})=>b(t.name,'cmd-heavylatest:'+t.id+'/'+hour)+' '+esc(heavyMark(e)[1])).join('<br>')||'';
+          const coverage=c?c.hits.length+(heavyView.onlineOnly?' seen online':' seen active')+' / '+c.sampled+' of '+players.length+' targets sampled'+(partial?' / partial coverage':''):
+            hour>at?'This hour has not started.':'No matching observations.';
+          detail='<tr class="ws-grid-detail"><td colspan="25"><div aria-live="polite"><strong>'+esc(title)+'</strong><p>'+esc(coverage)+'</p>'+names+'</div></td></tr>';
+        }
+        return '<td><button type="button" data-action="cmd-heavycell:'+key+'" class="ws-grid-cell '+tone+'" aria-pressed="'+selected+'" aria-label="'+esc(title+' / '+(c?value+' targets':'no sample'))+'">'+value+'</button></td>';
+      }).join('');
+      return '<tr><th scope="row"><button type="button" class="ws-heavy-day" data-action="cmd-heavyday:'+date+'">'+label+'</button></th>'+cells+'</tr>'+detail;
+    }).join('');
+    return heavyTable(body,false);
+  }
+  function heavyTable(rows,single){
     const headers=Array.from({length:24},(_,h)=>'<th scope="col">'+String(h).padStart(2,'0')+'</th>').join('');
+    const title=single?'Target / last online':'Date TCT',column=single?'ws-name-col':'ws-date-col';
+    return '<div class="ws-hour-scroll'+(single?' ws-heavy-grid':'')+'" tabindex="0" role="region" aria-label="Heavy hitter sightings"><table><colgroup><col class="'+column+'"><col span="24"></colgroup><thead><tr><th scope="col">'+title+'</th>'+headers+'</tr></thead><tbody>'+rows+'</tbody></table></div>';
+  }
+  function heavyDayTable(data,date,at){
     const rows=data.map(t=>{
       let detail='';
       const cells=Array.from({length:24},(_,h)=>{
@@ -165,8 +204,27 @@
       if(heavyView.selection===String(t.id))detail='<tr class="ws-grid-detail"><td colspan="25"><div aria-live="polite">'+heavyTargetDetail(t)+'</div></td></tr>';
       return '<tr><th scope="row"><button type="button" data-action="cmd-heavycell:'+t.id+'" aria-expanded="'+(heavyView.selection===String(t.id))+'">'+esc(t.name)+'</button><small>'+esc(heavyLast(t.latest))+'</small></th>'+cells+'</tr>'+detail;
     }).join('');
+    return heavyTable(rows,true);
+  }
+  function heavyActivityScreen(tabs,at=Date.now()){
+    const faction=cfg.enemyId,day=24*HOUR,today=Math.floor(at/day)*day;
+    const scope=[cfg.ourId,faction,state.data.war?.id||0].join('/');
+    if(scope!==heavyView.scope){heavyView.scope=scope;heavyView.player=0;heavyView.single=false;heavyView.selection='';heavyView.date=0;heavyView.error='';}
+    const date=heavyView.date>=today-13*day&&heavyView.date<=today?heavyView.date:today;
+    const targets=heavyTargets(),hist=heavyHistory(targets,faction,at);
+    const dates=Array.from({length:14},(_,i)=>{const d=today-i*day;return '<option value="'+d+'" '+(date===d?'selected':'')+'>'+esc((i===0?'Today / ':'')+new Date(d).toISOString().slice(0,10))+'</option>';}).join('');
+    const data=[...hist.values()].sort((a,b)=>(b.latest?.hour??0)-(a.latest?.hour??0)||(b.latest?.exact??0)-(a.latest?.exact??0)||a.name.localeCompare(b.name));
+    const days=cfg.heavyActivityDays===7?7:14;
+    if(!hist.has(heavyView.player))heavyView.player=0;
+    const players=heavyView.player?[hist.get(heavyView.player)]:data;
+    const shown=heavyView.single?heavyDayTable(players,date,at):heavyPeriodTable(players,days,at);
+    const controls='<div class="ws-tracker-controls">'+commandOption('heavy-span',[[7,'7 days'],[14,'14 days'],['day','Single day']],heavyView.single?'day':days,'View')+
+      (heavyView.single?'<label>TCT date <select id="ws-heavy-date">'+dates+'</select></label>':
+        commandOption('heavy-evidence',[['all','Any activity'],['online','Confirmed online']],heavyView.onlineOnly?'online':'all','Show'))+
+      commandOption('heavy-player',[[0,'All targets'],...targets.map(t=>[t.id,t.name])],heavyView.player,'Target')+'</div>';
+    const legend=heavyView.single?'<b>ON</b> Torn online &nbsp; <b>A</b> action or attack &nbsp; <b>S</b> scanner activity<br>&middot; roster checked &nbsp; 0 scanner score &nbsp; &ndash; no evidence':
+      'Each hour counts distinct targets. '+(heavyView.onlineOnly?'Online sightings use Torn roster checks.':'Activity includes online sightings, actions, attacks and individual scanner activity.')+' A dash means no sample. Tap an hour for names or a date for player rows.';
     scheduleHeavyHistory();
-    const grid='<div class="ws-hour-scroll ws-heavy-grid" tabindex="0" role="region" aria-label="Heavy hitter sightings"><table><colgroup><col class="ws-name-col"><col span="24"></colgroup><thead><tr><th scope="col">Target / last online</th>'+headers+'</tr></thead><tbody>'+rows+'</tbody></table></div>';
     const owner=positive(state.data.meta.ownerId),checked=targets.filter(t=>!heavyRange(faction,owner,t.id,at)).length;
     const fresh=targets.filter(t=>t.p?.updated>0&&t.p.updated<=at&&at-t.p.updated<5*MIN&&['Online','Idle','Offline'].includes(t.p.lastAction));
     const live=fresh.filter(t=>t.p.lastAction==='Online');
@@ -174,9 +232,8 @@
     const coverage=combatArchive.error?'Local history archive unavailable.':scouterPremiumActive()?'Individual Premium history checked through the last full hour for '+checked+' / '+targets.length+' targets.':'Individual Premium history requires an enabled, registered Premium key.';
     return card('Heavy hitter activity','<div class="ws-grid-tabs">'+tabs+'</div>'+
       (!targets.length?empty(faction?'No automatic, designated or assigned Black Skull targets for this opponent yet.':'Detect or select an opponent to see heavy hitters.'):
-      '<p>'+esc(rosterLine)+'</p><div class="ws-tracker-controls"><label>TCT date <select id="ws-heavy-date">'+dates+'</select></label></div>'+
-      '<p class="ws-small"><b>ON</b> Torn online &nbsp; <b>A</b> action or attack &nbsp; <b>S</b> scanner activity<br>&middot; roster checked &nbsp; 0 scanner score &nbsp; &ndash; no evidence</p>'+grid+
-      '<p class="ws-small">Times under names are the latest confirmed sightings across 14 days. Tap an hour for the evidence. '+esc(coverage)+'</p>')+
+      '<p>'+esc(rosterLine)+'</p>'+controls+'<p class="ws-small">'+legend+'</p>'+shown+
+      '<p class="ws-small">'+(heavyView.single?'Times under names are the latest confirmed sightings across 14 days. ':'')+esc(coverage)+'</p>')+
       (heavyView.error?'<p>'+esc(heavyView.error)+'</p>':'')+
       (roomKey()&&!commandRoom()?'<p>Shared assignments pending. '+b('Refresh orders','cmd-sync')+'</p>':'')+
       '<p class="ws-small">History follows the current target list. '+a('Scanner data policy','https://ffscouter.com/volunteer')+'</p>');

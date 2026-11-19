@@ -185,10 +185,12 @@
         if(loadPlayer)await scouterRead('activity',player);
       }else if(kind==='heavyview'){
         activityPrefs.mode='heavy';navigate('heatmap');return;
+      }else if(kind==='heavyday'){
+        heavyView.single=true;heavyView.date=target;heavyView.selection='';
       }else if(kind==='heavylatest'){
         const [id,hour]=value.split('/').map(Number);
         if(!idKey(id)||!Number.isSafeInteger(hour)||hour%HOUR!==0)return;
-        heavyView.date=Math.floor(hour/(24*HOUR))*24*HOUR;
+        heavyView.single=true;heavyView.date=Math.floor(hour/(24*HOUR))*24*HOUR;
         heavyView.selection=id+'/'+hour;render();
         const cell=root.querySelector('[data-action="cmd-heavycell:'+heavyView.selection+'"]');
         cell?.scrollIntoView({block:'nearest',inline:'center'});return;

@@ -1,3 +1,7 @@
+## 3.0.4 – Heavy hitter date ranges
+
+Under **Heavy hitters**, choose **7 days** or **14 days** for a date-by-hour TCT grid of distinct Black Skull targets. The first visit shows 14 days. The tracker remembers the last range selected. Filter to one target or switch from **Any activity** to **Confirmed online** for Torn roster sightings. Tap an hour to see names and evidence. Tap a date for the single-day player breakdown. Both ranges use the same cached individual history.
+
 ## 3.0.3 – Heavy hitter activity
 
 Open **Activity and forecasts → Heavy hitters**, or **Black Skull command → Heavy hitter activity**. The tracker follows today's automatic targets, manual Skull Capo designations, targets assigned to local Black Skulls, and published Black Skull assignments for this opponent. Select any of the last 14 UTC dates. Each row follows one target by Torn player ID.
