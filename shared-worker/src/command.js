@@ -169,9 +169,13 @@ export async function commandRoute(request,env,scope,actor,reply){
   const plan=JSON.stringify(room.plan),ops=JSON.stringify(room.ops);
   if(cmd.type==='observe'&&plan===current?.plan&&ops===current?.operations)return reply({schema:1,revision,now,...visibleRoom(room,actor),actor});
   const args=[plan,ops,now,JSON.stringify(event),f,w];
-  const result=revision===0?await env.DB.prepare('INSERT OR IGNORE INTO war_command(plan,operations,updated,event,faction,war,revision) VALUES(?,?,?,?,?,?,1)').bind(...args).run():
-    await env.DB.prepare('UPDATE war_command SET plan=?,operations=?,updated=?,event=?,next_cleanup=0,revision=revision+1 WHERE faction=? AND war=? AND revision=?').bind(...args,revision).run();
-  need(result.meta.changes===1,409,'Revision conflict. Refresh orders.');
+  // An audit trigger also writes a row. D1 counts those changes, so acknowledge
+  // the command using only the revision returned by the conditional write.
+  const write=revision===0
+    ? env.DB.prepare('INSERT OR IGNORE INTO war_command(plan,operations,updated,event,faction,war,revision) VALUES(?,?,?,?,?,?,1) RETURNING revision').bind(...args)
+    : env.DB.prepare('UPDATE war_command SET plan=?,operations=?,updated=?,event=?,next_cleanup=0,revision=revision+1 WHERE faction=? AND war=? AND revision=? RETURNING revision').bind(...args,revision);
+  const committed=await write.first();
+  need(committed?.revision===revision+1,409,'Revision conflict. Refresh orders.');
   return reply({schema:1,revision:revision+1,now,...visibleRoom(room,actor),actor,...(actor.role==='member'?{}:{event})});
 }
 // Housekeeping never calls Torn. An elapsed grace period cannot authorise a switch.

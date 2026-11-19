@@ -92,7 +92,15 @@ Every per-member grant is tied to a faction and expires after seven days. A clie
 
 ## Validation boundaries
 
-The repository tests exercise synthetic Torn and FFScouter records, a real SQLite schema with migrations/triggers behind the Worker handler, and the distributed installer in mobile-width Chromium. The browser integration can run with the actual hub installer and exercises native HTTP bridge calls against the Worker fixture. Live PDA, subscriber-only responses, production D1 data, account build-token settings and future production builds need separate evidence.
+The repository tests exercise synthetic Torn and FFScouter records, SQLite migrations and triggers, and the distributed installer in mobile-width Chromium. The browser integration can run with the actual hub installer and exercises native HTTP bridge calls against the Worker fixture. A separate integration test runs the Worker on workerd with a disposable local D1 binding. It writes a v1 relative order before migration, verifies its revision and content afterwards, and races two assignments and two claims. It also checks the winning client's acknowledgement, audit history, claim ownership, locks and war isolation. To run it from the repository root with Node 22.12 or later:
+
+```sh
+runtime_dir=$(mktemp -d)
+npm install --prefix "$runtime_dir" --no-audit --no-fund wrangler@4.165.0
+NODE_PATH="$runtime_dir/node_modules" node tests/worker/d1-runtime.mjs
+```
+
+The D1 test uses local credentials and needs no Cloudflare login. Live PDA, subscriber-only responses, production D1 data, account build-token settings and future production builds need separate verification.
 
 ## Specifications
 
