@@ -50,11 +50,12 @@
     return title+'<table aria-label="'+esc(t.title)+'"><colgroup><col class="ws-date-col"><col span="24"></colgroup><thead><tr><th scope="col">TCT</th>'+cols+'</tr></thead><tbody>'+rows+'</tbody></table>';
   }
   function activityScreen(){
-    const opts=activityPrefs,model=trackerModel(opts);
-    const choices=[...state.data.ours,...state.data.enemies].map(p=>[p.id,p.name]);
-    if(opts.player&&!choices.some(([id])=>id===opts.player))choices.push([opts.player,playerName(opts.player)]);
-    const tabs=[['hours','Hour grid'],['weekday','Weekday avg'],['compare','Compare']].map(([v,label])=>
+    const opts=activityPrefs;
+    const tabs=[['hours','Hour grid'],['weekday','Weekday avg'],['compare','Compare'],['heavy','Heavy hitters']].map(([v,label])=>
       '<button type="button" data-action="cmd-mode:'+v+'" aria-pressed="'+(opts.mode===v)+'">'+label+'</button>').join('');
+    if(opts.mode==='heavy')return heavyActivityScreen(tabs);
+    const model=trackerModel(opts),choices=[...state.data.ours,...state.data.enemies].map(p=>[p.id,p.name]);
+    if(opts.player&&!choices.some(([id])=>id===opts.player))choices.push([opts.player,playerName(opts.player)]);
     const controls='<div class="ws-tracker-controls">'+commandOption('days',choiceItems([3,7,14,30]),opts.days,'Days')+
       commandOption('source',[['users','Players seen'],['roster','Online checks %'],['recent','Recent action %'],['scanner','Scanner score'],['attack','Captured attacks']],opts.source,'Show')+
       (opts.mode!=='compare'?commandOption('first',[['enemies','Enemy first'],['ours','Ours first']],opts.first,'Order'):'')+
@@ -182,10 +183,21 @@
         gridSelection=null;
         const {mode,period,idle,first}=activityPrefs;cfg.activityGrid={days,source,mode,period,idle,first};saveCfg();
         if(loadPlayer)await scouterRead('activity',player);
-      }else if(kind==='mode'&&['hours','weekday','compare'].includes(value)){
+      }else if(kind==='heavyview'){
+        activityPrefs.mode='heavy';navigate('heatmap');return;
+      }else if(kind==='heavylatest'){
+        const [id,hour]=value.split('/').map(Number);
+        if(!idKey(id)||!Number.isSafeInteger(hour)||hour%HOUR!==0)return;
+        heavyView.date=Math.floor(hour/(24*HOUR))*24*HOUR;
+        heavyView.selection=id+'/'+hour;render();
+        const cell=root.querySelector('[data-action="cmd-heavycell:'+heavyView.selection+'"]');
+        cell?.scrollIntoView({block:'nearest',inline:'center'});return;
+      }else if(kind==='heavycell'){heavyView.selection=heavyView.selection===value?'':value;}
+      else if(kind==='mode'&&['hours','weekday','compare','heavy'].includes(value)){
         activityPrefs.mode=value;gridSelection=null;cfg.activityGrid={...cfg.activityGrid,mode:value};saveCfg();
+        if(value==='heavy')openHeavyHistory();
       }else if(kind==='cell'){gridSelection=gridSelection===value?null:value;}
-      else if(kind==='player'){activityPrefs.player=target;gridSelection=null;navigate('heatmap');}
+      else if(kind==='player'){activityPrefs.player=target;if(activityPrefs.mode==='heavy')activityPrefs.mode='hours';gridSelection=null;navigate('heatmap');}
       else if(kind==='csv'){fileDownload('warstaxx-activity.csv','text/csv',trackerCSV(trackerModel(),activityPrefs));}
       else if(kind==='flight'){cfg.flightMethod=cmdValue('method');cfg.flightBook=cmdValue('book');saveCfg();}
       else if(kind==='medical')await checkSupplies();

@@ -24,6 +24,11 @@
       return 'unknown';
     };
   }
+  function gridMemberships(faction,player,record){
+    const spans=(record?.memberships||[]).filter(m=>m.faction===faction);
+    if(player?.daysInFaction>0&&player.updated>0)spans.push({first:player.updated-player.daysInFaction*24*HOUR,last:player.updated});
+    return spans;
+  }
   function trackerSeries(faction,opts,at){
     const day=24*HOUR,start=Math.floor(at/day)*day-(opts.days-1)*day;
     const buckets=new Map(),out=new Map(),calendar=gridCalendar(faction,at);
@@ -39,16 +44,16 @@
     const memberships=new Map();
     function memberDuring(id,hour){
       if(!memberships.has(id)){
-        const p=roster.find(p=>p.id===id),spans=(combatArchive.people.get(id)?.memberships||[]).filter(m=>m.faction===faction);
-        if(p?.daysInFaction>0&&p.updated>0)spans.push({first:p.updated-p.daysInFaction*day,last:p.updated});
-        memberships.set(id,spans);
+        memberships.set(id,gridMemberships(faction,roster.find(p=>p.id===id),combatArchive.people.get(id)));
       }
       return memberships.get(id).some(m=>m.first<=hour&&m.last>=Math.min(hour+HOUR,at));
     }
     for(const r of combatArchive.hours.values()){
       if(r.faction!==faction||!within(r.hour)||opts.player&&r.player!==opts.player)continue;
       if(r.source==='scanner'){
-        if(premium&&r.owner===owner&&r.player===opts.player&&(!r.player||memberDuring(r.player,r.hour)))get(r.hour).scan=r;
+        if(premium&&r.owner===owner&&r.player===opts.player&&(!r.player||memberDuring(r.player,r.hour))){
+          const b=get(r.hour);if(!b.scan||b.scan.at<=r.at)b.scan=r;
+        }
         continue;
       }
       if(r.source==='legacy'){if(!opts.player)get(r.hour).legacy=r;continue;}

@@ -33,12 +33,18 @@ with sync_playwright() as pw:
     browser=pw.chromium.launch(executable_path=os.environ.get("CHROMIUM") or shutil.which("google-chrome") or shutil.which("chromium"),args=["--no-sandbox"])
     context=browser.new_context(viewport={"width":360,"height":780},is_mobile=True,has_touch=True)
     worker=subprocess.Popen(["node",str(ROOT/"tests/browser/worker-fixture.mjs")],stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
+    history_reads=[]
     def endpoint(request):
         url=urlsplit(request["url"])
         if url.hostname=="ffscouter.com":
             body={"code":0}
             if url.path.endswith("/check-key"):
                 body.update(is_registered=True,is_premium=True)
+            if url.path.endswith("/activity/player"):
+                query=parse_qs(url.query);target=int(query['target'][0])
+                history_reads.append(target)
+                body.update(meta=dict(subject_type="player",subject_id=target,start=int(query["start"][0]),end=int(query["end"][0]),bucket_seconds=3600,bucket_count=2,truncated=False),
+                            buckets=[dict(ts=fixture_hour*3600,activity_score=4),dict(ts=(fixture_hour+1)*3600,activity_score=3)])
             if url.path.endswith("/activity/faction"):
                 query=parse_qs(url.query);faction=int(query["faction_id"][0])
                 body.update(meta=dict(subject_type="faction",subject_id=faction,start=int(query["start"][0]),end=int(query["end"][0]),bucket_seconds=3600,bucket_count=1,truncated=False,member_count=12),
@@ -97,6 +103,26 @@ with sync_playwright() as pw:
     assert enemy_cell.inner_text()=='1'
     page.locator('#ws-cmd-idle').uncheck()
     assert enemy_cell.inner_text()=='4'
+    page.get_by_role('button',name='Heavy hitters',exact=True).click()
+    page.locator('#ws-heavy-date').select_option(str(midnight))
+    row=grid.locator('tbody tr').first
+    assert 'Objective' in row.inner_text() and 'Visitor' not in grid.inner_text()
+    observed=row.locator(f'[data-action="cmd-heavycell:3/{fixture_hour*3600000}"]')
+    assert observed.inner_text()=='ON'
+    scanned=row.locator(f'[data-action="cmd-heavycell:3/{(fixture_hour+1)*3600000}"]')
+    page.wait_for_function("(selector)=>document.querySelector(selector)?.textContent==='S'",arg=f'[data-action="cmd-heavycell:3/{(fixture_hour+1)*3600000}"]')
+    scanned.click()
+    assert 'Individual FFScouter score 3' in grid.locator('.ws-grid-detail').inner_text()
+    observed.click()
+    assert 'Observed online during this hour' in grid.locator('.ws-grid-detail').inner_text()
+    row.get_by_role('button',name='Objective',exact=True).click()
+    assert 'Designated by Skull Capo' in grid.locator('.ws-grid-detail').inner_text()
+    grid.get_by_role('button',name='Show latest online hour').click()
+    assert page.locator('#ws-heavy-date').input_value()==str((NOW//86400000)*86400000)
+    assert 'Online sighting at' in grid.locator('.ws-grid-detail').inner_text()
+    assert history_reads==[3]
+    assert grid.evaluate("e=>e.scrollWidth>e.clientWidth && e.parentElement.scrollWidth<=e.parentElement.clientWidth+2")
+    page.get_by_role('button',name='Hour grid').click()
     page.locator('details[data-ws-disclosure="enemy-brief"] summary').click()
     assert 'Visitor' in page.locator('.ws-content').inner_text()
     assert 'in Canada' in page.locator('.ws-content').inner_text()
@@ -131,6 +157,11 @@ with sync_playwright() as pw:
     assert page.locator('#ws-cmd-method').input_value()=='Airstrip'
     open_view(page,'combat')
     assert '1 unique attacks' in page.locator('.ws-content').inner_text()
+    open_view(page,'squad')
+    page.get_by_role('button',name='Heavy hitter activity').click()
+    page.locator('#ws-heavy-date').wait_for()
+    page.get_by_text('last full hour for 1 / 1 targets',exact=False).wait_for()
+    assert history_reads==[3]
     # The role is resolved from the bearer by the Worker, never by a UI role label.
     open_view(page,'squad')
     page.locator('details[data-ws-disclosure="target-3"] summary').click()
