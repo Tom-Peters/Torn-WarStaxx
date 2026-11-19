@@ -13,7 +13,7 @@ function setup(){
   const env={HOUR,MIN:60000,cfg,state:{data},combatArchive:archive,positive:Number,idKey:id=>Number.isSafeInteger(id)&&id>0,
     scouterPremiumActive:()=>true,enemyRoleBands:()=>bands,commandRoom:()=>({plan:{assignments:{11:{primary:1},8:{primary:1}}}}),
     playerName:id=>'P'+id,esc:String,infoButton:()=>'',b:()=>''};
-  const api=runInNewContext(read('activity-grid')+read('heavy-activity')+';({heavyTargets,heavyHistory,heavyMark,heavyRange,heavyLast,heavyTargetDetail})',env);
+  const api=runInNewContext(read('activity-grid')+read('heavy-activity')+';({heavyTargets,heavyHistory,heavyMark,heavyRange,heavyLast,heavyTargetDetail,heavyPeriodRows})',env);
   const add=(player,fields)=>{archive.hours.set(archive.hours.size,{faction:20,player,source:'roster',hour,at:hour+55000,samples:2,unknown:0,online:1,...fields});};
   return {api,env,archive,data,add,history:()=>api.heavyHistory(api.heavyTargets(),20,at)};
 }
@@ -68,4 +68,22 @@ test('individual scanner range persists with valid data only and competing accou
   await capture(response,20,8,range);assert.equal(stored.get(range.marker).end,ts+3600);
   state.data.meta.ownerId=4;await capture(response,20,8,{...range,owner:4,marker:'mark-4'});
   assert.deepEqual([...stored.values()].filter(r=>r.source==='scanner').map(r=>r.owner),[3,4]);
+});
+
+test('7 and 14 TCT dates count each heavy target once per hour and distinguish unchecked from observed zero',()=>{
+  const f=setup(),day=24*HOUR,today=Math.floor(at/day)*day;
+  f.add(8,{});f.add(9,{online:0});f.add(10,{source:'scanner',owner:99,score:3});
+  f.archive.fights.set(1,{attacker:8,attackerFaction:20,at:hour+1000});
+  f.add(10,{hour:today-7*day,source:'scanner',owner:99,score:0});
+  f.add(8,{hour:today-13*day});f.add(8,{hour:today-14*day});
+  const data=[...f.history().values()],rows=(d,online=false,targets=data)=>f.api.heavyPeriodRows(targets,d,online,at);
+  const week=rows(7),fortnight=rows(14);
+  assert.equal(week.length,7);assert.equal(week[6].date,today-6*day);
+  assert.equal(fortnight.length,14);assert.equal(fortnight[13].hours[0].hits.length,1);
+  assert.ok(week.every(r=>r.hours.length===24));assert.equal(week[0].hours[23],undefined);
+  assert.equal(week[1].hours[8].sampled,3);assert.equal(week[1].hours[8].hits.length,2);
+  assert.equal(rows(7,true)[1].hours[8].sampled,2);assert.equal(rows(7,true)[1].hours[8].hits.length,1);
+  assert.equal(fortnight[7].hours[0].hits.length,0);assert.equal(rows(14,true)[7].hours[0],undefined);
+  const selected=rows(7,false,[data.find(t=>t.id===10)]);
+  assert.deepEqual(Array.from(selected[1].hours[8].hits,x=>x.t.id),[10]);
 });
