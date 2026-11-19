@@ -1,14 +1,84 @@
+  function gridNumber(n,signed=false){
+    const v=Math.round(n*10)/10;return (signed&&v>0?'+':'')+String(v);
+  }
+  function gridDetail(t,row,h,c,model,opts){
+    const hour=String(h).padStart(2,'0')+':00 TCT',title=row.label+' / '+hour;
+    if(!c){
+      let reason='No matching observations for this hour.';
+      if(opts.mode!=='weekday'&&row.key+h*HOUR>Date.now())reason='This hour has not started.';
+      else if(model.compare){
+        const pair=model.groups.map(g=>g.series.get(row.key+h*HOUR));
+        reason=model.groups.map((g,i)=>g.title+': '+(pair[i]?gridNumber(pair[i].value)+' / '+gridSources[pair[i].source]+(pair[i].partial?' / partial':''):'no sample')).join('. ')+'. A difference needs comparable coverage from the same source.';
+      }
+      return '<strong>'+esc(title)+'</strong><p>'+esc(reason)+'</p>';
+    }
+    const label=opts.source==='users'?(c.source==='premium'?'players seen by Premium':'players observed '+(opts.idle?'online or idle':'online')):gridUnits[opts.source];
+    const facts=[gridSources[c.source],c.period==='unknown'?'war status unknown':c.period==='mixed'?'mixed periods':c.period==='war'?'wartime':'peacetime'];
+    if(c.a)facts.push('Our faction '+gridNumber(c.a.value)+' / enemy '+gridNumber(c.b.value));
+    if(opts.mode==='weekday')facts.push('Mean of '+c.dates+' sampled date'+(c.dates===1?'':'s')+' out of '+row.dates.length+(c.excluded?' / '+c.excluded+' other-source hours excluded':''));
+    if(c.checks!=null)facts.push(c.checks+' known status checks');
+    if(c.roster&&c.source==='local')facts.push(c.seen+' of '+c.roster+' members sampled');
+    if(c.source==='premium'&&c.roster)facts.push('Provider roster '+c.roster);
+    if(c.partial)facts.push('Partial coverage');
+    if(c.last)facts.push('Last checked '+new Date(c.last).toISOString().slice(0,16).replace('T',' ')+' UTC');
+    const links=set=>[...(set||[])].sort((a,b)=>playerName(a).localeCompare(playerName(b))).map(id=>infoButton(playerName(id),id)).join(' ');
+    const named=links(c.names),attackers=links(c.attackers);
+    return '<strong>'+esc(title+' / '+gridNumber(c.value,model.compare)+' '+label)+'</strong><p>'+esc(facts.join(' / '))+'</p>'+
+      (named?'<p>Seen by this device '+named+'</p>':'')+
+      (c.attacks?'<p>'+c.attacks+' captured attack'+(c.attacks===1?'':'s')+' '+attackers+'</p>':'');
+  }
+  function trackerTable(t,model,opts){
+    const cols=Array.from({length:24},(_,h)=>'<th scope="col">'+String(h).padStart(2,'0')+'</th>').join('');
+    const counts=new Map();
+    for(const c of t.series.values())counts.set(c.source,(counts.get(c.source)||0)+1);
+    const sourceNames={premium:'Premium',local:'Torn',score:'scanner',legacy:'archive',attack:'attack log'};
+    const coverage=[...counts].map(([k,n])=>n+'h '+sourceNames[k]).join(' / ')||'No sampled hours';
+    const title='<div class="ws-matrix-title">'+esc(t.title)+' <small>'+esc(coverage)+'</small></div>';
+    const rows=t.rows.map(row=>{
+      let detail='';
+      const cells=row.cells.map((c,h)=>{
+        const selected=gridSelection===t.key+'/'+row.key+'/'+h;
+        const band=!c?'gap':model.compare?(c.value>0?'lead':c.value<0?'trail':'even'):c.period;
+        const level=c&&c.value&&model.peak?Math.ceil(4*Math.abs(c.value)/model.peak):0;
+        const value=c?gridNumber(c.value,model.compare):'\u2013';
+        if(selected)detail='<tr class="ws-grid-detail"><td colspan="25"><div aria-live="polite">'+gridDetail(t,row,h,c,model,opts)+'</div></td></tr>';
+        return '<td><button type="button" class="ws-grid-cell '+band+' lvl'+level+(c?.partial?' partial':'')+'" aria-pressed="'+selected+'" aria-label="'+
+          esc(t.title+', '+row.label+', '+h+':00 TCT, '+(c?value+' '+gridUnits[opts.source]:'no comparable sample'))+'" data-action="cmd-cell:'+t.key+'/'+row.key+'/'+h+'">'+value+'</button></td>';
+      }).join('');
+      return '<tr><th scope="row">'+esc(row.label)+'</th>'+cells+'</tr>'+detail;
+    }).join('');
+    return title+'<table aria-label="'+esc(t.title)+'"><colgroup><col class="ws-date-col"><col span="24"></colgroup><thead><tr><th scope="col">TCT</th>'+cols+'</tr></thead><tbody>'+rows+'</tbody></table>';
+  }
   function activityScreen(){
-    const player=activityPrefs.player,choices=[...state.data.ours,...state.data.enemies].map(p=>[p.id,p.name]);
-    if(player&&!choices.some(x=>x[0]===player))choices.push([player,playerName(player)]);
-    const opts=activityPrefs;
-    let html=card('Enemy intelligence',enemyActivityBrief(Date.now()))+card('Activity / TCT',commandOption('days',choiceItems([3,7,14,30]),opts.days,'Days')+
-      commandOption('period',[['all','All observations'],['war','Wartime'],['peace','Peacetime']],opts.period,'Period')+
-      commandOption('source',[['roster','Confirmed online samples'],['recent','Last action within 15m'],['scanner','Premium scanner score'],['attack','Recorded attacking hits']],opts.source,'Evidence')+
-      commandOption('player',[[0,'All members'],...choices],player,'Player')+b('Apply filters','cmd-filters')+b('Export CSV','cmd-csv')+
-      b('Refresh Premium history','cmd-scanner')+'<p>Percentages describe sampled statuses. A scanner score counts provider observations. '+esc(scannerError)+'</p>');
-    for(const [f,title] of [[cfg.ourId,'Our faction'],[cfg.enemyId,'Enemy faction']])if(f)html+=gridTable(f,title,opts);
-    return html+forecastCard()+foldCommand('old-activity','Observation summaries',activity(false));
+    const opts=activityPrefs,model=trackerModel(opts);
+    const choices=[...state.data.ours,...state.data.enemies].map(p=>[p.id,p.name]);
+    if(opts.player&&!choices.some(([id])=>id===opts.player))choices.push([opts.player,playerName(opts.player)]);
+    const tabs=[['hours','Hour grid'],['weekday','Weekday avg'],['compare','Compare']].map(([v,label])=>
+      '<button type="button" data-action="cmd-mode:'+v+'" aria-pressed="'+(opts.mode===v)+'">'+label+'</button>').join('');
+    const controls='<div class="ws-tracker-controls">'+commandOption('days',choiceItems([3,7,14,30]),opts.days,'Days')+
+      commandOption('source',[['users','Players seen'],['roster','Online checks %'],['recent','Recent action %'],['scanner','Scanner score'],['attack','Captured attacks']],opts.source,'Show')+
+      (opts.mode!=='compare'?commandOption('first',[['enemies','Enemy first'],['ours','Ours first']],opts.first,'Order'):'')+
+      (opts.source==='users'?'<label class="ws-idle"><input type="checkbox" id="ws-cmd-idle" '+(opts.idle?'checked':'')+'> Include idle (Torn)</label>':'')+
+      '</div>'+foldCommand('grid-filters','Filters and export'+(opts.player?' / '+playerName(opts.player):'')+(opts.period!=='all'?' / '+opts.period:''),
+      '<div class="ws-tracker-controls">'+commandOption('period',[['all','All periods'],['war','Wartime'],['peace','Peacetime']],opts.period,'Period')+
+      commandOption('player',[[0,'All members'],...choices],opts.player,'Player')+'</div>'+b('Export CSV','cmd-csv')+b('Refresh Premium history','cmd-scanner')+
+      '<p>Players seen uses the Premium faction count when available. Local counts use distinct players observed online that hour. Include idle uses local Torn observations. '+a('Scanner data policy','https://ffscouter.com/volunteer')+'</p>');
+    const legend=model.compare?'<span class="lead">Our lead</span><span class="trail">Enemy lead</span>':
+      '<span class="peace">Peace</span><span class="war">War</span><span class="unknown">Unknown / mixed</span>';
+    const filters='<div class="ws-grid-tabs">'+tabs+'</div>'+controls+
+      '<div class="ws-grid-key">'+legend+'<small>Brighter = higher'+(model.peak?' / peak '+gridNumber(model.peak):'')+' &middot; &ndash; no sample &middot; corner mark = partial</small></div>';
+    let note='';
+    if(!cfg.enemyId)note='Set or detect an opponent to see enemy activity.';
+    else if(opts.mode==='compare')note='Positive numbers favour our faction. Gaps need comparable observations on both sides.';
+    else if(opts.source==='scanner'&&!scouterPremiumActive())note='Enable FFScouter Premium in Settings to view scanner scores.';
+    else if(!model.groups.find(g=>g.key==='enemies')?.series.size)note=opts.player?'No enemy observations match this player and period.':'No enemy observations in this period. Foreground roster checks and authorised Premium history can fill these hours.';
+    const width=64+25+24*Math.max(19,(gridNumber(model.peak).length+(model.compare?1:0)+(opts.mode==='weekday'?2:0))*7+3);
+    const grid='<div class="ws-hour-scroll" style="--ws-grid-width:'+width+'px" role="region" aria-label="Faction activity grids, swipe for later hours" tabindex="0">'+model.tables.map(t=>trackerTable(t,model,opts)).join('')+'</div>';
+    return card('Faction activity',filters+(note?'<p>'+esc(note)+'</p>':'')+(scannerError?'<p>'+esc(scannerError)+'</p>':'')+grid+
+      '<small>'+opts.days+' UTC dates / swipe for later hours / tap a cell for evidence</small>')+
+      foldCommand('enemy-brief','Enemy intelligence',enemyActivityBrief(Date.now()))+
+      foldCommand('grid-forecast','Attack-window forecasts',forecastCard())+
+      foldCommand('old-activity','Enemy activity summary and player reports',activity(false));
   }
   function forecastCard(){
     const {windows,context:c}=forecastReport();
@@ -105,14 +175,19 @@
         const utc=k=>cmdValue(k)?Date.parse(cmdValue(k)+'Z'):null;
         await syncCommand({type:'roll',choice:cmdValue('roll'),from:utc('from'),until:utc('until')});
       }else if(kind==='scanner')await loadFactionScanner();
-      else if(kind==='filters'){Object.assign(activityPrefs,{days:Number(cmdValue('days')),period:cmdValue('period'),source:cmdValue('source'),player:Number(cmdValue('player'))});if(activityPrefs.source==='scanner'&&activityPrefs.player)await scouterRead('activity',activityPrefs.player);}
-      else if(kind==='player'){activityPrefs.player=target;navigate('heatmap');}
-      else if(kind==='csv'){
-        const csv=['faction,player,hour_utc,source,sum,denominator,observed_players,roster_size,unknown_observations,last_observation_utc'];
-        for(const f of [cfg.ourId,cfg.enemyId].filter(idKey))for(const [hour,c] of activityCells(f))
-          csv.push([f,activityPrefs.player||'',new Date(hour).toISOString(),activityPrefs.source,c.sum,c.count,c.players.size||'',c.roster||'',c.missing,new Date(c.at).toISOString()].join(','));
-        fileDownload('warstaxx-activity.csv','text/csv',csv.join('\r\n'));
-      }else if(kind==='flight'){cfg.flightMethod=cmdValue('method');cfg.flightBook=cmdValue('book');saveCfg();}
+      else if(kind==='filters'){
+        const source=cmdValue('source'),player=Number(cmdValue('player')),days=Number(cmdValue('days'));
+        const loadPlayer=source==='scanner'&&player&&(source!==activityPrefs.source||player!==activityPrefs.player||days!==activityPrefs.days);
+        Object.assign(activityPrefs,{days,source,first:cmdValue('first')||activityPrefs.first,period:cmdValue('period'),player,idle:$('#ws-cmd-idle',root)?.checked||false});
+        gridSelection=null;
+        const {mode,period,idle,first}=activityPrefs;cfg.activityGrid={days,source,mode,period,idle,first};saveCfg();
+        if(loadPlayer)await scouterRead('activity',player);
+      }else if(kind==='mode'&&['hours','weekday','compare'].includes(value)){
+        activityPrefs.mode=value;gridSelection=null;cfg.activityGrid={...cfg.activityGrid,mode:value};saveCfg();
+      }else if(kind==='cell'){gridSelection=gridSelection===value?null:value;}
+      else if(kind==='player'){activityPrefs.player=target;gridSelection=null;navigate('heatmap');}
+      else if(kind==='csv'){fileDownload('warstaxx-activity.csv','text/csv',trackerCSV(trackerModel(),activityPrefs));}
+      else if(kind==='flight'){cfg.flightMethod=cmdValue('method');cfg.flightBook=cmdValue('book');saveCfg();}
       else if(kind==='medical')await checkSupplies();
       else if(kind==='rules'){
         const num=k=>cmdValue(k)===''?null:Number(cmdValue(k)),decay=num('decay'),overseas=num('overseas');

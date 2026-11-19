@@ -1,3 +1,12 @@
+## 3.0.2 – Faction activity grid
+
+Open **Players → Activity** or **Tools & reports → Activity and forecasts**. Both factions share a horizontally scrollable 24-hour TCT axis. The default shows the enemy first, with 14 dates and counts of players seen. Use **Order** to put your own faction first. Tap any cell for its source, coverage and any locally observed names or attacks. Choose 3, 7, 14 or 30 dates. Date labels stay in view when scrolling.
+
+- **Players seen** uses the opted-in Premium faction count when supplied, otherwise the number of distinct members observed online by Torn roster checks. **Include idle (Torn)** counts each locally observed online or idle member once. Older device observations have limited idle coverage. A dash marks missing evidence, and a corner mark identifies partial coverage.
+- **Weekday avg** averages only sampled dates using a single evidence source per cell. **Compare** shows our figure minus theirs for the same UTC hour when both sides have comparable sources and coverage. Green and amber distinguish peacetime and wartime in the hour grid. Blue-grey marks unknown or mixed periods.
+- Open **Filters and export** to select a player or period or export the displayed view. Percentages, scanner scores and captured attacks are also available under **Show**. Scanner activity describes provider observations. It cannot establish continuous online time or identify individual players in a faction aggregate.
+- This release changes the userscript only. Update through the existing Torn PDA install URL. All data stays within the existing storage boundaries. To roll back the UI, restore the 3.0.1 installer from commit `5154230`. Existing local records remain readable.
+
 ## 3.0.1 – Enemy activity intelligence
 
 The Activity screen now reads enemy faction Premium history when enabled and shows enemy evidence even when our own coverage is missing. Select an hour to see observed players and captured attackers. The enemy briefing uses current roster status, dated strength estimates and the last official war scorecard.
