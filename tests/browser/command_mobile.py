@@ -6,14 +6,15 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from urllib.parse import urlsplit, parse_qs
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[2]
 NOW = int(time.time() * 1000)
 def player(i, name, country, status="Okay"):
     return dict(id=i, name=name, status=status, statusText="Abroad in "+country if status=="Abroad" else "Okay",
-                lastAt=NOW, lastAction="Online", locationHint=country, updated=NOW, until=0)
-cfg = dict(ourId=10, enemyId=20, blackSkulls={"1":True}, manualHeavyTargetsByEnemy={"20":{"3":True}})
+                daysInFaction=15, lastAt=NOW, lastAction="Online", locationHint=country, updated=NOW, until=0)
+cfg = dict(ourId=10, enemyId=20, ffEnabled=True, ffConsent=True, ffKey="offline-fixture", blackSkulls={"1":True}, manualHeavyTargetsByEnemy={"20":{"3":True}})
 data = dict(ours=[player(1,"Hitter","Torn"), player(2,"Regular","Canada","Abroad")],
             enemies=[player(3,"Objective","Torn"),player(4,"Visitor","Canada","Abroad")],
             updated=dict(wars=NOW,ours=NOW,enemies=NOW),meta=dict(ownerId=1),
@@ -33,6 +34,16 @@ with sync_playwright() as pw:
     context=browser.new_context(viewport={"width":360,"height":780},is_mobile=True,has_touch=True)
     worker=subprocess.Popen(["node",str(ROOT/"tests/browser/worker-fixture.mjs")],stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
     def endpoint(request):
+        url=urlsplit(request["url"])
+        if url.hostname=="ffscouter.com":
+            body={"code":0}
+            if url.path.endswith("/check-key"):
+                body.update(is_registered=True,is_premium=True)
+            if url.path.endswith("/activity/faction"):
+                query=parse_qs(url.query);faction=int(query["faction_id"][0])
+                body.update(meta=dict(subject_type="faction",subject_id=faction,start=int(query["start"][0]),end=int(query["end"][0]),bucket_seconds=3600,bucket_count=1,truncated=False,member_count=12),
+                            buckets=[dict(ts=fixture_hour*3600,activity_score=8,active_players=4 if faction==20 else 2)])
+            return {"status":200,"responseText":json.dumps(body)}
         if "fixture.workers.dev" not in request["url"]:
             return {"status":503,"responseText":"{}"}
         worker.stdin.write(json.dumps(request)+"\n");worker.stdin.flush()
@@ -59,17 +70,41 @@ with sync_playwright() as pw:
         assert expected.lower() in text.lower(),(view,text[:600])
         assert page.locator(".ws-content").evaluate("e=>e.scrollWidth<=e.clientWidth+2"),(view,"horizontal overflow")
     assert "1 unique attacks" in page.locator(".ws-content").inner_text()
-    # The legacy Activity route in PDA must expose the opponent even without friendly samples.
+    # Both entry points show the date grid. Scope both aggregate counts and named evidence.
     open_view(page, "activity")
+    grid=page.locator('.ws-hour-scroll')
+    assert grid.locator('table').count()==2
+    assert 'Enemy faction' in grid.locator('table').first.get_attribute('aria-label')
+    page.locator('#ws-cmd-first').select_option('ours')
+    assert 'Our faction' in grid.locator('table').first.get_attribute('aria-label')
+    assert grid.evaluate('e=>{const t=[...e.querySelectorAll("table")];return [...t[0].rows[0].cells].every((c,i)=>Math.abs(c.getBoundingClientRect().x-t[1].rows[0].cells[i].getBoundingClientRect().x)<1)}')
+
+    assert grid.locator('table').nth(1).locator('tbody tr').count()==14
+    assert grid.locator('table').nth(1).locator('thead th').count()==25
+    midnight=(fixture_hour-6)*3600000
+    key=f'{midnight}/6'
+    enemy_cell=grid.locator(f'[data-action="cmd-cell:enemies/{key}"]')
+    page.wait_for_function("(selector)=>document.querySelector(selector)?.textContent==='4'",arg=f'[data-action="cmd-cell:enemies/{key}"]')
+    enemy_cell.click()
+    assert 'FFScouter faction activity' in grid.locator('.ws-grid-detail').inner_text()
+    assert 'Objective' in grid.locator('.ws-grid-detail').inner_text()
+    page.get_by_role('button',name='Compare',exact=True).click()
+    assert grid.locator(f'[data-action="cmd-cell:compare/{key}"]').inner_text()=='-2'
+    page.get_by_role('button',name='Weekday avg').click()
+    assert grid.locator('table').first.locator('tbody tr').count()==8
+    page.get_by_role('button',name='Hour grid').click()
+    page.locator('#ws-cmd-idle').check()
+    assert enemy_cell.inner_text()=='1'
+    page.locator('#ws-cmd-idle').uncheck()
+    assert enemy_cell.inner_text()=='4'
+    page.locator('details[data-ws-disclosure="enemy-brief"] summary').click()
     assert 'Visitor' in page.locator('.ws-content').inner_text()
     assert 'in Canada' in page.locator('.ws-content').inner_text()
-    cell = page.locator('[data-action="hour:6"]')
-    assert '75%' in cell.inner_text()
-    cell.click()
+    page.locator('details[data-ws-disclosure="old-activity"] summary').click()
+    page.locator('[data-action="hour:6"]').click()
     detail = page.locator('#ws-enemy-hour-detail')
     assert '06:00-06:59 TCT' in detail.inner_text()
-    assert 'Objective' in detail.inner_text()
-    detail.get_by_role('button', name='Objective').click()
+    detail.get_by_role('button', name='Objective').first.click()
     assert 'stalemates' in page.locator('.ws-content').inner_text().lower()
     open_view(page,"enemy")
     assert page.locator('.ws-country-title').all_text_contents()==["Torn","Canada"]
@@ -78,10 +113,17 @@ with sync_playwright() as pw:
     assert 'Your attack / Stalemate' in page.locator('.ws-roster-grid details[open]').inner_text()
     open_view(page,'heatmap')
     scroll=page.locator('.ws-hour-scroll').first
-    assert scroll.evaluate("e=>{e.scrollLeft=140;return e.scrollLeft>0}")
+    assert scroll.evaluate("e=>{const th=e.querySelector('tbody th');const x=th.getBoundingClientRect().x;e.scrollLeft=140;return e.scrollLeft>0&&Math.abs(th.getBoundingClientRect().x-x)<2}")
     page.locator("#ws-cmd-days").select_option("3")
-    page.get_by_role("button",name="Apply filters").click()
+    assert scroll.evaluate("e=>e.scrollLeft")>0
+    assert scroll.locator('table').first.locator('tbody tr').count()==3
     assert "3 UTC dates" in page.locator(".ws-content").inner_text()
+    page.locator('details[data-ws-disclosure="grid-filters"] summary').click()
+    with page.expect_download() as export:
+        page.get_by_role('button',name='Export CSV').click()
+    lines=Path(export.value.path()).read_text().splitlines()
+    assert len(lines)==1+2*3*24
+    assert any(line.startswith('20,') and ',users,false,4,,,' in line for line in lines)
     open_view(page,'flights')
     page.locator('#ws-cmd-method').select_option('Airstrip');page.locator('#ws-cmd-book').select_option('no')
     page.get_by_role('button',name='Compare routes').click()

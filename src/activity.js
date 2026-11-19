@@ -1,4 +1,12 @@
-  const activityPrefs={days:7,period:'all',player:0,source:'roster'};
+  const activityPrefs={days:14,period:'all',player:0,source:'users',mode:'hours',idle:false,first:'enemies'};
+  const savedGrid=cfg.activityGrid||{};
+  if([3,7,14,30].includes(savedGrid.days))activityPrefs.days=savedGrid.days;
+  if(['all','war','peace'].includes(savedGrid.period))activityPrefs.period=savedGrid.period;
+  if(['users','roster','recent','scanner','attack'].includes(savedGrid.source))activityPrefs.source=savedGrid.source;
+  if(['hours','weekday','compare'].includes(savedGrid.mode))activityPrefs.mode=savedGrid.mode;
+  activityPrefs.idle=savedGrid.idle===true;
+  if(savedGrid.first==='ours')activityPrefs.first='ours';
+  let gridSelection=null;
   let activitySweep=0,scannerBusy=false,scannerError='';
   let scannerScope='',scannerAttempts=new Map();
   function warAt(faction,at){
@@ -19,8 +27,16 @@
         req.onsuccess=()=>{
           const r=req.result||{id:key,hour,faction,player:p.id,war,source:'roster',samples:0,online:0,recent:0,unknown:0,away:0};
           if(r.at>=at) return;
-          r.samples++;r.online+=Number(isOnline(p));r.unknown+=Number(!['Online','Idle','Offline'].includes(p.lastAction));
-          r.recent+=Number(p.lastAt>0&&at-p.lastAt>=0&&at-p.lastAt<=15*MIN);
+          const status=String(p.lastAction||'').toLowerCase(),known=['online','idle','offline'].includes(status);
+          r.samples++;r.online+=Number(status==='online');r.unknown+=Number(!known);
+          r.idle=(r.idle||0)+Number(status==='idle');
+          r.idleKnown=(r.idleKnown||0)+Number(known);
+          const dated=p.lastAt>0&&p.lastAt<=at;
+          // Only new observations have a denominator for last-action coverage.
+          r.datedChecks=(r.datedChecks||0)+Number(dated);
+          r.recentDated=(r.recentDated||0)+Number(dated&&at-p.lastAt<=15*MIN);
+          r.recent+=Number(dated&&at-p.lastAt<=15*MIN);
+          r.periodVerified=war!=null;
           r.away+=Number(memberState(p)==='away');r.at=at;r.country=nativeWarLocation(p).country;r.roster=players.length;
           store.put(r);rows.push(r);
         };
@@ -168,26 +184,6 @@
   function fileDownload(name,type,body){
     const url=URL.createObjectURL(new Blob([body],{type})),a=document.createElement('a');
     a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);
-  }
-  function gridValue(c,source){
-    if(!c||!c.count)return '-';
-    return source==='roster'||source==='recent'?Math.round(100*c.sum/c.count)+'%':fmt(c.sum/c.count);
-  }
-  function gridTable(faction,title,opts){
-    const cells=activityCells(faction,opts),midnight=Math.floor(Date.now()/(24*HOUR))*24*HOUR;
-    const headers=Array.from({length:24},(_,i)=>'<th>'+String(i).padStart(2,'0')+'</th>').join('');
-    const tr=(name,items)=>'<tr><th scope="row">'+esc(name)+'</th>'+items.join('')+'</tr>';
-    const td=(c)=>'<td style="background:'+(c?.count?'rgba(0,178,207,'+(0.13+0.67*Math.min(1,c.sum/c.count/(opts.source==='scanner'?10:1)))+')':'transparent')+'">'+gridValue(c,opts.source)+'</td>';
-    let rows='';
-    for(let day=0;day<opts.days;day++){
-      const date=midnight-day*24*HOUR;
-      rows+=tr(new Date(date).toISOString().slice(5,10),Array.from({length:24},(_,i)=>td(cells.get(date+i*HOUR))));
-    }
-    const means=(filter)=>Array.from({length:24},(_,i)=>{const v=weightedCells(cells,d=>filter(d)&&d.getUTCHours()===i);return td(v.mean===null?null:{count:1,sum:v.mean});});
-    rows+=tr('Average',means(()=>true));
-    for(let d=0;d<7;d++)rows+=tr(['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d],means(x=>x.getUTCDay()===d));
-    const last=Math.max(0,...[...cells.values()].map(c=>c.at)),coverage=[...cells.values()].filter(c=>c.count).length;
-    return card(title,'<p>'+coverage+' sampled hour(s) / '+opts.days+' UTC dates. Latest '+esc(stamp(last))+'. Dash = missing.</p><div class="ws-hour-scroll" tabindex="0"><table><thead><tr><th>TCT</th>'+headers+'</tr></thead><tbody>'+rows+'</tbody></table></div>');
   }
   async function migrateLegacyActivity(){
     if(!combatArchive.db||state.data.meta.hourMigration)return;

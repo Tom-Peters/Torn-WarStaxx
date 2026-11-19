@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      3.0.1
+// @version      3.0.2
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -71,7 +71,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='3.0.1';
+  const id='war', version='3.0.2';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -184,7 +184,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='3.0.1', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='3.0.2', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics','dashboard','scouting','archive','scouter','squad','brief','heatmap','flights','combat'];
   const labels={scouter:'FFScouter Premium',overview:'Live war',enemy:'Players',reports:'Tools & reports',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics',dashboard:'Full dashboard',scouting:'Faction scouting',archive:'Detailed reports',squad:'Black Skull command',brief:'War briefing',heatmap:'Activity and forecasts',flights:'Defensive travel',combat:'Combat archive'};
@@ -426,7 +426,15 @@
   }
   // END bundled intelligence.js
   // BEGIN bundled activity.js
-  const activityPrefs={days:7,period:'all',player:0,source:'roster'};
+  const activityPrefs={days:14,period:'all',player:0,source:'users',mode:'hours',idle:false,first:'enemies'};
+  const savedGrid=cfg.activityGrid||{};
+  if([3,7,14,30].includes(savedGrid.days))activityPrefs.days=savedGrid.days;
+  if(['all','war','peace'].includes(savedGrid.period))activityPrefs.period=savedGrid.period;
+  if(['users','roster','recent','scanner','attack'].includes(savedGrid.source))activityPrefs.source=savedGrid.source;
+  if(['hours','weekday','compare'].includes(savedGrid.mode))activityPrefs.mode=savedGrid.mode;
+  activityPrefs.idle=savedGrid.idle===true;
+  if(savedGrid.first==='ours')activityPrefs.first='ours';
+  let gridSelection=null;
   let activitySweep=0,scannerBusy=false,scannerError='';
   let scannerScope='',scannerAttempts=new Map();
   function warAt(faction,at){
@@ -447,8 +455,16 @@
         req.onsuccess=()=>{
           const r=req.result||{id:key,hour,faction,player:p.id,war,source:'roster',samples:0,online:0,recent:0,unknown:0,away:0};
           if(r.at>=at) return;
-          r.samples++;r.online+=Number(isOnline(p));r.unknown+=Number(!['Online','Idle','Offline'].includes(p.lastAction));
-          r.recent+=Number(p.lastAt>0&&at-p.lastAt>=0&&at-p.lastAt<=15*MIN);
+          const status=String(p.lastAction||'').toLowerCase(),known=['online','idle','offline'].includes(status);
+          r.samples++;r.online+=Number(status==='online');r.unknown+=Number(!known);
+          r.idle=(r.idle||0)+Number(status==='idle');
+          r.idleKnown=(r.idleKnown||0)+Number(known);
+          const dated=p.lastAt>0&&p.lastAt<=at;
+          // Only new observations have a denominator for last-action coverage.
+          r.datedChecks=(r.datedChecks||0)+Number(dated);
+          r.recentDated=(r.recentDated||0)+Number(dated&&at-p.lastAt<=15*MIN);
+          r.recent+=Number(dated&&at-p.lastAt<=15*MIN);
+          r.periodVerified=war!=null;
           r.away+=Number(memberState(p)==='away');r.at=at;r.country=nativeWarLocation(p).country;r.roster=players.length;
           store.put(r);rows.push(r);
         };
@@ -596,26 +612,6 @@
   function fileDownload(name,type,body){
     const url=URL.createObjectURL(new Blob([body],{type})),a=document.createElement('a');
     a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);
-  }
-  function gridValue(c,source){
-    if(!c||!c.count)return '-';
-    return source==='roster'||source==='recent'?Math.round(100*c.sum/c.count)+'%':fmt(c.sum/c.count);
-  }
-  function gridTable(faction,title,opts){
-    const cells=activityCells(faction,opts),midnight=Math.floor(Date.now()/(24*HOUR))*24*HOUR;
-    const headers=Array.from({length:24},(_,i)=>'<th>'+String(i).padStart(2,'0')+'</th>').join('');
-    const tr=(name,items)=>'<tr><th scope="row">'+esc(name)+'</th>'+items.join('')+'</tr>';
-    const td=(c)=>'<td style="background:'+(c?.count?'rgba(0,178,207,'+(0.13+0.67*Math.min(1,c.sum/c.count/(opts.source==='scanner'?10:1)))+')':'transparent')+'">'+gridValue(c,opts.source)+'</td>';
-    let rows='';
-    for(let day=0;day<opts.days;day++){
-      const date=midnight-day*24*HOUR;
-      rows+=tr(new Date(date).toISOString().slice(5,10),Array.from({length:24},(_,i)=>td(cells.get(date+i*HOUR))));
-    }
-    const means=(filter)=>Array.from({length:24},(_,i)=>{const v=weightedCells(cells,d=>filter(d)&&d.getUTCHours()===i);return td(v.mean===null?null:{count:1,sum:v.mean});});
-    rows+=tr('Average',means(()=>true));
-    for(let d=0;d<7;d++)rows+=tr(['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d],means(x=>x.getUTCDay()===d));
-    const last=Math.max(0,...[...cells.values()].map(c=>c.at)),coverage=[...cells.values()].filter(c=>c.count).length;
-    return card(title,'<p>'+coverage+' sampled hour(s) / '+opts.days+' UTC dates. Latest '+esc(stamp(last))+'. Dash = missing.</p><div class="ws-hour-scroll" tabindex="0"><table><thead><tr><th>TCT</th>'+headers+'</tr></thead><tbody>'+rows+'</tbody></table></div>');
   }
   async function migrateLegacyActivity(){
     if(!combatArchive.db||state.data.meta.hourMigration)return;
@@ -955,17 +951,87 @@
   }
   // END bundled coordination.js
   // BEGIN bundled views.js
+  function gridNumber(n,signed=false){
+    const v=Math.round(n*10)/10;return (signed&&v>0?'+':'')+String(v);
+  }
+  function gridDetail(t,row,h,c,model,opts){
+    const hour=String(h).padStart(2,'0')+':00 TCT',title=row.label+' / '+hour;
+    if(!c){
+      let reason='No matching observations for this hour.';
+      if(opts.mode!=='weekday'&&row.key+h*HOUR>Date.now())reason='This hour has not started.';
+      else if(model.compare){
+        const pair=model.groups.map(g=>g.series.get(row.key+h*HOUR));
+        reason=model.groups.map((g,i)=>g.title+': '+(pair[i]?gridNumber(pair[i].value)+' / '+gridSources[pair[i].source]+(pair[i].partial?' / partial':''):'no sample')).join('. ')+'. A difference needs comparable coverage from the same source.';
+      }
+      return '<strong>'+esc(title)+'</strong><p>'+esc(reason)+'</p>';
+    }
+    const label=opts.source==='users'?(c.source==='premium'?'players seen by Premium':'players observed '+(opts.idle?'online or idle':'online')):gridUnits[opts.source];
+    const facts=[gridSources[c.source],c.period==='unknown'?'war status unknown':c.period==='mixed'?'mixed periods':c.period==='war'?'wartime':'peacetime'];
+    if(c.a)facts.push('Our faction '+gridNumber(c.a.value)+' / enemy '+gridNumber(c.b.value));
+    if(opts.mode==='weekday')facts.push('Mean of '+c.dates+' sampled date'+(c.dates===1?'':'s')+' out of '+row.dates.length+(c.excluded?' / '+c.excluded+' other-source hours excluded':''));
+    if(c.checks!=null)facts.push(c.checks+' known status checks');
+    if(c.roster&&c.source==='local')facts.push(c.seen+' of '+c.roster+' members sampled');
+    if(c.source==='premium'&&c.roster)facts.push('Provider roster '+c.roster);
+    if(c.partial)facts.push('Partial coverage');
+    if(c.last)facts.push('Last checked '+new Date(c.last).toISOString().slice(0,16).replace('T',' ')+' UTC');
+    const links=set=>[...(set||[])].sort((a,b)=>playerName(a).localeCompare(playerName(b))).map(id=>infoButton(playerName(id),id)).join(' ');
+    const named=links(c.names),attackers=links(c.attackers);
+    return '<strong>'+esc(title+' / '+gridNumber(c.value,model.compare)+' '+label)+'</strong><p>'+esc(facts.join(' / '))+'</p>'+
+      (named?'<p>Seen by this device '+named+'</p>':'')+
+      (c.attacks?'<p>'+c.attacks+' captured attack'+(c.attacks===1?'':'s')+' '+attackers+'</p>':'');
+  }
+  function trackerTable(t,model,opts){
+    const cols=Array.from({length:24},(_,h)=>'<th scope="col">'+String(h).padStart(2,'0')+'</th>').join('');
+    const counts=new Map();
+    for(const c of t.series.values())counts.set(c.source,(counts.get(c.source)||0)+1);
+    const sourceNames={premium:'Premium',local:'Torn',score:'scanner',legacy:'archive',attack:'attack log'};
+    const coverage=[...counts].map(([k,n])=>n+'h '+sourceNames[k]).join(' / ')||'No sampled hours';
+    const title='<div class="ws-matrix-title">'+esc(t.title)+' <small>'+esc(coverage)+'</small></div>';
+    const rows=t.rows.map(row=>{
+      let detail='';
+      const cells=row.cells.map((c,h)=>{
+        const selected=gridSelection===t.key+'/'+row.key+'/'+h;
+        const band=!c?'gap':model.compare?(c.value>0?'lead':c.value<0?'trail':'even'):c.period;
+        const level=c&&c.value&&model.peak?Math.ceil(4*Math.abs(c.value)/model.peak):0;
+        const value=c?gridNumber(c.value,model.compare):'\u2013';
+        if(selected)detail='<tr class="ws-grid-detail"><td colspan="25"><div aria-live="polite">'+gridDetail(t,row,h,c,model,opts)+'</div></td></tr>';
+        return '<td><button type="button" class="ws-grid-cell '+band+' lvl'+level+(c?.partial?' partial':'')+'" aria-pressed="'+selected+'" aria-label="'+
+          esc(t.title+', '+row.label+', '+h+':00 TCT, '+(c?value+' '+gridUnits[opts.source]:'no comparable sample'))+'" data-action="cmd-cell:'+t.key+'/'+row.key+'/'+h+'">'+value+'</button></td>';
+      }).join('');
+      return '<tr><th scope="row">'+esc(row.label)+'</th>'+cells+'</tr>'+detail;
+    }).join('');
+    return title+'<table aria-label="'+esc(t.title)+'"><colgroup><col class="ws-date-col"><col span="24"></colgroup><thead><tr><th scope="col">TCT</th>'+cols+'</tr></thead><tbody>'+rows+'</tbody></table>';
+  }
   function activityScreen(){
-    const player=activityPrefs.player,choices=[...state.data.ours,...state.data.enemies].map(p=>[p.id,p.name]);
-    if(player&&!choices.some(x=>x[0]===player))choices.push([player,playerName(player)]);
-    const opts=activityPrefs;
-    let html=card('Enemy intelligence',enemyActivityBrief(Date.now()))+card('Activity / TCT',commandOption('days',choiceItems([3,7,14,30]),opts.days,'Days')+
-      commandOption('period',[['all','All observations'],['war','Wartime'],['peace','Peacetime']],opts.period,'Period')+
-      commandOption('source',[['roster','Confirmed online samples'],['recent','Last action within 15m'],['scanner','Premium scanner score'],['attack','Recorded attacking hits']],opts.source,'Evidence')+
-      commandOption('player',[[0,'All members'],...choices],player,'Player')+b('Apply filters','cmd-filters')+b('Export CSV','cmd-csv')+
-      b('Refresh Premium history','cmd-scanner')+'<p>Percentages describe sampled statuses. A scanner score counts provider observations. '+esc(scannerError)+'</p>');
-    for(const [f,title] of [[cfg.ourId,'Our faction'],[cfg.enemyId,'Enemy faction']])if(f)html+=gridTable(f,title,opts);
-    return html+forecastCard()+foldCommand('old-activity','Observation summaries',activity(false));
+    const opts=activityPrefs,model=trackerModel(opts);
+    const choices=[...state.data.ours,...state.data.enemies].map(p=>[p.id,p.name]);
+    if(opts.player&&!choices.some(([id])=>id===opts.player))choices.push([opts.player,playerName(opts.player)]);
+    const tabs=[['hours','Hour grid'],['weekday','Weekday avg'],['compare','Compare']].map(([v,label])=>
+      '<button type="button" data-action="cmd-mode:'+v+'" aria-pressed="'+(opts.mode===v)+'">'+label+'</button>').join('');
+    const controls='<div class="ws-tracker-controls">'+commandOption('days',choiceItems([3,7,14,30]),opts.days,'Days')+
+      commandOption('source',[['users','Players seen'],['roster','Online checks %'],['recent','Recent action %'],['scanner','Scanner score'],['attack','Captured attacks']],opts.source,'Show')+
+      (opts.mode!=='compare'?commandOption('first',[['enemies','Enemy first'],['ours','Ours first']],opts.first,'Order'):'')+
+      (opts.source==='users'?'<label class="ws-idle"><input type="checkbox" id="ws-cmd-idle" '+(opts.idle?'checked':'')+'> Include idle (Torn)</label>':'')+
+      '</div>'+foldCommand('grid-filters','Filters and export'+(opts.player?' / '+playerName(opts.player):'')+(opts.period!=='all'?' / '+opts.period:''),
+      '<div class="ws-tracker-controls">'+commandOption('period',[['all','All periods'],['war','Wartime'],['peace','Peacetime']],opts.period,'Period')+
+      commandOption('player',[[0,'All members'],...choices],opts.player,'Player')+'</div>'+b('Export CSV','cmd-csv')+b('Refresh Premium history','cmd-scanner')+
+      '<p>Players seen uses the Premium faction count when available. Local counts use distinct players observed online that hour. Include idle uses local Torn observations. '+a('Scanner data policy','https://ffscouter.com/volunteer')+'</p>');
+    const legend=model.compare?'<span class="lead">Our lead</span><span class="trail">Enemy lead</span>':
+      '<span class="peace">Peace</span><span class="war">War</span><span class="unknown">Unknown / mixed</span>';
+    const filters='<div class="ws-grid-tabs">'+tabs+'</div>'+controls+
+      '<div class="ws-grid-key">'+legend+'<small>Brighter = higher'+(model.peak?' / peak '+gridNumber(model.peak):'')+' &middot; &ndash; no sample &middot; corner mark = partial</small></div>';
+    let note='';
+    if(!cfg.enemyId)note='Set or detect an opponent to see enemy activity.';
+    else if(opts.mode==='compare')note='Positive numbers favour our faction. Gaps need comparable observations on both sides.';
+    else if(opts.source==='scanner'&&!scouterPremiumActive())note='Enable FFScouter Premium in Settings to view scanner scores.';
+    else if(!model.groups.find(g=>g.key==='enemies')?.series.size)note=opts.player?'No enemy observations match this player and period.':'No enemy observations in this period. Foreground roster checks and authorised Premium history can fill these hours.';
+    const width=64+25+24*Math.max(19,(gridNumber(model.peak).length+(model.compare?1:0)+(opts.mode==='weekday'?2:0))*7+3);
+    const grid='<div class="ws-hour-scroll" style="--ws-grid-width:'+width+'px" role="region" aria-label="Faction activity grids, swipe for later hours" tabindex="0">'+model.tables.map(t=>trackerTable(t,model,opts)).join('')+'</div>';
+    return card('Faction activity',filters+(note?'<p>'+esc(note)+'</p>':'')+(scannerError?'<p>'+esc(scannerError)+'</p>':'')+grid+
+      '<small>'+opts.days+' UTC dates / swipe for later hours / tap a cell for evidence</small>')+
+      foldCommand('enemy-brief','Enemy intelligence',enemyActivityBrief(Date.now()))+
+      foldCommand('grid-forecast','Attack-window forecasts',forecastCard())+
+      foldCommand('old-activity','Enemy activity summary and player reports',activity(false));
   }
   function forecastCard(){
     const {windows,context:c}=forecastReport();
@@ -1062,14 +1128,19 @@
         const utc=k=>cmdValue(k)?Date.parse(cmdValue(k)+'Z'):null;
         await syncCommand({type:'roll',choice:cmdValue('roll'),from:utc('from'),until:utc('until')});
       }else if(kind==='scanner')await loadFactionScanner();
-      else if(kind==='filters'){Object.assign(activityPrefs,{days:Number(cmdValue('days')),period:cmdValue('period'),source:cmdValue('source'),player:Number(cmdValue('player'))});if(activityPrefs.source==='scanner'&&activityPrefs.player)await scouterRead('activity',activityPrefs.player);}
-      else if(kind==='player'){activityPrefs.player=target;navigate('heatmap');}
-      else if(kind==='csv'){
-        const csv=['faction,player,hour_utc,source,sum,denominator,observed_players,roster_size,unknown_observations,last_observation_utc'];
-        for(const f of [cfg.ourId,cfg.enemyId].filter(idKey))for(const [hour,c] of activityCells(f))
-          csv.push([f,activityPrefs.player||'',new Date(hour).toISOString(),activityPrefs.source,c.sum,c.count,c.players.size||'',c.roster||'',c.missing,new Date(c.at).toISOString()].join(','));
-        fileDownload('warstaxx-activity.csv','text/csv',csv.join('\r\n'));
-      }else if(kind==='flight'){cfg.flightMethod=cmdValue('method');cfg.flightBook=cmdValue('book');saveCfg();}
+      else if(kind==='filters'){
+        const source=cmdValue('source'),player=Number(cmdValue('player')),days=Number(cmdValue('days'));
+        const loadPlayer=source==='scanner'&&player&&(source!==activityPrefs.source||player!==activityPrefs.player||days!==activityPrefs.days);
+        Object.assign(activityPrefs,{days,source,first:cmdValue('first')||activityPrefs.first,period:cmdValue('period'),player,idle:$('#ws-cmd-idle',root)?.checked||false});
+        gridSelection=null;
+        const {mode,period,idle,first}=activityPrefs;cfg.activityGrid={days,source,mode,period,idle,first};saveCfg();
+        if(loadPlayer)await scouterRead('activity',player);
+      }else if(kind==='mode'&&['hours','weekday','compare'].includes(value)){
+        activityPrefs.mode=value;gridSelection=null;cfg.activityGrid={...cfg.activityGrid,mode:value};saveCfg();
+      }else if(kind==='cell'){gridSelection=gridSelection===value?null:value;}
+      else if(kind==='player'){activityPrefs.player=target;gridSelection=null;navigate('heatmap');}
+      else if(kind==='csv'){fileDownload('warstaxx-activity.csv','text/csv',trackerCSV(trackerModel(),activityPrefs));}
+      else if(kind==='flight'){cfg.flightMethod=cmdValue('method');cfg.flightBook=cmdValue('book');saveCfg();}
       else if(kind==='medical')await checkSupplies();
       else if(kind==='rules'){
         const num=k=>cmdValue(k)===''?null:Number(cmdValue(k)),decay=num('decay'),overseas=num('overseas');
@@ -1253,6 +1324,178 @@
     return latest?'<p class="ws-small">'+esc((latest.attacker===me?'Your attack':'Their attack on you')+' / '+latest.result+' / '+stamp(latest.at))+'</p>':'';
   }
   // END bundled enemy-activity.js
+  // BEGIN bundled activity-grid.js
+  const gridWeekdays=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const gridUnits={users:'players',roster:'% online',recent:'% recently active',scanner:'scanner score',attack:'attacks'};
+  const gridSources={premium:'FFScouter faction activity',local:'Torn roster checks',score:'FFScouter scanner score',attack:'Captured attacks',legacy:'Archived roster totals'};
+
+  // The latest ranked-war list covers only the period back to its oldest returned start.
+  function gridCalendar(faction,at){
+    const side=faction===cfg.ourId?'ourWars':'enemyWars',history=state.data[side]||[];
+    const fetched=state.data.updated[side]||0,intervals=[];
+    const add=(start,end,ongoing=false)=>{
+      if(start>0&&end>=start)intervals.push([start,end,ongoing]);
+    };
+    for(const war of history)if(war.factions?.includes(faction))
+      add(epochMs(war.start),war.end?epochMs(war.end):fetched,!war.end);
+    const current=state.data.war;
+    if(current&&current.factions?.some(f=>f.id===faction))add(epochMs(current.start),current.observed,true);
+    const complete=history.length&&history.every(w=>w.start&&w.factions?.includes(faction));
+    const oldest=complete?Math.min(...history.map(w=>epochMs(w.start))):Infinity;
+    return (hour,tags)=>{
+      const end=Math.min(hour+HOUR,at);
+      const overlaps=intervals.filter(([a,b])=>a<end&&b>hour);
+      if(overlaps.length)return overlaps.some(([a,b,ongoing])=>a<=hour&&(b>=end||ongoing&&tags?.has('war')))?'war':'mixed';
+      if(tags?.has('war'))return tags.has('peace')?'mixed':'war';
+      if((hour>=oldest&&end<=fetched)||tags?.has('peace'))return 'peace';
+      return 'unknown';
+    };
+  }
+  function trackerSeries(faction,opts,at){
+    const day=24*HOUR,start=Math.floor(at/day)*day-(opts.days-1)*day;
+    const buckets=new Map(),out=new Map(),calendar=gridCalendar(faction,at);
+    const owner=positive(state.data.meta.ownerId),premium=owner&&scouterPremiumActive();
+    const within=h=>Number.isSafeInteger(h)&&h%HOUR===0&&h>=start&&h<=at;
+    const get=h=>{
+      if(!buckets.has(h))buckets.set(h,{active:new Set(),seen:new Set(),attackers:new Set(),scoped:new Set(),tags:new Set(),
+        checks:0,online:0,recent:0,recentChecks:0,attacks:0,roster:0,unknown:0,idlePartial:false,localAt:0,attackAt:0});
+      return buckets.get(h);
+    };
+    const side=faction===cfg.ourId?'ours':'enemies';
+    const roster=state.data[side]||[];
+    const memberships=new Map();
+    function memberDuring(id,hour){
+      if(!memberships.has(id)){
+        const p=roster.find(p=>p.id===id),spans=(combatArchive.people.get(id)?.memberships||[]).filter(m=>m.faction===faction);
+        if(p?.daysInFaction>0&&p.updated>0)spans.push({first:p.updated-p.daysInFaction*day,last:p.updated});
+        memberships.set(id,spans);
+      }
+      return memberships.get(id).some(m=>m.first<=hour&&m.last>=Math.min(hour+HOUR,at));
+    }
+    for(const r of combatArchive.hours.values()){
+      if(r.faction!==faction||!within(r.hour)||opts.player&&r.player!==opts.player)continue;
+      if(r.source==='scanner'){
+        if(premium&&r.owner===owner&&r.player===opts.player&&(!r.player||memberDuring(r.player,r.hour)))get(r.hour).scan=r;
+        continue;
+      }
+      if(r.source==='legacy'){if(!opts.player)get(r.hour).legacy=r;continue;}
+      if(r.source!=='roster'||!r.player)continue;
+      const b=get(r.hour),known=r.samples-r.unknown;
+      b.scoped.add(r.player);b.localAt=Math.max(b.localAt,r.at);b.roster=Math.max(b.roster,r.roster||0);
+      if(r.war>0)b.tags.add('war');else if(r.war===0&&(r.periodVerified||side==='ours'))b.tags.add('peace');
+      if(known>0){
+        b.checks+=known;b.online+=r.online;
+        if(!opts.idle||r.idleKnown>0||r.online>0)b.seen.add(r.player);
+        if(r.online>0||opts.idle&&r.idle>0)b.active.add(r.player);
+        if(opts.idle&&(r.idleKnown||0)<known)b.idlePartial=true;
+      }
+      b.unknown+=r.unknown||0;
+      if(r.datedChecks>0){b.recent+=r.recentDated;b.recentChecks+=r.datedChecks;}
+      else if(r.datedChecks==null&&r.recent===r.samples&&r.samples>0){b.recent+=r.samples;b.recentChecks+=r.samples;}
+    }
+    // Side-only records from older installers need independent membership evidence.
+    for(const p of roster){
+      if(opts.player&&opts.player!==p.id)continue;
+      for(const [i,s] of Object.entries(state.data.activity?.[side+':'+p.id]?.hours||{})){
+        const hour=Number(i)*HOUR;
+        if(!within(hour)||!(s.online>0&&s.online<=s.count)||buckets.get(hour)?.scoped.has(p.id))continue;
+        if(!memberDuring(p.id,hour))continue;
+        const b=get(hour);b.active.add(p.id);b.seen.add(p.id);
+        b.legacyNames=true;if(opts.idle)b.idlePartial=true;
+      }
+    }
+    for(const r of combatArchive.fights.values()){
+      const hour=Math.floor(r.at/HOUR)*HOUR;
+      if(!within(hour)||r.at>at||r.attackerFaction!==faction||opts.player&&r.attacker!==opts.player)continue;
+      const b=get(hour);b.attacks++;b.attackAt=Math.max(b.attackAt,r.at);
+      if(r.attacker)b.attackers.add(r.attacker);
+      if(r.warId||r.ranked)b.tags.add('war');
+    }
+    for(const [hour,b] of buckets){
+      const period=calendar(hour,b.tags);
+      if(opts.period!=='all'&&period!==opts.period)continue;
+      const scan=b.scan;
+      let value=null,source='',roster=null,partial=false,last=null,checks=null;
+      if(opts.source==='users'&&!opts.player&&!opts.idle&&Number.isSafeInteger(scan?.active)&&scan.active>=0){
+        value=scan.active;source='premium';roster=scan.roster;partial=scan.partial;last=scan.at;
+      }else if(opts.source==='users'&&b.seen.size){
+        value=b.active.size;source='local';roster=opts.player?1:b.roster||null;last=b.localAt||null;checks=b.checks||null;
+        partial=b.idlePartial||b.legacyNames||!roster||b.seen.size<roster;
+      }else if(opts.source==='scanner'&&Number.isFinite(scan?.score)){
+        value=scan.score;source='score';roster=scan.roster;partial=scan.partial;last=scan.at;
+      }else if(opts.source==='attack'&&b.attacks){
+        value=b.attacks;source='attack';last=b.attackAt;
+      }else if((opts.source==='roster'&&b.checks)||(opts.source==='recent'&&b.recentChecks)){
+        checks=opts.source==='roster'?b.checks:b.recentChecks;
+        value=100*(opts.source==='roster'?b.online:b.recent)/checks;
+        source='local';last=b.localAt;roster=opts.player?1:b.roster||null;partial=b.unknown>0||!roster||b.seen.size<roster;
+      }else if(opts.source==='roster'&&b.legacy?.samples>0){
+        checks=b.legacy.samples;value=100*b.legacy.online/checks;source='legacy';last=b.legacy.at;partial=true;
+      }
+      if(value!==null)out.set(hour,{value,source,period,roster,partial:!!partial,last,checks,dates:1,
+        names:b.active,seen:b.seen.size,attackers:b.attackers,attacks:b.attacks});
+    }
+    return out;
+  }
+  function trackerAverage(cells){
+    if(!cells.length)return null;
+    // Do not blend scanner activity and live online statuses into one average.
+    const source=cells.find(c=>c.source==='premium')?.source||cells.find(c=>c.source==='local')?.source||cells[0].source;
+    const used=cells.filter(c=>c.source===source),dates=used.length,periods=new Set(used.map(c=>c.period));
+    return {source,value:used.reduce((v,c)=>v+c.value,0)/dates,dates,excluded:cells.length-dates,
+      period:periods.size===1?used[0].period:'mixed',partial:used.some(c=>c.partial),
+      last:Math.max(...used.map(c=>c.last||0))||null,
+      names:new Set(used.flatMap(c=>[...c.names])),attackers:new Set(used.flatMap(c=>[...c.attackers])),attacks:used.reduce((v,c)=>v+c.attacks,0)};
+  }
+  function trackerDifference(a,b){
+    if(!a||!b||a.source!==b.source||a.partial||b.partial)return null;
+    return {value:a.value-b.value,source:a.source,period:a.period===b.period?a.period:'mixed',a,b,dates:1,
+      partial:false,last:Math.max(a.last||0,b.last||0)||null};
+  }
+  function trackerModel(opts=activityPrefs,at=Date.now()){
+    const day=24*HOUR,today=Math.floor(at/day)*day;
+    const dates=Array.from({length:opts.days},(_,i)=>today-i*day);
+    const sides=[['ours',cfg.ourId,'Our faction'],['enemies',cfg.enemyId,'Enemy faction']].filter(([,id])=>idKey(id));
+    const groups=sides.map(([key,id,side])=>{
+      const name=state.data.factionBasic[id]?.name||state.data.war?.factions?.find(f=>f.id===id)?.name||
+        (key==='enemies'&&state.data.war?.opponentId===id?state.data.war.opponentName:'');
+      return {key,id,title:side+(name?' / '+name:'')+' #'+id,series:trackerSeries(id,opts,at)};
+    });
+    const rows=opts.mode==='weekday'?[1,2,3,4,5,6,0,-1].map(d=>({key:d,label:d===-1?'All days':gridWeekdays[d],
+      dates:dates.filter(t=>d===-1||new Date(t).getUTCDay()===d)})):
+      dates.map(t=>({key:t,label:gridWeekdays[new Date(t).getUTCDay()]+' '+new Date(t).toISOString().slice(5,10),dates:[t]}));
+    const compare=opts.mode==='compare';
+    let tables=groups.slice();
+    if(compare){
+      tables=[];
+      if(groups.length===2){
+        const matched=new Map();
+        for(const [hour,ours] of groups[0].series){
+          const difference=trackerDifference(ours,groups[1].series.get(hour));
+          if(difference)matched.set(hour,difference);
+        }
+        tables.push({key:'compare',id:0,title:'Our faction minus enemy',series:matched});
+      }
+    }else if(opts.first==='enemies')tables.reverse();
+    let peak=0;
+    for(const t of tables)t.rows=rows.map(row=>({...row,cells:Array.from({length:24},(_,h)=>{
+      const cells=row.dates.map(d=>t.series.get(d+h*HOUR)).filter(Boolean);
+      const c=opts.mode==='weekday'?trackerAverage(cells):cells[0];
+      if(c)peak=Math.max(peak,Math.abs(c.value));
+      return c;
+    })}));
+    return {groups,tables,peak,compare};
+  }
+  function trackerCSV(model,opts){
+    const csv=['faction_id,comparison_ours_id,comparison_enemy_id,player_filter,view,utc_date_or_weekday,hour_tct,metric,include_idle,value,our_value,enemy_value,source,period,sampled_dates,partial,last_checked_utc'];
+    for(const t of model.tables)for(const row of t.rows)row.cells.forEach((c,h)=>{
+      const label=opts.mode==='weekday'?row.label:new Date(row.key).toISOString().slice(0,10);
+      csv.push([t.id||'',model.compare?model.groups[0].id:'',model.compare?model.groups[1].id:'',opts.player||'',opts.mode,label,String(h).padStart(2,'0'),opts.source,opts.source==='users'&&opts.idle,
+        c?.value??'',c?.a?.value??'',c?.b?.value??'',c?gridSources[c.source]:'',c?.period||'',c?.dates??'',c?.partial??'',c?.last?new Date(c.last).toISOString():''].join(','));
+    });
+    return csv.join('\r\n');
+  }
+  // END bundled activity-grid.js
   const effectiveKey=()=>String(cfg.key||'').trim()||(apiKeyPda.includes('PDA-APIKEY')?'':apiKeyPda);
   const saveCfg=()=>{try{localStorage.setItem(CONFIG,JSON.stringify(cfg));return true;}catch(_){state.localKeyError=true;return false;}};
   const save=()=>{try{localStorage.setItem(DATA,JSON.stringify(state.data));return true;}catch(_){
@@ -2057,7 +2300,7 @@
         query.set('from',String(Math.floor(Date.now()/1000)-7*86400));
       }else{
         path='activity/player';query.set('target',String(id));query.set('bucket','3600');
-        const end=Math.floor(Date.now()/HOUR)*3600;query.set('end',String(end));query.set('start',String(end-(state.tab==='heatmap'?activityPrefs.days:1)*86400));
+        const end=Math.floor(Date.now()/HOUR)*3600;query.set('end',String(end));query.set('start',String(end-(['activity','heatmap'].includes(state.tab)?activityPrefs.days:1)*86400));
       }
       const body=await ffRequest('https://ffscouter.com/api/v1/'+path+'?'+query);if(!current())return;
       const at=Date.now();
@@ -3488,7 +3731,7 @@
         if(enemy){
           const fresh=roster(enemy,old).map(p=>({...p,updated:enemyStart}));
           if(oldAt&&Date.now()-oldAt<5*MIN&&activeWarNow())observeNativeWarTransitions(old,fresh,positive(state.data.war?.id));
-          state.data.enemies=fresh;captureRoster('enemies',fresh,state.data.updated.enemies,wars?(activeWarNow()?state.data.war.id:0):null).catch(archiveFailure);
+          state.data.enemies=fresh;captureRoster('enemies',fresh,state.data.updated.enemies,wars&&state.data.war?.opponentId===cfg.enemyId?(activeWarNow()?state.data.war.id:0):warAt(cfg.enemyId,enemyStart)).catch(archiveFailure);
           if(previousWarId&&state.data.war&&previousWarId===positive(state.data.war.id)&&
             oldAt&&Date.now()-oldAt<5*MIN)recordAvailability(old,fresh,previousWarId);
         }
@@ -3601,7 +3844,38 @@
     '#warstaxx-root .ws-lead{padding:14px;background:linear-gradient(110deg,#103e63,#0b2948);border:1px solid #397a9e;border-radius:12px;margin-bottom:10px}',
     '#warstaxx-root .ws-lead h2{font-size:18px;margin:0 0 8px}#warstaxx-root .ws-score{font-size:22px;font-weight:800}',
     '#warstaxx-root .ws-table-wrap button.ws-inline{border:0;background:none;color:#8ae3ff;padding:2px;min-height:28px;text-align:left;font-weight:700;text-decoration:underline}',
-    '#warstaxx-root .ws-hour-scroll{overflow-x:auto;max-width:100%;overscroll-behavior-x:contain}#warstaxx-root .ws-hour-scroll table{border-collapse:collapse;width:max-content;font-variant-numeric:tabular-nums}#warstaxx-root .ws-hour-scroll td,#warstaxx-root .ws-hour-scroll th{padding:5px;text-align:center;min-width:32px}#warstaxx-root .ws-hour-scroll th:first-child{position:sticky;left:0;background:#11283a;color:#dbf6ff}#warstaxx-root details label{display:grid;min-width:0}#warstaxx-root select,#warstaxx-root input{max-width:100%;box-sizing:border-box}',
+    '#warstaxx-root details label{display:grid;min-width:0}#warstaxx-root select,#warstaxx-root input{max-width:100%;box-sizing:border-box}',
+    '#warstaxx-root .ws-grid-tabs,#warstaxx-root .ws-tracker-controls,#warstaxx-root .ws-grid-key{display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin:6px 0}',
+    '#warstaxx-root .ws-grid-tabs button{background:#122f46;color:#bcd9e7;border:1px solid #34556a;border-radius:5px;min-height:32px;padding:3px 9px;font:inherit}#warstaxx-root .ws-grid-tabs button[aria-pressed=true]{background:#105274;color:white;border-color:#64d7e8}',
+    '#warstaxx-root .ws-tracker-controls label{display:flex;align-items:center;gap:4px;font-size:12px;margin:0;max-width:100%}#warstaxx-root .ws-tracker-controls select{width:auto;max-width:145px;min-height:30px;margin:0;padding:3px}',
+    '#warstaxx-root .ws-tracker-controls .ws-idle{display:inline-flex;flex-direction:row;gap:3px}#warstaxx-root .ws-idle input{width:15px;height:15px;min-height:0;margin:0}',
+    '#warstaxx-root details[data-ws-disclosure="grid-filters"]{margin:5px 0}#warstaxx-root details[data-ws-disclosure="grid-filters"]>summary{padding:5px 7px;min-height:24px;font-size:12px}',
+    '#warstaxx-root .ws-grid-key{color:#c7dce7;font-size:11px;gap:7px}#warstaxx-root .ws-grid-key span:before{content:"";display:inline-block;background:#46768b;width:8px;height:8px;margin-right:3px;border-radius:2px}#warstaxx-root .ws-grid-key .peace:before,#warstaxx-root .ws-grid-key .lead:before{background:#4bcc8a}#warstaxx-root .ws-grid-key .war:before,#warstaxx-root .ws-grid-key .trail:before{background:#f3a54c}',
+    '#warstaxx-root .ws-hour-scroll{overflow-x:auto;max-width:100%;container-type:inline-size;font-variant-numeric:tabular-nums;scrollbar-color:#527186 #0a1a2a}',
+    '#warstaxx-root .ws-hour-scroll table{border-collapse:separate;border-spacing:1px;width:max(100%,var(--ws-grid-width,550px));min-width:0;table-layout:fixed;margin:0;background:#0c1c2b}',
+    '#warstaxx-root .ws-date-col{width:64px}',
+    '#warstaxx-root .ws-hour-scroll th,#warstaxx-root .ws-hour-scroll td{font-size:11px;line-height:17px;text-align:center;padding:0;border:0;min-width:0;color:#bed8e2;font-weight:500}',
+    '#warstaxx-root .ws-hour-scroll th:first-child,#warstaxx-root .ws-matrix-title{position:sticky;left:0;background:#142b3e;text-align:left;z-index:1}',
+    '#warstaxx-root .ws-hour-scroll th:first-child{padding:0 4px;min-width:64px;color:#e6f3fa;white-space:nowrap}#warstaxx-root .ws-matrix-title{padding:4px 5px;margin:6px 0 1px;font-size:13px;font-weight:700;color:#dcf4fa}#warstaxx-root .ws-matrix-title small{font-size:10px;font-weight:400}',
+    '#warstaxx-root .ws-grid-cell{appearance:none;display:block;width:100%;min-width:0;min-height:20px;padding:0 1px;border:0;border-radius:2px;box-shadow:none;font:600 11px/20px system-ui,sans-serif;color:#f0f8fa}',
+    '#warstaxx-root .ws-grid-cell[aria-pressed=true],#warstaxx-root .ws-grid-cell:focus-visible{outline:2px solid white;outline-offset:-2px}#warstaxx-root .ws-grid-cell.gap{background:transparent;color:#748799}',
+    '#warstaxx-root .ws-grid-cell.partial{background-image:linear-gradient(225deg,#cee7ec 3px,transparent 3px)}',
+    '#warstaxx-root .ws-grid-detail td{text-align:left;background:#102c41}#warstaxx-root .ws-grid-detail td>div{position:sticky;left:0;width:min(82vw,660px);max-width:100cqi;box-sizing:border-box;padding:6px;font:12px/1.4 system-ui,sans-serif;white-space:normal;color:#e0f1fa}#warstaxx-root .ws-grid-detail p{margin:4px 0}',
+    '#warstaxx-root .ws-grid-cell.peace.lvl0,#warstaxx-root .ws-grid-cell.lead.lvl0{background-color:#19372f;color:#f1f8fa}',
+    '#warstaxx-root .ws-grid-cell.peace.lvl1,#warstaxx-root .ws-grid-cell.lead.lvl1{background-color:#20513d;color:#f1f8fa}',
+    '#warstaxx-root .ws-grid-cell.peace.lvl2,#warstaxx-root .ws-grid-cell.lead.lvl2{background-color:#2a684a;color:#f1f8fa}',
+    '#warstaxx-root .ws-grid-cell.peace.lvl3,#warstaxx-root .ws-grid-cell.lead.lvl3{background-color:#51a370;color:#0b1c27}',
+    '#warstaxx-root .ws-grid-cell.peace.lvl4,#warstaxx-root .ws-grid-cell.lead.lvl4{background-color:#8fe3a7;color:#0b1c27}',
+    '#warstaxx-root .ws-grid-cell.war.lvl0,#warstaxx-root .ws-grid-cell.trail.lvl0{background-color:#3e2f23;color:#f1f8fa}',
+    '#warstaxx-root .ws-grid-cell.war.lvl1,#warstaxx-root .ws-grid-cell.trail.lvl1{background-color:#624024;color:#f1f8fa}',
+    '#warstaxx-root .ws-grid-cell.war.lvl2,#warstaxx-root .ws-grid-cell.trail.lvl2{background-color:#855021;color:#f1f8fa}',
+    '#warstaxx-root .ws-grid-cell.war.lvl3,#warstaxx-root .ws-grid-cell.trail.lvl3{background-color:#ce8945;color:#0b1c27}',
+    '#warstaxx-root .ws-grid-cell.war.lvl4,#warstaxx-root .ws-grid-cell.trail.lvl4{background-color:#ffc270;color:#0b1c27}',
+    '#warstaxx-root .ws-grid-cell.unknown.lvl0,#warstaxx-root .ws-grid-cell.mixed.lvl0,#warstaxx-root .ws-grid-cell.even.lvl0{background-color:#243440;color:#f1f8fa}',
+    '#warstaxx-root .ws-grid-cell.unknown.lvl1,#warstaxx-root .ws-grid-cell.mixed.lvl1,#warstaxx-root .ws-grid-cell.even.lvl1{background-color:#304b62;color:#f1f8fa}',
+    '#warstaxx-root .ws-grid-cell.unknown.lvl2,#warstaxx-root .ws-grid-cell.mixed.lvl2,#warstaxx-root .ws-grid-cell.even.lvl2{background-color:#375c75;color:#f1f8fa}',
+    '#warstaxx-root .ws-grid-cell.unknown.lvl3,#warstaxx-root .ws-grid-cell.mixed.lvl3,#warstaxx-root .ws-grid-cell.even.lvl3{background-color:#719ab3;color:#0b1c27}',
+    '#warstaxx-root .ws-grid-cell.unknown.lvl4,#warstaxx-root .ws-grid-cell.mixed.lvl4,#warstaxx-root .ws-grid-cell.even.lvl4{background-color:#a8cbd9;color:#0b1c27}',
     '#warstaxx-root .ws-hour-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:3px;margin:8px 0}#warstaxx-root .ws-hour{border:1px solid #426781;border-radius:5px;text-align:center;padding:5px 1px;background:#103652}',
     '#warstaxx-root .ws-hour.positive{background:#125d61;border-color:#4d9c99}#warstaxx-root .ws-hour.negative{background:#633144;border-color:#a26b7c}#warstaxx-root .ws-hour.unknown{opacity:.5;background:#1e3249}',
     '#warstaxx-root .ws-hour b{display:block;font-size:11px}#warstaxx-root .ws-hour small{font-size:9px}',
@@ -7685,7 +7959,7 @@
       '<button type="button" class="'+((state.tab===tab||
         !primary.includes(state.tab)&&tab===detailGroup)?'on':'')+
       '" data-tab="'+tab+'">'+esc(labels[tab])+'</button>').join('');
-    const pages={scouter:scouterScreen,overview:warWorkspace,enemy:rosterWorkspace,reports:archiveWorkspace,dashboard:overview,scouting:enemyScreen,archive:reportsScreen,leader:leaderScreen,skulls:blackSkullsRoom,commander,operations,ledger,threats,control,turtle,command,pace,afteraction,intel,targets,matchups,timeline,strategy,activity,history,assignments:orders,alerts:alertView,settings,diagnostics,squad:squadScreen,brief:briefScreen,heatmap:activityScreen,flights:flightScreen,combat:archiveScreen};
+    const pages={scouter:scouterScreen,overview:warWorkspace,enemy:rosterWorkspace,reports:archiveWorkspace,dashboard:overview,scouting:enemyScreen,archive:reportsScreen,leader:leaderScreen,skulls:blackSkullsRoom,commander,operations,ledger,threats,control,turtle,command,pace,afteraction,intel,targets,matchups,timeline,strategy,activity:activityScreen,history,assignments:orders,alerts:alertView,settings,diagnostics,squad:squadScreen,brief:briefScreen,heatmap:activityScreen,flights:flightScreen,combat:archiveScreen};
     const content=$('.ws-content',root);
     const scroll=content.scrollTop;
     if(previousDisclosureView){
@@ -7693,6 +7967,7 @@
       if(disclosureViews.size>100)disclosureViews.delete(disclosureViews.keys().next().value);
     }
     const disclosureView=state.tab+':'+(state.playerOpen?positive(state.chosen):0);
+    const trackerScroll=previousDisclosureView===disclosureView?content.querySelector('.ws-hour-scroll')?.scrollLeft:0;
     const active=document.activeElement;
     // Preserve keyboard focus when polling redraws the current view.
     const focusData=active&&content.contains(active)?{
@@ -7739,6 +8014,7 @@
     state.renderedPlayerId=state.tab==='targets'&&state.playerOpen?positive(state.chosen):0;
     state.skipDraftRestore=false;
     content.scrollTop=scroll;
+    if(trackerScroll&&content.querySelector('.ws-hour-scroll'))content.querySelector('.ws-hour-scroll').scrollLeft=trackerScroll;
     if(focusData){
       const controls=Array.from(content.querySelectorAll('button,input,select,textarea,a[href]'));
       const same=controls.find(x=>(focusData.id&&x.id===focusData.id)||
@@ -8225,6 +8501,7 @@
     }
   });
   root.addEventListener('change',e=>{
+    if(e.target.closest('.ws-tracker-controls')){commandAction('filters');return;}
     if(e.target.id==='ws-roster-country'){workspace.country=e.target.value;render();return;}
     if(e.target.id==='ws-roster-sort'){workspace.sort=e.target.value;render();return;}
     const risk=e.target.closest('[data-skull-risk]');
