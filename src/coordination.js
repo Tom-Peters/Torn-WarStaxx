@@ -79,7 +79,7 @@
     const room=commandRoom(),role=room?.actor.role,mayPlan=role==='capo',actor=room?.actor.id;
     let html=card('Black Skull command',esc(commandSync.error||(!room?'Local proposals. Connect shared orders in Settings to publish.':
       'Shared revision '+room.revision+' / '+role+' / checked '+age(commandSync.readAt)))+
-      '<div class="ws-toolbar">'+b('Refresh orders','cmd-sync')+b('Settings','tab:settings')+'</div>');
+      '<div class="ws-toolbar">'+b('Heavy hitter activity','cmd-heavyview')+b('Refresh orders','cmd-sync')+b('Settings','tab:settings')+'</div>');
     const proposals=suggestedAssignments(),map=new Map(proposals.map(p=>[p.target.id,p]));
     const ids=[...new Set([...Object.keys(room?.plan.assignments||{}).map(Number),...map.keys()])].sort((i,j)=>
       (room?.plan.assignments[j]?.priority??map.get(j)?.priority??0)-(room?.plan.assignments[i]?.priority??map.get(i)?.priority??0));

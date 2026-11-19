@@ -3,7 +3,7 @@
   if([3,7,14,30].includes(savedGrid.days))activityPrefs.days=savedGrid.days;
   if(['all','war','peace'].includes(savedGrid.period))activityPrefs.period=savedGrid.period;
   if(['users','roster','recent','scanner','attack'].includes(savedGrid.source))activityPrefs.source=savedGrid.source;
-  if(['hours','weekday','compare'].includes(savedGrid.mode))activityPrefs.mode=savedGrid.mode;
+  if(['hours','weekday','compare','heavy'].includes(savedGrid.mode))activityPrefs.mode=savedGrid.mode;
   activityPrefs.idle=savedGrid.idle===true;
   if(savedGrid.first==='ours')activityPrefs.first='ours';
   let gridSelection=null;
@@ -17,8 +17,8 @@
     return null;
   }
   async function captureRoster(side,players,at,war){
-    await archiveReady;if(!combatArchive.db||!players.length)return;
     const faction=side==='ours'?cfg.ourId:cfg.enemyId,hour=Math.floor(at/HOUR)*HOUR;
+    await archiveReady;if(!combatArchive.db||!faction||!players.length)return;
     const rows=[];
     await transact('hours',store=>{
       for(const p of players){
@@ -29,6 +29,7 @@
           if(r.at>=at) return;
           const status=String(p.lastAction||'').toLowerCase(),known=['online','idle','offline'].includes(status);
           r.samples++;r.online+=Number(status==='online');r.unknown+=Number(!known);
+          if(status==='online')r.lastOnlineAt=at;
           r.idle=(r.idle||0)+Number(status==='idle');
           r.idleKnown=(r.idleKnown||0)+Number(known);
           const dated=p.lastAt>0&&p.lastAt<=at;
@@ -71,20 +72,27 @@
       expired.forEach(x=>combatArchive.hours.delete(x.id));
     }
   }
-  async function captureScanner(body,faction,player=0){
+  async function captureScanner(body,faction,player=0,range=null){
     await archiveReady;
-    const meta=body?.meta,at=Date.now();
+    const meta=body?.meta,at=Date.now(),owner=positive(state.data.meta.ownerId);
+    if(range&&(!range.valid()||range.from!==meta?.start||range.end!==meta?.end))return false;
     if(!combatArchive.db||meta?.subject_type!==(player?'player':'faction')||Number(meta.subject_id)!==(player||faction)||
       meta.bucket_seconds!==3600||!Array.isArray(body.buckets)||body.buckets.length>744)throw Error('Unrecognised activity response');
     const rows=[];
     for(const b of body.buckets){
-      const hour=b.ts*1000;
-      if(!Number.isInteger(b.ts)||b.ts<meta.start||b.ts>=meta.end||hour>at||hour<at-31*24*HOUR||!Number.isFinite(b.activity_score)||b.activity_score<0)continue;
-      rows.push({id:[hour,faction,player,'scanner'].join('/'),hour,faction,player,war:warAt(faction,hour),
-        owner:positive(state.data.meta.ownerId),source:'scanner',score:b.activity_score,active:officialNumber(b.active_players),roster:officialNumber(meta.member_count),
+      const hour=b?.ts*1000;
+      if(!Number.isInteger(b?.ts)||hour%HOUR!==0||b.ts<meta.start||b.ts>=meta.end||hour>at||hour<at-31*24*HOUR||!Number.isFinite(b.activity_score)||b.activity_score<0)continue;
+      const parts=[hour,faction,player,'scanner'];if(player)parts.push(owner);
+      rows.push({id:parts.join('/'),hour,faction,player,war:warAt(faction,hour),
+        owner,source:'scanner',score:b.activity_score,active:officialNumber(b.active_players),roster:officialNumber(meta.member_count),
         ratio:officialNumber(b.active_ratio),partial:meta.truncated===true,at});
     }
+    if(range&&meta.truncated===false&&new Set(rows.map(r=>r.hour)).size===body.buckets.length){
+      rows.push({id:range.marker,source:'scanner-range',faction,player,owner:range.owner,at,hour:Math.floor(at/HOUR)*HOUR,
+        from:range.coveredFrom,end:range.end});
+    }
     await transact('hours',s=>rows.forEach(r=>s.put(r)));rows.forEach(r=>combatArchive.hours.set(r.id,r));
+    return true;
   }
   async function loadFactionScanner(){
     if(scannerBusy||document.hidden||!cfg.ffConsent||!cfg.ffEnabled)return;
@@ -132,8 +140,9 @@
       if(r.hour<cut||r.hour>at||r.faction!==faction||!allowed(r.war)||r.source!==(options.source==='recent'?'roster':options.source))continue;
       if(r.source==='scanner'&&r.owner!==positive(state.data.meta.ownerId))continue;
       if(options.player?r.player!==options.player:r.source==='scanner'&&r.player)continue;
-      const c=bucket(r.hour);c.at=Math.max(c.at,r.at);c.roster=Math.max(c.roster,r.roster||0);c.received++;
-      if(r.source==='scanner'){c.sum+=r.score;c.count++;if(r.partial)c.missing++;}
+      const c=bucket(r.hour);if(r.source==='scanner'&&c.at>r.at)continue;
+      c.at=Math.max(c.at,r.at);c.roster=Math.max(c.roster,r.roster||0);c.received++;
+      if(r.source==='scanner'){c.sum=r.score;c.count=1;c.missing=Number(!!r.partial);c.received=1;}
       else{c.players.add(r.player);c.sum+=options.source==='recent'?r.recent:r.online;c.count+=options.source==='recent'?r.samples:r.samples-r.unknown;c.missing+=r.unknown;}
     }
     if(options.source==='roster'&&!options.player)for(const r of combatArchive.hours.values()){

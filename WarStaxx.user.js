@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      3.0.2
+// @version      3.0.3
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -71,7 +71,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='3.0.2';
+  const id='war', version='3.0.3';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -184,7 +184,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='3.0.2', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='3.0.3', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics','dashboard','scouting','archive','scouter','squad','brief','heatmap','flights','combat'];
   const labels={scouter:'FFScouter Premium',overview:'Live war',enemy:'Players',reports:'Tools & reports',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics',dashboard:'Full dashboard',scouting:'Faction scouting',archive:'Detailed reports',squad:'Black Skull command',brief:'War briefing',heatmap:'Activity and forecasts',flights:'Defensive travel',combat:'Combat archive'};
@@ -431,7 +431,7 @@
   if([3,7,14,30].includes(savedGrid.days))activityPrefs.days=savedGrid.days;
   if(['all','war','peace'].includes(savedGrid.period))activityPrefs.period=savedGrid.period;
   if(['users','roster','recent','scanner','attack'].includes(savedGrid.source))activityPrefs.source=savedGrid.source;
-  if(['hours','weekday','compare'].includes(savedGrid.mode))activityPrefs.mode=savedGrid.mode;
+  if(['hours','weekday','compare','heavy'].includes(savedGrid.mode))activityPrefs.mode=savedGrid.mode;
   activityPrefs.idle=savedGrid.idle===true;
   if(savedGrid.first==='ours')activityPrefs.first='ours';
   let gridSelection=null;
@@ -445,8 +445,8 @@
     return null;
   }
   async function captureRoster(side,players,at,war){
-    await archiveReady;if(!combatArchive.db||!players.length)return;
     const faction=side==='ours'?cfg.ourId:cfg.enemyId,hour=Math.floor(at/HOUR)*HOUR;
+    await archiveReady;if(!combatArchive.db||!faction||!players.length)return;
     const rows=[];
     await transact('hours',store=>{
       for(const p of players){
@@ -457,6 +457,7 @@
           if(r.at>=at) return;
           const status=String(p.lastAction||'').toLowerCase(),known=['online','idle','offline'].includes(status);
           r.samples++;r.online+=Number(status==='online');r.unknown+=Number(!known);
+          if(status==='online')r.lastOnlineAt=at;
           r.idle=(r.idle||0)+Number(status==='idle');
           r.idleKnown=(r.idleKnown||0)+Number(known);
           const dated=p.lastAt>0&&p.lastAt<=at;
@@ -499,20 +500,27 @@
       expired.forEach(x=>combatArchive.hours.delete(x.id));
     }
   }
-  async function captureScanner(body,faction,player=0){
+  async function captureScanner(body,faction,player=0,range=null){
     await archiveReady;
-    const meta=body?.meta,at=Date.now();
+    const meta=body?.meta,at=Date.now(),owner=positive(state.data.meta.ownerId);
+    if(range&&(!range.valid()||range.from!==meta?.start||range.end!==meta?.end))return false;
     if(!combatArchive.db||meta?.subject_type!==(player?'player':'faction')||Number(meta.subject_id)!==(player||faction)||
       meta.bucket_seconds!==3600||!Array.isArray(body.buckets)||body.buckets.length>744)throw Error('Unrecognised activity response');
     const rows=[];
     for(const b of body.buckets){
-      const hour=b.ts*1000;
-      if(!Number.isInteger(b.ts)||b.ts<meta.start||b.ts>=meta.end||hour>at||hour<at-31*24*HOUR||!Number.isFinite(b.activity_score)||b.activity_score<0)continue;
-      rows.push({id:[hour,faction,player,'scanner'].join('/'),hour,faction,player,war:warAt(faction,hour),
-        owner:positive(state.data.meta.ownerId),source:'scanner',score:b.activity_score,active:officialNumber(b.active_players),roster:officialNumber(meta.member_count),
+      const hour=b?.ts*1000;
+      if(!Number.isInteger(b?.ts)||hour%HOUR!==0||b.ts<meta.start||b.ts>=meta.end||hour>at||hour<at-31*24*HOUR||!Number.isFinite(b.activity_score)||b.activity_score<0)continue;
+      const parts=[hour,faction,player,'scanner'];if(player)parts.push(owner);
+      rows.push({id:parts.join('/'),hour,faction,player,war:warAt(faction,hour),
+        owner,source:'scanner',score:b.activity_score,active:officialNumber(b.active_players),roster:officialNumber(meta.member_count),
         ratio:officialNumber(b.active_ratio),partial:meta.truncated===true,at});
     }
+    if(range&&meta.truncated===false&&new Set(rows.map(r=>r.hour)).size===body.buckets.length){
+      rows.push({id:range.marker,source:'scanner-range',faction,player,owner:range.owner,at,hour:Math.floor(at/HOUR)*HOUR,
+        from:range.coveredFrom,end:range.end});
+    }
     await transact('hours',s=>rows.forEach(r=>s.put(r)));rows.forEach(r=>combatArchive.hours.set(r.id,r));
+    return true;
   }
   async function loadFactionScanner(){
     if(scannerBusy||document.hidden||!cfg.ffConsent||!cfg.ffEnabled)return;
@@ -560,8 +568,9 @@
       if(r.hour<cut||r.hour>at||r.faction!==faction||!allowed(r.war)||r.source!==(options.source==='recent'?'roster':options.source))continue;
       if(r.source==='scanner'&&r.owner!==positive(state.data.meta.ownerId))continue;
       if(options.player?r.player!==options.player:r.source==='scanner'&&r.player)continue;
-      const c=bucket(r.hour);c.at=Math.max(c.at,r.at);c.roster=Math.max(c.roster,r.roster||0);c.received++;
-      if(r.source==='scanner'){c.sum+=r.score;c.count++;if(r.partial)c.missing++;}
+      const c=bucket(r.hour);if(r.source==='scanner'&&c.at>r.at)continue;
+      c.at=Math.max(c.at,r.at);c.roster=Math.max(c.roster,r.roster||0);c.received++;
+      if(r.source==='scanner'){c.sum=r.score;c.count=1;c.missing=Number(!!r.partial);c.received=1;}
       else{c.players.add(r.player);c.sum+=options.source==='recent'?r.recent:r.online;c.count+=options.source==='recent'?r.samples:r.samples-r.unknown;c.missing+=r.unknown;}
     }
     if(options.source==='roster'&&!options.player)for(const r of combatArchive.hours.values()){
@@ -885,7 +894,7 @@
     const room=commandRoom(),role=room?.actor.role,mayPlan=role==='capo',actor=room?.actor.id;
     let html=card('Black Skull command',esc(commandSync.error||(!room?'Local proposals. Connect shared orders in Settings to publish.':
       'Shared revision '+room.revision+' / '+role+' / checked '+age(commandSync.readAt)))+
-      '<div class="ws-toolbar">'+b('Refresh orders','cmd-sync')+b('Settings','tab:settings')+'</div>');
+      '<div class="ws-toolbar">'+b('Heavy hitter activity','cmd-heavyview')+b('Refresh orders','cmd-sync')+b('Settings','tab:settings')+'</div>');
     const proposals=suggestedAssignments(),map=new Map(proposals.map(p=>[p.target.id,p]));
     const ids=[...new Set([...Object.keys(room?.plan.assignments||{}).map(Number),...map.keys()])].sort((i,j)=>
       (room?.plan.assignments[j]?.priority??map.get(j)?.priority??0)-(room?.plan.assignments[i]?.priority??map.get(i)?.priority??0));
@@ -1003,11 +1012,12 @@
     return title+'<table aria-label="'+esc(t.title)+'"><colgroup><col class="ws-date-col"><col span="24"></colgroup><thead><tr><th scope="col">TCT</th>'+cols+'</tr></thead><tbody>'+rows+'</tbody></table>';
   }
   function activityScreen(){
-    const opts=activityPrefs,model=trackerModel(opts);
-    const choices=[...state.data.ours,...state.data.enemies].map(p=>[p.id,p.name]);
-    if(opts.player&&!choices.some(([id])=>id===opts.player))choices.push([opts.player,playerName(opts.player)]);
-    const tabs=[['hours','Hour grid'],['weekday','Weekday avg'],['compare','Compare']].map(([v,label])=>
+    const opts=activityPrefs;
+    const tabs=[['hours','Hour grid'],['weekday','Weekday avg'],['compare','Compare'],['heavy','Heavy hitters']].map(([v,label])=>
       '<button type="button" data-action="cmd-mode:'+v+'" aria-pressed="'+(opts.mode===v)+'">'+label+'</button>').join('');
+    if(opts.mode==='heavy')return heavyActivityScreen(tabs);
+    const model=trackerModel(opts),choices=[...state.data.ours,...state.data.enemies].map(p=>[p.id,p.name]);
+    if(opts.player&&!choices.some(([id])=>id===opts.player))choices.push([opts.player,playerName(opts.player)]);
     const controls='<div class="ws-tracker-controls">'+commandOption('days',choiceItems([3,7,14,30]),opts.days,'Days')+
       commandOption('source',[['users','Players seen'],['roster','Online checks %'],['recent','Recent action %'],['scanner','Scanner score'],['attack','Captured attacks']],opts.source,'Show')+
       (opts.mode!=='compare'?commandOption('first',[['enemies','Enemy first'],['ours','Ours first']],opts.first,'Order'):'')+
@@ -1135,10 +1145,21 @@
         gridSelection=null;
         const {mode,period,idle,first}=activityPrefs;cfg.activityGrid={days,source,mode,period,idle,first};saveCfg();
         if(loadPlayer)await scouterRead('activity',player);
-      }else if(kind==='mode'&&['hours','weekday','compare'].includes(value)){
+      }else if(kind==='heavyview'){
+        activityPrefs.mode='heavy';navigate('heatmap');return;
+      }else if(kind==='heavylatest'){
+        const [id,hour]=value.split('/').map(Number);
+        if(!idKey(id)||!Number.isSafeInteger(hour)||hour%HOUR!==0)return;
+        heavyView.date=Math.floor(hour/(24*HOUR))*24*HOUR;
+        heavyView.selection=id+'/'+hour;render();
+        const cell=root.querySelector('[data-action="cmd-heavycell:'+heavyView.selection+'"]');
+        cell?.scrollIntoView({block:'nearest',inline:'center'});return;
+      }else if(kind==='heavycell'){heavyView.selection=heavyView.selection===value?'':value;}
+      else if(kind==='mode'&&['hours','weekday','compare','heavy'].includes(value)){
         activityPrefs.mode=value;gridSelection=null;cfg.activityGrid={...cfg.activityGrid,mode:value};saveCfg();
+        if(value==='heavy')openHeavyHistory();
       }else if(kind==='cell'){gridSelection=gridSelection===value?null:value;}
-      else if(kind==='player'){activityPrefs.player=target;gridSelection=null;navigate('heatmap');}
+      else if(kind==='player'){activityPrefs.player=target;if(activityPrefs.mode==='heavy')activityPrefs.mode='hours';gridSelection=null;navigate('heatmap');}
       else if(kind==='csv'){fileDownload('warstaxx-activity.csv','text/csv',trackerCSV(trackerModel(),activityPrefs));}
       else if(kind==='flight'){cfg.flightMethod=cmdValue('method');cfg.flightBook=cmdValue('book');saveCfg();}
       else if(kind==='medical')await checkSupplies();
@@ -1351,6 +1372,11 @@
       return 'unknown';
     };
   }
+  function gridMemberships(faction,player,record){
+    const spans=(record?.memberships||[]).filter(m=>m.faction===faction);
+    if(player?.daysInFaction>0&&player.updated>0)spans.push({first:player.updated-player.daysInFaction*24*HOUR,last:player.updated});
+    return spans;
+  }
   function trackerSeries(faction,opts,at){
     const day=24*HOUR,start=Math.floor(at/day)*day-(opts.days-1)*day;
     const buckets=new Map(),out=new Map(),calendar=gridCalendar(faction,at);
@@ -1366,16 +1392,16 @@
     const memberships=new Map();
     function memberDuring(id,hour){
       if(!memberships.has(id)){
-        const p=roster.find(p=>p.id===id),spans=(combatArchive.people.get(id)?.memberships||[]).filter(m=>m.faction===faction);
-        if(p?.daysInFaction>0&&p.updated>0)spans.push({first:p.updated-p.daysInFaction*day,last:p.updated});
-        memberships.set(id,spans);
+        memberships.set(id,gridMemberships(faction,roster.find(p=>p.id===id),combatArchive.people.get(id)));
       }
       return memberships.get(id).some(m=>m.first<=hour&&m.last>=Math.min(hour+HOUR,at));
     }
     for(const r of combatArchive.hours.values()){
       if(r.faction!==faction||!within(r.hour)||opts.player&&r.player!==opts.player)continue;
       if(r.source==='scanner'){
-        if(premium&&r.owner===owner&&r.player===opts.player&&(!r.player||memberDuring(r.player,r.hour)))get(r.hour).scan=r;
+        if(premium&&r.owner===owner&&r.player===opts.player&&(!r.player||memberDuring(r.player,r.hour))){
+          const b=get(r.hour);if(!b.scan||b.scan.at<=r.at)b.scan=r;
+        }
         continue;
       }
       if(r.source==='legacy'){if(!opts.player)get(r.hour).legacy=r;continue;}
@@ -1496,6 +1522,191 @@
     return csv.join('\r\n');
   }
   // END bundled activity-grid.js
+  // BEGIN bundled heavy-activity.js
+  const heavyView={date:0,selection:'',scope:'',timer:0,busy:false,next:0,pause:0,error:''};
+  function heavyTargets(){
+    if(!cfg.enemyId)return [];
+    const bands=enemyRoleBands(),targets=new Map(),roster=new Map(state.data.enemies.map(p=>[p.id,p]));
+    function add(id,reason){
+      if(!idKey(id))return;
+      if(!targets.has(id))targets.set(id,{id,p:roster.get(id),name:playerName(id),reasons:new Set()});
+      targets.get(id).reasons.add(reason);
+    }
+    for(const id of bands.automatic)add(id,'Automatic Black Skull target');
+    for(const id of bands.manual)add(id,'Designated by Skull Capo');
+    for(const hitter of state.data.ours){
+      if(cfg.blackSkulls[hitter.id])add(positive(cfg.assignments[hitter.id]),'Assigned to '+hitter.name);
+    }
+    for(const [id,a] of Object.entries(commandRoom()?.plan.assignments||{})){
+      if(a.primary)add(Number(id),'Shared assignment to '+playerName(a.primary));
+    }
+    return [...targets.values()].sort((a,b)=>a.name.localeCompare(b.name)||a.id-b.id);
+  }
+  function heavyHistory(targets,faction,at){
+    const day=24*HOUR,today=Math.floor(at/day)*day,cut=today-13*day;
+    const result=new Map(targets.map(t=>[t.id,{...t,hours:new Map(),latest:null}]));
+    const owner=positive(state.data.meta.ownerId),premium=owner&&scouterPremiumActive();
+    function bucket(target,hour){
+      if(!target.hours.has(hour))target.hours.set(hour,{checks:0,online:0,onlineAt:0,attacks:0});
+      return target.hours.get(hour);
+    }
+    const inRange=t=>Number.isFinite(t)&&t>=cut&&t<=at;
+    const floor=t=>Math.floor(t/HOUR)*HOUR;
+    function online(target,hour,time){
+      const b=bucket(target,hour);
+      b.online=1;
+      if(inRange(time)&&floor(time)===hour)b.onlineAt=Math.max(b.onlineAt,time);
+      if(!target.latest||hour>=target.latest.hour)target.latest={hour,exact:b.onlineAt};
+    }
+    for(const r of combatArchive.hours.values()){
+      const t=result.get(r.player);
+      if(!t||r.faction!==faction||!inRange(r.hour)||floor(r.hour)!==r.hour)continue;
+      if(r.source==='roster'){
+        const b=bucket(t,r.hour);b.checks+=Math.max(0,r.samples-r.unknown);
+        if(r.online>0)online(t,r.hour,r.lastOnlineAt||(r.online===r.samples?r.at:0));
+      }else if(r.source==='scanner'&&premium&&r.owner===owner&&Number.isFinite(r.score)&&r.score>=0){
+        const b=bucket(t,r.hour);if(!b.scanAt||b.scanAt<=r.at){b.score=r.score;b.partial=r.partial;b.scanAt=r.at;}
+      }
+    }
+    for(const t of result.values()){
+      const p=t.p,spans=gridMemberships(faction,p,combatArchive.people.get(t.id));
+      for(const [i,s] of Object.entries(state.data.activity?.['enemies:'+t.id]?.hours||{})){
+        const hour=Number(i)*HOUR;
+        if(inRange(hour)&&s.online>0&&s.online<=s.count&&spans.some(m=>m.first<=hour&&m.last>=Math.min(hour+HOUR,at)))
+          online(t,hour,0);
+      }
+      if(!p||!inRange(p.updated))continue;
+      const hour=floor(p.updated);
+      if(['Online','Offline','Idle'].includes(p.lastAction)){
+        const b=bucket(t,hour);b.checks=Math.max(1,b.checks);
+        if(p.lastAction==='Online')online(t,hour,p.updated);
+      }
+      if(inRange(p.lastAt)&&p.lastAt<=p.updated)bucket(t,floor(p.lastAt)).action=p.lastAt;
+    }
+    for(const r of combatArchive.fights.values()){
+      const t=result.get(r.attacker);
+      if(t&&r.attackerFaction===faction&&inRange(r.at))bucket(t,floor(r.at)).attacks++;
+    }
+    return result;
+  }
+  function heavyMark(b){
+    if(b?.online)return ['ON','Online in Torn roster','peace lvl3'];
+    if(b?.action||b?.attacks)return ['A','Torn action or recorded attack','unknown lvl3'];
+    if(b?.score>0)return ['S','Individual scanner activity','unknown lvl2'];
+    if(b?.checks)return ['\u00b7','Roster checked without an online sighting','even lvl0'];
+    if(b?.score===0)return ['0','Scanner returned zero activity','even lvl0'];
+    return ['\u2013','No evidence','gap'];
+  }
+  const heavyVisible=()=>state.open&&!state.playerOpen&&['activity','heatmap'].includes(state.tab)&&activityPrefs.mode==='heavy'&&!document.hidden;
+  function heavyRange(faction,owner,id,at){
+    const end=Math.floor(at/HOUR)*3600,from=Math.floor(at/(24*HOUR))*86400-13*86400;
+    const marker=[faction,owner,id,'heavy-range'].join('/'),prior=combatArchive.hours.get(marker);
+    if(prior?.from<=from&&prior.end>=end)return null;
+    return {faction,owner,marker,end,coveredFrom:from,from:prior?.from<=from&&prior.end>from&&prior.end<end?prior.end:from};
+  }
+  // Read one individual at a time only while this view is visible. A complete UTC
+  // range survives reloads. On subsequent visits request only new completed hours.
+  function scheduleHeavyHistory(){
+    if(heavyView.timer||heavyView.busy||!heavyVisible()||!cfg.ffConsent||!cfg.ffEnabled||!ffApiKey()||!state.data.meta.ownerId)return;
+    if(!combatArchive.ready||!scouterPremiumActive())return;
+    heavyView.timer=setTimeout(async()=>{
+      heavyView.timer=0;
+      if(!heavyVisible()||!cfg.ffConsent||!cfg.ffEnabled||!scouterPremiumActive()||heavyView.pause>Date.now())return;
+      const at=Date.now(),owner=positive(state.data.meta.ownerId),faction=cfg.enemyId,key=scouterContext();
+      if(!owner||!faction||!key)return;
+      if(scouterExtra.busy){heavyView.next=at+7000;scheduleHeavyHistory();return;}
+      const targets=heavyTargets();
+      const next=targets.map(t=>({t,range:heavyRange(faction,owner,t.id,at)})).find(x=>x.range&&at-(scouterExtra.attempts['activity:'+x.t.id]||0)>=15*MIN);
+      if(!next)return;
+      const {t,range}=next;
+      range.valid=()=>heavyVisible()&&cfg.enemyId===faction&&positive(state.data.meta.ownerId)===owner&&ffApiKey()===key&&scouterPremiumActive()&&heavyTargets().some(x=>x.id===t.id);
+      range.rateLimit=seconds=>{heavyView.pause=Date.now()+seconds*1000;};
+      heavyView.busy=true;heavyView.error='';
+      try{
+        const ok=await scouterRead('activity',t.id,range);
+        if(!ok&&range.valid()){
+          heavyView.pause=Math.max(heavyView.pause,Date.now()+MIN);
+          heavyView.error='Individual scanner history is unavailable. Torn observations are still shown.';
+        }
+      }finally{
+        heavyView.busy=false;heavyView.next=Date.now()+7000;
+        if(heavyVisible())render();
+      }
+    },Math.max(100,heavyView.next-Date.now(),heavyView.pause-Date.now()));
+  }
+  function openHeavyHistory(){
+    if(roomKey()&&(commandSync.scope!==roomKey()||Date.now()-commandSync.attempt>75000))syncCommand();
+    if(!scouterPremiumActive())loadFactionScanner();
+    archiveReady.then(()=>{if(heavyVisible())render();});
+  }
+  function heavyClock(t){return new Date(t).toISOString().slice(11,16);}
+  function heavyLast(latest){
+    if(!latest)return 'No sighting in 14 days';
+    const d=new Date(latest.hour).toISOString();
+    return d.slice(5,10)+' '+(latest.exact?heavyClock(latest.exact):d.slice(11,13)+'h')+' TCT';
+  }
+  function heavyCellDetail(t,hour,at){
+    const b=t.hours.get(hour),p=t.p;
+    const facts=[];
+    if(b?.online)facts.push(b.onlineAt?'Online sighting at '+heavyClock(b.onlineAt)+' TCT':'Observed online during this hour');
+    if(b?.checks&&!b.online)facts.push('Roster sampled without an online sighting');
+    if(b?.action)facts.push('Torn last action '+heavyClock(b.action)+' TCT');
+    if(b?.attacks)facts.push(b.attacks+' captured outgoing attack'+(b.attacks===1?'':'s'));
+    if(b?.score!=null)facts.push('Individual FFScouter score '+b.score+(b.partial?' (partial)':''));
+    const status=p?.updated&&p.updated<=at?String(p.lastAction||'Unknown')+' / checked '+age(p.updated):'Unknown';
+    return '<strong>'+esc(t.name+' / '+new Date(hour).toISOString().slice(0,10)+' '+heavyClock(hour)+' TCT')+'</strong><p>'+
+      esc(facts.join(' / ')||(hour>at?'This hour has not started.':'No individual evidence for this hour.'))+'</p><p>'+esc([...t.reasons].join(' / '))+
+      '</p><p>Latest roster status '+esc(status)+'</p>'+infoButton('Open player dossier',t.id);
+  }
+  function heavyTargetDetail(t){
+    const hours=[...t.hours].filter(([,b])=>b.online).sort(([a],[b])=>b-a);
+    const freq=new Map();
+    for(const [hour] of hours){
+      const utc=heavyClock(hour);freq.set(utc,(freq.get(utc)||0)+1);
+    }
+    const repeat=[...freq].filter(([,days])=>days>=2).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).slice(0,3);
+    return '<strong>'+esc(t.name)+'</strong><p>'+esc([...t.reasons].join(' / '))+'</p>'+
+      '<p>Latest online '+esc(heavyLast(t.latest))+'</p>'+
+      (repeat.length?'<p>Repeated online sightings '+esc(repeat.map(([utc,n])=>utc+' TCT on '+n+' dates').join(' / '))+'</p>':'')+
+      (hours.length?'<p>Recent online hours (TCT) '+esc(hours.slice(0,6).map(([h])=>new Date(h).toISOString().slice(5,13).replace('T',' ')+'h').join(', '))+'</p>':'')+
+      (t.latest?b('Show latest online hour','cmd-heavylatest:'+t.id+'/'+t.latest.hour):'')+infoButton('Open player dossier',t.id);
+  }
+  function heavyActivityScreen(tabs,at=Date.now()){
+    const faction=cfg.enemyId,day=24*HOUR,today=Math.floor(at/day)*day;
+    const scope=[cfg.ourId,faction,state.data.war?.id||0].join('/');
+    if(scope!==heavyView.scope){heavyView.scope=scope;heavyView.selection='';heavyView.date=0;heavyView.error='';}
+    const date=heavyView.date>=today-13*day&&heavyView.date<=today?heavyView.date:today;
+    const targets=heavyTargets(),hist=heavyHistory(targets,faction,at);
+    const dates=Array.from({length:14},(_,i)=>{const d=today-i*day;return '<option value="'+d+'" '+(date===d?'selected':'')+'>'+esc((i===0?'Today / ':'')+new Date(d).toISOString().slice(0,10))+'</option>';}).join('');
+    const data=[...hist.values()].sort((a,b)=>(b.latest?.hour??0)-(a.latest?.hour??0)||(b.latest?.exact??0)-(a.latest?.exact??0)||a.name.localeCompare(b.name));
+    const headers=Array.from({length:24},(_,h)=>'<th scope="col">'+String(h).padStart(2,'0')+'</th>').join('');
+    const rows=data.map(t=>{
+      let detail='';
+      const cells=Array.from({length:24},(_,h)=>{
+        const hour=date+h*HOUR,[mark,label,band]=heavyMark(t.hours.get(hour)),key=t.id+'/'+hour,selected=heavyView.selection===key;
+        if(selected)detail='<tr class="ws-grid-detail"><td colspan="25"><div aria-live="polite">'+heavyCellDetail(t,hour,at)+'</div></td></tr>';
+        return '<td><button type="button" class="ws-grid-cell '+band+'" aria-label="'+esc(t.name+' '+heavyClock(hour)+' TCT / '+label)+'" aria-pressed="'+selected+'" data-action="cmd-heavycell:'+key+'">'+mark+'</button></td>';
+      }).join('');
+      if(heavyView.selection===String(t.id))detail='<tr class="ws-grid-detail"><td colspan="25"><div aria-live="polite">'+heavyTargetDetail(t)+'</div></td></tr>';
+      return '<tr><th scope="row"><button type="button" data-action="cmd-heavycell:'+t.id+'" aria-expanded="'+(heavyView.selection===String(t.id))+'">'+esc(t.name)+'</button><small>'+esc(heavyLast(t.latest))+'</small></th>'+cells+'</tr>'+detail;
+    }).join('');
+    scheduleHeavyHistory();
+    const grid='<div class="ws-hour-scroll ws-heavy-grid" tabindex="0" role="region" aria-label="Heavy hitter sightings"><table><colgroup><col class="ws-name-col"><col span="24"></colgroup><thead><tr><th scope="col">Target / last online</th>'+headers+'</tr></thead><tbody>'+rows+'</tbody></table></div>';
+    const owner=positive(state.data.meta.ownerId),checked=targets.filter(t=>!heavyRange(faction,owner,t.id,at)).length;
+    const fresh=targets.filter(t=>t.p?.updated>0&&t.p.updated<=at&&at-t.p.updated<5*MIN&&['Online','Idle','Offline'].includes(t.p.lastAction));
+    const live=fresh.filter(t=>t.p.lastAction==='Online');
+    const rosterLine=fresh.length?'Online at last check: '+(live.map(t=>t.name).join(', ')||'none seen')+' ('+fresh.length+'/'+targets.length+' checked in 5m).':'Awaiting a fresh Torn roster check.';
+    const coverage=combatArchive.error?'Local history archive unavailable.':scouterPremiumActive()?'Individual Premium history checked through the last full hour for '+checked+' / '+targets.length+' targets.':'Individual Premium history requires an enabled, registered Premium key.';
+    return card('Heavy hitter activity','<div class="ws-grid-tabs">'+tabs+'</div>'+
+      (!targets.length?empty(faction?'No automatic, designated or assigned Black Skull targets for this opponent yet.':'Detect or select an opponent to see heavy hitters.'):
+      '<p>'+esc(rosterLine)+'</p><div class="ws-tracker-controls"><label>TCT date <select id="ws-heavy-date">'+dates+'</select></label></div>'+
+      '<p class="ws-small"><b>ON</b> Torn online &nbsp; <b>A</b> action or attack &nbsp; <b>S</b> scanner activity<br>&middot; roster checked &nbsp; 0 scanner score &nbsp; &ndash; no evidence</p>'+grid+
+      '<p class="ws-small">Times under names are the latest confirmed sightings across 14 days. Tap an hour for the evidence. '+esc(coverage)+'</p>')+
+      (heavyView.error?'<p>'+esc(heavyView.error)+'</p>':'')+
+      (roomKey()&&!commandRoom()?'<p>Shared assignments pending. '+b('Refresh orders','cmd-sync')+'</p>':'')+
+      '<p class="ws-small">History follows the current target list. '+a('Scanner data policy','https://ffscouter.com/volunteer')+'</p>');
+  }
+  // END bundled heavy-activity.js
   const effectiveKey=()=>String(cfg.key||'').trim()||(apiKeyPda.includes('PDA-APIKEY')?'':apiKeyPda);
   const saveCfg=()=>{try{localStorage.setItem(CONFIG,JSON.stringify(cfg));return true;}catch(_){state.localKeyError=true;return false;}};
   const save=()=>{try{localStorage.setItem(DATA,JSON.stringify(state.data));return true;}catch(_){
@@ -2274,7 +2485,7 @@
       .map(x=>({ts:x.ts*1000,score:x.activity_score}));
     return {at,rows,truncated:body.meta.truncated===true};
   }
-  async function scouterRead(kind,id=0){
+  async function scouterRead(kind,id=0,range=null){
     const key=scouterContext();id=positive(id);
     if(scouterExtra.busy||document.hidden)return;
     if(!cfg.ffEnabled||!cfg.ffConsent||!key){scouterExtra.error='Enable FFScouter and save your registered key in WarStaxx Settings.';render();return;}
@@ -2282,7 +2493,7 @@
     if(Date.now()-n(scouterExtra.attempts[token])<ttl){scouterExtra.error='Recent check cached. Try again after '+Math.ceil((ttl-(Date.now()-scouterExtra.attempts[token]))/MIN)+' minute(s).';render();return;}
     if(!['flights','targets','stats','activity','history'].includes(kind)||(!id&&!['flights','targets'].includes(kind)))return;
     scouterExtra.busy=true;scouterExtra.error='';scouterExtra.attempts[token]=Date.now();render();
-    const current=()=>cfg.ffConsent&&cfg.ffEnabled&&ffApiKey()===key&&!document.hidden;
+    const current=()=>cfg.ffConsent&&cfg.ffEnabled&&ffApiKey()===key&&!document.hidden&&(!range||range.valid());
     try{
       await checkFFRegistration();if(!current())return;
       if(!scouterPremiumActive())throw Error('Premium is not active for this key. Verify the key linked to your subscription in Settings.');
@@ -2300,14 +2511,14 @@
         query.set('from',String(Math.floor(Date.now()/1000)-7*86400));
       }else{
         path='activity/player';query.set('target',String(id));query.set('bucket','3600');
-        const end=Math.floor(Date.now()/HOUR)*3600;query.set('end',String(end));query.set('start',String(end-(['activity','heatmap'].includes(state.tab)?activityPrefs.days:1)*86400));
+        const end=range?.end??Math.floor(Date.now()/HOUR)*3600;query.set('end',String(end));query.set('start',String(range?.from??(end-(['activity','heatmap'].includes(state.tab)?activityPrefs.days:1)*86400)));
       }
       const body=await ffRequest('https://ffscouter.com/api/v1/'+path+'?'+query);if(!current())return;
       const at=Date.now();
       if(kind==='flights')Object.assign(scouterExtra.flights,parseScouterFlights(body,ids,at));
-      else if(kind==='activity'){scouterExtra.activity[id]=parseScouterActivity(body,id,at);
+      else if(kind==='activity'){if(!range)scouterExtra.activity[id]=parseScouterActivity(body,id,at);
         const faction=state.data.ours.some(p=>p.id===id)?cfg.ourId:state.data.enemies.some(p=>p.id===id)?cfg.enemyId:0;
-        if(faction)await captureScanner(body,faction,id);}
+        if(range||faction)return await captureScanner(body,range?.faction??faction,id,range);}
       else if(kind==='history'){
         if(Number(body?.player_id)!==id||!Array.isArray(body.history))throw Error('History response does not match this player');
         scouterExtra.history[id]={at,rows:body.history.filter(x=>Number.isFinite(x.bs_estimate)&&x.bs_estimate>0&&ffTimestamp(x.timestamp)>0).slice(0,28)
@@ -2321,7 +2532,9 @@
           last:ffTimestamp(x.last_action),source:String(x.source||'Unknown').slice(0,30),hospital:ffTimestamp(x.hospital_until)}));
         scouterExtra.targetsAt=at;
       }
-    }catch(e){scouterExtra.error=String(e.message||e).split(key).join('[redacted]').slice(0,180);
+    }catch(e){if(!current())return;
+      if(range&&e.retryAfter)range.rateLimit(e.retryAfter);
+      scouterExtra.error=String(e.message||e).split(key).join('[redacted]').slice(0,180);
       if(/premium.*required|subscription.*required/i.test(scouterExtra.error)&&state.data.meta.ffRegistration)state.data.meta.ffRegistration.premium=false;}
     finally{scouterExtra.busy=false;render();syncPageBse(false);}
   }
@@ -3629,7 +3842,11 @@
       let json;
       try{json=typeof raw==='string'?JSON.parse(raw):raw;}
       catch(_){throw new Error('FFScouter returned invalid JSON');}
-      if(status>=400)throw new Error('FFScouter HTTP '+status+(json?.error?' - '+String(json.error).slice(0,90):''));
+      if(status>=400){
+        const error=new Error('FFScouter HTTP '+status+(json?.error?' - '+String(json.error).slice(0,90):''));
+        if(status===429)error.retryAfter=Math.max(60,Number(json?.retry_after_seconds)||0);
+        throw error;
+      }
       if((json?.code!==undefined&&Number(json.code)!==0)||json?.error)throw new Error('FFScouter '+String(json.error||json.code).slice(0,100));
       return json;
     };
@@ -3853,7 +4070,7 @@
     '#warstaxx-root .ws-grid-key{color:#c7dce7;font-size:11px;gap:7px}#warstaxx-root .ws-grid-key span:before{content:"";display:inline-block;background:#46768b;width:8px;height:8px;margin-right:3px;border-radius:2px}#warstaxx-root .ws-grid-key .peace:before,#warstaxx-root .ws-grid-key .lead:before{background:#4bcc8a}#warstaxx-root .ws-grid-key .war:before,#warstaxx-root .ws-grid-key .trail:before{background:#f3a54c}',
     '#warstaxx-root .ws-hour-scroll{overflow-x:auto;max-width:100%;container-type:inline-size;font-variant-numeric:tabular-nums;scrollbar-color:#527186 #0a1a2a}',
     '#warstaxx-root .ws-hour-scroll table{border-collapse:separate;border-spacing:1px;width:max(100%,var(--ws-grid-width,550px));min-width:0;table-layout:fixed;margin:0;background:#0c1c2b}',
-    '#warstaxx-root .ws-date-col{width:64px}',
+    '#warstaxx-root .ws-date-col{width:64px}#warstaxx-root .ws-heavy-grid table{width:max(100%,680px)}#warstaxx-root .ws-name-col{width:119px}#warstaxx-root .ws-heavy-grid th small{display:block;font-size:10px;color:#b2cad8;font-weight:400}#warstaxx-root .ws-heavy-grid th button{background:none;border:0;color:#94e2fc;text-align:left;padding:3px 0;max-width:114px;overflow:hidden;text-overflow:ellipsis;min-height:24px;vertical-align:middle}#warstaxx-root .ws-heavy-grid .ws-grid-cell{min-height:38px}',
     '#warstaxx-root .ws-hour-scroll th,#warstaxx-root .ws-hour-scroll td{font-size:11px;line-height:17px;text-align:center;padding:0;border:0;min-width:0;color:#bed8e2;font-weight:500}',
     '#warstaxx-root .ws-hour-scroll th:first-child,#warstaxx-root .ws-matrix-title{position:sticky;left:0;background:#142b3e;text-align:left;z-index:1}',
     '#warstaxx-root .ws-hour-scroll th:first-child{padding:0 4px;min-width:64px;color:#e6f3fa;white-space:nowrap}#warstaxx-root .ws-matrix-title{padding:4px 5px;margin:6px 0 1px;font-size:13px;font-weight:700;color:#dcf4fa}#warstaxx-root .ws-matrix-title small{font-size:10px;font-weight:400}',
@@ -8002,7 +8219,7 @@
       }
     }
     previousDisclosureView=disclosureView;
-    if(form)for(const prior of form){if(!prior.id)continue;const field=content.querySelector('#'+prior.id);
+    if(form)for(const prior of form){if(!prior.id||prior.id==='ws-heavy-date')continue;const field=content.querySelector('#'+prior.id);
       if(!field)continue;if(prior.type==='checkbox')field.checked=prior.checked;else field.value=prior.value;}
     if(priorLeaderNote!==null&&$('#ws-leader-note',content))$('#ws-leader-note',content).value=priorLeaderNote;
     if(playerDraft)for(const old of playerDraft){
@@ -8037,7 +8254,7 @@
     state.tab=tab;state.open=true;state.playerOpen=false;state.selectedWar=0;
     root.style.display='block';render();
     if(['squad','brief'].includes(tab)&&Date.now()-commandSync.attempt>30000)syncCommand();
-    if(['activity','heatmap'].includes(tab))loadFactionScanner();
+    if(['activity','heatmap'].includes(tab)){if(activityPrefs.mode==='heavy')openHeavyHistory();else loadFactionScanner();}
     if(tab==='flights')checkSupplies();
     $('.ws-content',root).scrollTop=0;
     if(focus)setTimeout(()=>$('#ws-alert-'+focus,root)?.scrollIntoView({block:'center'}),100);
@@ -8501,6 +8718,7 @@
     }
   });
   root.addEventListener('change',e=>{
+    if(e.target.id==='ws-heavy-date'){heavyView.date=Number(e.target.value);heavyView.selection='';render();return;}
     if(e.target.closest('.ws-tracker-controls')){commandAction('filters');return;}
     if(e.target.id==='ws-roster-country'){workspace.country=e.target.value;render();return;}
     if(e.target.id==='ws-roster-sort'){workspace.sort=e.target.value;render();return;}

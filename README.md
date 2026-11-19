@@ -1,3 +1,11 @@
+## 3.0.3 – Heavy hitter activity
+
+Open **Activity and forecasts → Heavy hitters**, or **Black Skull command → Heavy hitter activity**. The tracker follows today's automatic targets, manual Skull Capo designations, targets assigned to local Black Skulls, and published Black Skull assignments for this opponent. Select any of the last 14 UTC dates. Each row follows one target by Torn player ID.
+
+**ON** is a confirmed online roster sighting. **A** is a Torn last action or recorded outgoing attack. **S** is a positive individual Premium scanner score. A dot records a known roster check without an online sighting. A scanner zero means that the provider returned a zero score. A dash means no individual evidence. Tap a name for repeated sighting hours or tap an hour for its evidence. Historical observations that only identify the hour display hour-level precision.
+
+With Premium enabled, the open tracker requests individual history one target at a time and caches completed ranges on this device. Subsequent visits request missing completed hours. Faction aggregate counts never identify a particular hitter. The existing Worker, D1 schema and installation URL are compatible without a migration.
+
 ## 3.0.2 – Faction activity grid
 
 Open **Players → Activity** or **Tools & reports → Activity and forecasts**. Both factions share a horizontally scrollable 24-hour TCT axis. The default shows the enemy first, with 14 dates and counts of players seen. Use **Order** to put your own faction first. Tap any cell for its source, coverage and any locally observed names or attacks. Choose 3, 7, 14 or 30 dates. Date labels stay in view when scrolling.
