@@ -207,6 +207,43 @@ with sync_playwright() as pw:
     inject()
     assert page.locator('#warstaxx-root').is_hidden()
     assert page.locator('#native').is_visible()
+    # Native war screen, upgraded mid-war with a previously skipped anonymous ranked hit.
+    page.goto('https://www.torn.com/factions.php#/war/7')
+    page.locator('#native').evaluate("""el=>el.innerHTML='<div class="faction-war"><ul class="members-list">'+
+        [1,2].map(id=>'<li class="your" data-player_id="'+id+'"><div class="member">Member '+id+'</div><div class="status">Okay</div></li>').join('')+'</ul></div>'""")
+    start=data['war']['start']
+    data['war']['factions']=[dict(id=10,score=93),dict(id=20,score=23)]
+    data['concededWars']={"7":dict(version=4,warId=7,ourId=10,enemyId=20,start=start*1000,cursor=NOW//1000,
+        total=14.6,rows=1,ourTotal=0,ourRows=0,fetches=1,lastFetch=NOW,caughtUpAt=NOW,complete=True,
+        seen={"101":1},byMember={"1":dict(id=1,attacks=1,scoringAttacks=1,enemyScore=14.6)},byAttacker={},enemyAttackers={},winsByDefender={})}
+    page.evaluate("""([data,cfg])=>{
+      localStorage.setItem('warstaxx-data-v1',JSON.stringify(data));
+      localStorage.setItem('warstaxx-config-v1',JSON.stringify({...cfg,key:'fixture',factionAuto:false,ffEnabled:false,shared:{enabled:false}}));
+      window.GM_xmlhttpRequest=r=>{
+        const path=new URL(r.url).pathname;
+        const hit=(id,defender,points,attacker)=>({id,started:data.war.start+12,ended:data.war.start+15,
+          attacker,defender:{id:defender,faction:{id:10}},is_ranked_war:true,respect_gain:points,result:'Hospitalized'});
+        let body={};
+        if(path.endsWith('/wars'))body={wars:{ranked:data.war}};
+        if(path.endsWith('/members'))body={members:(path.includes('/10/')?data.ours:data.enemies).map(p=>({id:p.id,name:p.name,status:{state:'Okay'},last_action:{status:'Online'}}))};
+        if(path.endsWith('/faction/attacks'))body={attacks:[hit(101,1,14.6,{id:3,faction:{id:20}}),hit(102,2,8.45,null)]};
+        setTimeout(()=>r.onload({status:200,responseText:JSON.stringify(body)}),0);
+      };
+    }""",[data,cfg])
+    inject()
+    summary=page.locator('.wsnw-faction-summary')
+    summary.get_by_text('G 23',exact=True).wait_for()
+    assert 'NET +70' in summary.inner_text()
+    assert '8.4 unaccounted' in summary.inner_text()
+    member=page.locator('li.your[data-player_id="2"]')
+    assert member.locator('[data-wsnw-chip="given"]').inner_text()=='—'
+    page.wait_for_function("""()=>document.querySelector('li[data-player_id="2"] [data-wsnw-chip="given"]')?.textContent==='8.45'""")
+    assert '23.05 traced to defenders' in summary.inner_text()
+    assert 'unaccounted' not in summary.inner_text()
+    member.locator('[data-wsnw-chip="given"]').click()
+    assert 'Attacker hidden or unknown / Hospitalized / 8.45 given' in member.inner_text()
+    assert member.locator('.wsnw-expanded-detail').evaluate('e=>e.scrollWidth<=e.clientWidth+2')
+    print('Native score reconciliation passed at 360px: official score, honest gap, automatic replay and defender evidence.')
     assert not errors, errors
     print('360px Chromium passed: 8 hub routes, installer reinjection, archive reload, country order, inline expansion, horizontal grid, filters, flight settings and attack-page entry.')
     worker.stdin.close();worker.wait(timeout=5)

@@ -1,3 +1,11 @@
+## 3.0.5 – Ranked-war points and incoming attacks
+
+The friendly roster now shows Torn’s official faction scores and lead. Underneath, **traced to defenders** totals the ranked attack gains assigned to individual members. A difference from the scoreboard stays visible. Whole faction points can differ from decimal attack totals through rounding or refresh timing. Member values show up to two decimal places.
+
+**WAR IN** counts recorded ranked attacks received, including zero-point results. Expand a member to see the five most recent incoming records with their time in TCT, attacker when available, result and ranked points. Non-ranked attacks appear separately in that history. A hidden attacker can still count against a known defender when Torn marks the attack as ranked and the defender’s faction and war window match.
+
+Update from the existing Torn PDA installer and reopen the active war. With faction attack access enabled, WarStaxx rechecks the feed from the war start and deduplicates against previously credited attacks. An unresolved score gap leaves unobserved member values unknown. The Worker and D1 require no migration.
+
 ## 3.0.4 – Heavy hitter date ranges
 
 Under **Heavy hitters**, choose **7 days** or **14 days** for a date-by-hour TCT grid of distinct Black Skull targets. The first visit shows 14 days. The tracker remembers the last range selected. Filter to one target or switch from **Any activity** to **Confirmed online** for Torn roster sightings. Tap an hour to see names and evidence. Tap a date for the single-day player breakdown. Both ranges use the same cached individual history.

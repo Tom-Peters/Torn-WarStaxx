@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      3.0.4
+// @version      3.0.5
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -71,7 +71,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='3.0.4';
+  const id='war', version='3.0.5';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -184,7 +184,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='3.0.4', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='3.0.5', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics','dashboard','scouting','archive','scouter','squad','brief','heatmap','flights','combat'];
   const labels={scouter:'FFScouter Premium',overview:'Live war',enemy:'Players',reports:'Tools & reports',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics',dashboard:'Full dashboard',scouting:'Faction scouting',archive:'Detailed reports',squad:'Black Skull command',brief:'War briefing',heatmap:'Activity and forecasts',flights:'Defensive travel',combat:'Combat archive'};
@@ -1872,7 +1872,7 @@
       return {id:positive(a.id||a.attack_id),
         at:epochMs(a.timestamp_ended||a.ended||a.timestamp_started||a.started||a.timestamp||a.start),
         startedAt:epochMs(a.timestamp_started||a.started||a.start),
-        attacker,defender,attackerFaction,defenderFaction,ranked:warFlag==null?null:ranked,
+        attacker,defender,attackerFaction,defenderFaction,hiddenAttacker:!attacker&&(a.attacker===null||a.is_stealthed===true),ranked:warFlag==null?null:ranked,
         endedAt:epochMs(a.timestamp_ended||a.ended),respectLoss:officialNumber(a.respect_loss),
         modifierWarlord:officialNumber(a.modifiers?.warlord),
         attackerName:String(a.attacker?.name||a.attacker_name||'').slice(0,80),
@@ -6231,87 +6231,119 @@
     let rec=state.data.concededWars[key];
     if(rec&&(rec.version!==4||positive(rec.ourId)!==w.ourId||positive(rec.enemyId)!==w.enemyId||
         n(rec.start)!==w.start))rec=null;
+    if(rec&&create&&!rec.defenderReplay){
+      // Replay v4 inclusively once. Keep credited attack IDs and totals during backfill.
+      rec.cursor=Math.floor(w.start/1000)-1;rec.complete=false;rec.defenderReplay=true;
+    }
     if(!rec&&create){
-      rec={version:4,warId:positive(warId),ourId:w.ourId,enemyId:w.enemyId,start:w.start,
+      rec={version:4,defenderReplay:true,warId:positive(warId),ourId:w.ourId,enemyId:w.enemyId,start:w.start,
         cursor:Math.max(0,Math.floor(w.start/1000)-1),seen:{},byMember:{},byAttacker:{},enemyAttackers:{},winsByDefender:{},
         total:0,rows:0,ourTotal:0,ourRows:0,fetches:0,lastFetch:0,caughtUpAt:0,complete:false,error:''};
       state.data.concededWars[key]=rec;
     }
     return rec||null;
   }
-  // One deduplicated, chronological feed covers BOTH sides of the current war.
-  // Torn attack respect is an observed score proxy; the final official scorecard
-  // is authoritative after the war. Uncaptured history must never become zero.
+  function incomingWarAttack(a,w){
+    return a.ranked===true&&a.defenderFaction===w.ourId&&positive(a.defender)&&
+      (a.attackerFaction===w.enemyId||(!a.attackerFaction&&a.hiddenAttacker&&!a.attacker));
+  }
+  function rememberIncoming(rec,a,ranked){
+    const db=rec.recentIncoming||(rec.recentIncoming={}),previous=db[a.defender]||[];
+    const old=previous.find(x=>x.id===a.id);
+    const item={id:a.id,at:a.at,result:a.result||old?.result||'Result unknown',
+      attacker:a.attackerName||(positive(a.attacker)?'Player #'+a.attacker:old?.attacker)||'Attacker hidden or unknown',
+      type:ranked?'Ranked':a.ranked===false?'Non-ranked':'War status unknown',
+      points:ranked?(officialNumber(a.respect)??old?.points??null):null};
+    db[a.defender]=[item,...previous.filter(x=>x.id!==a.id)].sort((x,y)=>y.at-x.at||y.id-x.id).slice(0,5);
+  }
+  function creditWarAttack(row,scoreField,a,points,countAttempt,trackPace){
+    if(countAttempt)row.attacks++;
+    row.lastAt=Math.max(n(row.lastAt),a.at);
+    if(points>0){
+      row.scoringAttacks++;row[scoreField]+=points;
+      if(trackPace){
+        row.pointEvents=(row.pointEvents||[]).concat({at:a.at,points})
+          .filter(x=>x.at>=Date.now()-2*HOUR).slice(-300);
+      }
+    }
+  }
   function captureConcessionAttacks(rec,records){
     if(!rec)return 0;
     const w=warAttackWindow(rec.warId);
     if(!w||w.start!==n(rec.start))return 0;
     let added=0;
     for(const a of records){
-      if(!positive(a.id)||rec.seen[a.id]||a.ranked!==true||
-        !n(a.at)||a.at<w.start||a.at>w.end+60000)continue;
-      const againstUs=a.attackerFaction===w.enemyId&&a.defenderFaction===w.ourId&&positive(a.defender);
-      const forUs=a.attackerFaction===w.ourId&&a.defenderFaction===w.enemyId&&positive(a.attacker);
+      if(!positive(a.id)||!n(a.at)||a.at<w.start||a.at>w.end)continue;
+      const againstUs=incomingWarAttack(a,w);
+      if(a.defenderFaction===w.ourId&&positive(a.defender))rememberIncoming(rec,a,againstUs);
+      const forUs=a.ranked===true&&a.attackerFaction===w.ourId&&a.defenderFaction===w.enemyId&&positive(a.attacker);
       if(!againstUs&&!forUs)continue;
-      rec.seen[a.id]=1;added++;
-      const points=officialNumber(a.respect);
+      const prior=rec.seen[a.id];
+      if(prior===1)continue;
+      const fresh=!prior,attacker=positive(a.attacker)||positive(prior?.attacker);
+      const recorded=officialNumber(a.respect),points=prior?.points??recorded;
+      const resolved=Boolean(prior&&prior.points===null&&recorded!==null);
+      const revealed=Boolean(prior&&!prior.attacker&&attacker);
+      if(!fresh&&!resolved&&!revealed)continue;
+      const pendingKey=forUs?'pendingOutgoing':'pendingIncoming';
+      if(fresh&&points===null)rec[pendingKey]=n(rec[pendingKey])+1;
+      if(resolved)rec[pendingKey]=Math.max(0,n(rec[pendingKey])-1);
+      const credit=fresh||resolved?points:null;
+      if(fresh)added++;
+      if(attacker&&points!==null)rec.seen[a.id]=1;
+      else rec.seen[a.id]={attacker,points};
       if(forUs){
-        rec.ourRows++;
+        if(fresh)rec.ourRows++;
         const hitter=rec.byAttacker[a.attacker]||
           (rec.byAttacker[a.attacker]={id:a.attacker,attacks:0,scoringAttacks:0,ourScore:0,lastAt:0});
-        hitter.attacks++;
-        if(points!==null&&points>0){hitter.scoringAttacks++;hitter.ourScore+=points;rec.ourTotal+=points;}
-        hitter.lastAt=Math.max(n(hitter.lastAt),a.at);
-        if(points!==null&&points>0){
-          hitter.pointEvents=(Array.isArray(hitter.pointEvents)?hitter.pointEvents:[])
-            .concat({at:a.at,points}).filter(x=>x.at>=Date.now()-2*HOUR).slice(-300);
-        }
+        creditWarAttack(hitter,'ourScore',a,credit,fresh,true);
+        if(credit>0)rec.ourTotal+=credit;
       }else{
-        rec.rows++;
-        // Enemy offense can be ranked independently of the friendly defender.
-        if(positive(a.attacker)){
-          const attacker=rec.enemyAttackers[a.attacker]||
-            (rec.enemyAttackers[a.attacker]={id:a.attacker,attacks:0,scoringAttacks:0,
-              enemyScore:0,lastAt:0});
-          attacker.attacks++;
-          if(points!==null&&points>0){attacker.scoringAttacks++;attacker.enemyScore+=points;}
-          attacker.lastAt=Math.max(n(attacker.lastAt),a.at);
-          if(points!==null&&points>0){
-            attacker.pointEvents=(Array.isArray(attacker.pointEvents)?attacker.pointEvents:[])
-              .concat({at:a.at,points}).filter(x=>x.at>=Date.now()-2*HOUR).slice(-300);
-            const perDefender=rec.winsByDefender[a.defender]||
-              (rec.winsByDefender[a.defender]={});
-            const witness=perDefender[a.attacker]||
-              (perDefender[a.attacker]={wins:0,lastAt:0});
+        if(fresh)rec.rows++;
+        if(fresh&&!attacker)rec.hiddenAttempts=n(rec.hiddenAttempts)+1;
+        if(revealed)rec.hiddenAttempts=Math.max(0,n(rec.hiddenAttempts)-1);
+        if(attacker){
+          const scorer=rec.enemyAttackers[attacker]||
+            (rec.enemyAttackers[attacker]={id:attacker,attacks:0,scoringAttacks:0,enemyScore:0,lastAt:0});
+          const scorerPoints=revealed?points:credit;
+          creditWarAttack(scorer,'enemyScore',a,scorerPoints,fresh||revealed,true);
+          if(scorerPoints>0){
+            const perDefender=rec.winsByDefender[a.defender]||(rec.winsByDefender[a.defender]={});
+            const witness=perDefender[attacker]||(perDefender[attacker]={wins:0,lastAt:0});
             witness.wins++;witness.lastAt=Math.max(n(witness.lastAt),a.at);
           }
         }
         const defender=rec.byMember[a.defender]||
-          (rec.byMember[a.defender]={id:a.defender,attacks:0,scoringAttacks:0,enemyScore:0,
-            lastAt:0,hitTimes:[]});
-        defender.attacks++;
-        if(points!==null&&points>0){defender.enemyScore+=points;defender.scoringAttacks++;rec.total+=points;}
-        defender.lastAt=Math.max(n(defender.lastAt),a.at);
-        // Retain only a few recent attack timestamps for pressure alerts.
-        defender.hitTimes=(Array.isArray(defender.hitTimes)?defender.hitTimes:[])
-          .concat(a.at).sort((a,b)=>a-b).slice(-30);
+          (rec.byMember[a.defender]={id:a.defender,attacks:0,scoringAttacks:0,enemyScore:0,lastAt:0,hitTimes:[]});
+        creditWarAttack(defender,'enemyScore',a,credit,fresh,false);
+        if(credit>0)rec.total+=credit;
+        if(fresh)defender.hitTimes=(defender.hitTimes||[]).concat(a.at).sort((a,b)=>a-b).slice(-30);
       }
     }
     return added;
   }
-    function concessionSnapshot(warId=positive(state.data.war?.id),at=Date.now()){
+  function scoreDifference(official,captured){
+    if(official==null)return null;
+    const difference=Math.round((official-captured)*100)/100;
+    // Torn can display whole faction points alongside decimal member scores.
+    return Number.isInteger(official)&&(Math.floor(captured+0.000001)===official||Math.round(captured)===official)?0:difference;
+  }
+  function concessionSnapshot(warId=positive(state.data.war?.id),at=Date.now()){
     const rec=concessionRecord(warId,false);
-    if(!rec||!rec.fetches)return null;
+    if(!rec||(!rec.fetches&&!rec.rows&&!rec.ourRows))return null;
     const active=positive(state.data.war?.id)===positive(warId);
-    // Complete means all pages scanned from war start through a recent fetch.
-    // It is not a claim that the live opponent score can no longer change.
-    const complete=Boolean(rec.complete&&rec.caughtUpAt&&
-      (!active||at-n(rec.caughtUpAt)<2*MIN));
-    return {known:true,partial:!complete,complete,byMember:rec.byMember,byAttacker:rec.byAttacker,
+    const score=active?warScore():null;
+    const scanComplete=Boolean(rec.complete&&!rec.error&&rec.caughtUpAt&&
+      (!active||(rec.defenderReplay&&at>=rec.caughtUpAt&&at-rec.caughtUpAt<2*MIN)));
+    const gap=scoreDifference(score?.enemy,rec.total),ourGap=scoreDifference(score?.our,rec.ourTotal);
+    const incomingComplete=scanComplete&&!rec.pendingIncoming&&(!active||gap===0);
+    const outgoingComplete=scanComplete&&!rec.pendingOutgoing&&(!active||ourGap===0);
+    const complete=incomingComplete&&outgoingComplete;
+    return {known:true,partial:!complete,complete,scanComplete,incomingComplete,outgoingComplete,gap,hiddenAttempts:n(rec.hiddenAttempts),
+      byMember:rec.byMember,byAttacker:rec.byAttacker,recentIncoming:rec.recentIncoming||{},
       enemyAttackers:rec.enemyAttackers||{},winsByDefender:rec.winsByDefender||{},
       rows:rec.rows,total:rec.total,ourRows:rec.ourRows,ourTotal:rec.ourTotal,
-      lastFetch:rec.lastFetch,caughtUpAt:rec.caughtUpAt,
-      error:String(rec.error||''),warId:rec.warId};
+      lastFetch:rec.lastFetch,caughtUpAt:rec.caughtUpAt,error:String(rec.error||''),warId:rec.warId};
   }
   async function refreshWarConcessions(force=false){
     if(cfg.autoConceded===false||!activeWarNow()||
@@ -6322,36 +6354,56 @@
     state.concededBusy=true;
     try{
       if(!rec.fetches)captureConcessionAttacks(rec,warAttackRows(w.id));
-      // A maximum of three API pages per refresh catches up active wars without
-      // flooding Torn. Each page advances an inclusive, deduplicated cursor.
+      // Overlap the last two minutes when caught up to pick up delayed feed entries.
+      const start=Math.floor(w.start/1000)-1,to=Math.floor(Date.now()/1000);
+      let from=Math.max(start,n(rec.cursor)-(rec.complete?120:0));
+      const gap=scoreDifference(warScore()?.enemy,rec.total);
+      if(gap>0&&rec.complete){
+        rec.gapSince=rec.gapSince||Date.now();
+        if(Date.now()-rec.gapSince>=5*MIN&&Date.now()-n(rec.lastRepairAt)>=30*MIN){
+          from=rec.cursor=start;rec.complete=false;rec.lastRepairAt=Date.now();
+        }
+      }else if(gap===0)rec.gapSince=0;
       for(let page=0;page<3;page++){
-        const from=Math.max(Math.floor(w.start/1000)-1,n(rec.cursor)),
-          to=Math.floor(Date.now()/1000);
-        const response=await call('/faction/attacks?limit=100&sort=ASC&from='+from+'&to='+to,
-          'concessions',0);
+        const response=await call('/faction/attacks?limit=100&sort=ASC&from='+from+'&to='+to,'concessions',0);
         if(!response)break;
-        const source=parseArray(unpack(response,'attacks')),parsed=attacks(response);
-        await keepFights(attacks(response,true).map(a=>a.ranked&&a.at>=w.start&&a.at<=w.end&&[a.attackerFaction,a.defenderFaction].sort().join() === [w.ourId,w.enemyId].sort().join()?{...a,warId:w.id}:a),'Torn ranked attacks').catch(archiveFailure);
+        if(positive(state.data.war?.id)!==rec.warId||positive(cfg.ourId)!==w.ourId)break;
+        if(!Array.isArray(response.attacks))throw Error('Torn attack list unavailable. Scan will retry.');
+        const parsed=attacks(response,true);
+        const archived=parsed.map(a=>{
+          const ours=a.ranked===true&&a.attackerFaction===w.ourId&&a.defenderFaction===w.enemyId;
+          return a.at>=w.start&&a.at<=w.end&&(ours||incomingWarAttack(a,w))?{...a,warId:w.id}:a;
+        });
+        await keepFights(archived,'Torn ranked attacks').catch(archiveFailure);
         captureConcessionAttacks(rec,parsed);
         rec.fetches++;rec.lastFetch=Date.now();rec.error='';
-        if(source.length<100){
-          rec.cursor=to;rec.complete=true;rec.caughtUpAt=rec.lastFetch;
-          break;
+        if(parsed.length!==response.attacks.length)throw Error('Incomplete Torn attack records. Scan will retry.');
+        const next=response._metadata?.links?.next;
+        if(!next&&(response.attacks.length<100||response._metadata?.links?.next===null)){
+          rec.cursor=to;rec.complete=true;rec.caughtUpAt=rec.lastFetch;break;
         }
-        const highest=Math.max(0,...parsed.map(a=>Math.floor(a.at/1000)));
-        if(highest<=from){
-          rec.complete=false;
-          rec.error='Attack pagination did not advance. Totals remain partial.';
-          break;
+        // Use only the numeric cursor. All requests stay on the fixed Torn endpoint.
+        const highest=next?Number(new URL(next,'https://api.torn.com').searchParams.get('from')):
+          Math.max(0,...parsed.map(a=>Math.floor(a.at/1000)));
+        // Some inclusive ASC links point back to the same final second. A short
+        // page at that second exhausts it; verify the remaining seconds separately.
+        if(next&&highest===from&&parsed.length<100&&parsed.every(a=>Math.floor(a.at/1000)===from)){
+          if(from===to||!parsed.length){
+            rec.cursor=to;rec.complete=true;rec.caughtUpAt=rec.lastFetch;break;
+          }
+          rec.cursor=from=from+1;rec.complete=false;continue;
         }
-        rec.cursor=highest;rec.complete=false;
+        if(!Number.isSafeInteger(highest)||highest<=from||highest>to){
+          rec.complete=false;rec.error='Attack pagination did not advance. Totals remain partial.';break;
+        }
+        rec.cursor=from=highest;rec.complete=false;
       }
       for(const key of Object.keys(state.data.concededWars)
         .sort((a,b)=>n(state.data.concededWars[b]?.lastFetch)-n(state.data.concededWars[a]?.lastFetch))
         .slice(4))delete state.data.concededWars[key];
       save();
     }catch(e){
-      rec.error=String(e.message||e).slice(0,150);
+      rec.error=e instanceof TypeError?'Invalid attack page. Scan will retry.':String(e.message||e).slice(0,150);
       save();
     }finally{state.concededBusy=false;}
   }
@@ -6359,10 +6411,10 @@
   function liveEnemyWarImpact(memberId,warId=positive(state.data.war?.id),at=Date.now()){
     const id=positive(memberId),snapshot=concessionSnapshot(warId,at),
       rec=snapshot?.enemyAttackers?.[id]||null,
-      complete=Boolean(snapshot?.complete),known=Boolean(snapshot?.known);
+      complete=Boolean(snapshot?.incomingComplete)&&!snapshot.hiddenAttempts,known=Boolean(snapshot?.known);
     return {id,complete,known,
-      scored:known&&(complete||rec)?n(rec?.enemyScore):null,
-      hits:known&&(complete||rec)?n(rec?.scoringAttacks):null,
+      scored:known&&(complete||rec?.enemyScore>0)?n(rec?.enemyScore):null,
+      hits:known&&(complete||rec?.scoringAttacks>0)?n(rec?.scoringAttacks):null,
       attacks:known&&(complete||rec)?n(rec?.attacks):null,
       lastAt:n(rec?.lastAt),lastFetch:n(snapshot?.lastFetch),
       source:!known?'Awaiting current-war attack history':
@@ -6379,15 +6431,16 @@
     // Very short windows give misleading per-hour extrapolations.
     if(interval<10*MIN)return null;
     const record=(side==='enemy'?snap.enemyAttackers:snap.byAttacker)?.[id]||null;
-    if(!snap.complete&&!record)return null;
+    const complete=side==='enemy'?snap.incomingComplete&&!snap.hiddenAttempts:snap.outgoingComplete;
+    if(!complete&&!record)return null;
     const events=Array.isArray(record?.pointEvents)?record.pointEvents:[],
       selected=events.filter(x=>n(x.at)>at-interval&&n(x.at)<=at&&
         officialNumber(x.points)!==null&&n(x.points)>0),
       points=selected.reduce((sum,x)=>sum+n(x.points),0),
       rate=points*HOUR/interval;
     return {memberId:id,side,points,rate,hits:selected.length,
-      minutes:interval/MIN,complete:Boolean(snap.complete),
-      partial:!snap.complete,lastFetch:n(snap.lastFetch),
+      minutes:interval/MIN,complete:Boolean(complete),
+      partial:!complete,lastFetch:n(snap.lastFetch),
       source:'Observed current-war ranked scoring attacks in rolling 60m window'};
   }
   function liveScoringPaceCard(limit=8){
@@ -6419,11 +6472,11 @@
     const id=positive(memberId),data=concessionSnapshot(warId,at),
       incoming=data?.byMember?.[id]||null,outgoing=data?.byAttacker?.[id]||null,
       complete=data?.complete===true,known=Boolean(data?.known);
-    const earned=known&&(complete||outgoing)?n(outgoing?.ourScore):null,
-      given=known&&(complete||incoming)?n(incoming?.enemyScore):null,
-      hits=known&&(complete||incoming)?n(incoming?.scoringAttacks):null,
-      attacks=known&&(complete||incoming)?n(incoming?.attacks):null,
-      ownHits=known&&(complete||outgoing)?n(outgoing?.attacks):null,
+    const earned=known&&(data.outgoingComplete||outgoing?.ourScore>0)?n(outgoing?.ourScore):null,
+      given=known&&(data.incomingComplete||incoming?.enemyScore>0)?n(incoming?.enemyScore):null,
+      hits=known&&(data.incomingComplete||incoming?.scoringAttacks>0)?n(incoming?.scoringAttacks):null,
+      attacks=known&&(data.incomingComplete||incoming)?n(incoming?.attacks):null,
+      ownHits=known&&(data.outgoingComplete||outgoing)?n(outgoing?.attacks):null,
       net=earned!==null&&given!==null?earned-given:null;
     const times=Array.isArray(incoming?.hitTimes)?incoming.hitTimes:[],
       in30=times.filter(t=>t>=at-30*MIN&&t<=at+MIN).length,
@@ -6434,7 +6487,8 @@
     // an official member-specific war score. Reject inconsistent >100% shares.
     const share=given!==null&&enemyScore!==null&&enemyScore!==undefined&&enemyScore>0&&
       given<=enemyScore*1.0001?100*given/enemyScore:null;
-    return {id,known,complete,partial:!complete,earned,given,hits,attacks,ownHits,net,
+    return {id,known,complete,partial:!complete,incomingComplete:data?.incomingComplete,outgoingComplete:data?.outgoingComplete,
+      recentIncoming:data?.recentIncoming?.[id]||[],earned,given,hits,attacks,ownHits,net,
       share,in30,in60,underFire,lastAt:n(incoming?.lastAt),
       lastFetch:n(data?.lastFetch),error:String(data?.error||'')};
   }
@@ -7186,25 +7240,27 @@
         b('Leadership','tab:command')+
       b('War room','tab:overview')+b('All targets','tab:targets')+'</div>';
   }
+  const warPointFormat=new Intl.NumberFormat('en-GB',{maximumFractionDigits:2});
+  function warPoints(value){return value==null?'\u2014':warPointFormat.format(value);}
+  function attributionLabel(snap){
+    if(cfg.autoConceded===false)return 'Member attack scan disabled';
+    if(!snap?.known)return state.data.errors?.concessions?'Member attack feed unavailable / check faction attack access':'Awaiting member attack records';
+    const gap=snap.gap;
+    let label=warPoints(snap.total)+' traced to defenders';
+    if(gap>0)label+=' / ~'+warPoints(gap)+' unaccounted';
+    if(gap<0)label+=' / ~'+warPoints(-gap)+' above scoreboard';
+    if(!snap.incomingComplete&&!gap)label+=' / partial';
+    return label;
+  }
   function liveWarImpactSummaryCard(){
     if(!activeWarNow())return '';
-    const captured=concessionSnapshot(),score=warScore(),
-      known=Boolean(captured?.known),prefix=captured?.complete?'':'\u2265',
-      earned=known?prefix+fmt(captured.ourTotal):'Unknown',
-      given=known?prefix+fmt(captured.total):'Unknown',
-      difference=known?captured.ourTotal-captured.total:null,
-      net=difference===null?'Unknown':'~'+(difference>=0?'+':'')+fmt(difference);
+    const captured=cfg.autoConceded===false?null:concessionSnapshot(),score=warScore();
     return card('Our faction war impact | earned vs conceded',
-      '<div class="ws-inline-metrics">'+
-      '<span><b>Earned:</b> '+earned+'</span>'+
-      '<span><b>Conceded:</b> '+given+'</span>'+
-      '<span><b>Observed net:</b> '+net+'</span>'+
-      '<span><b>Official score:</b> '+(score?
-        fmt(score.our)+' / '+fmt(score.enemy):'Unknown')+'</span></div>'+
-      '<p class="ws-small">Earned/conceded are captured attack-respect points, not official complete scorecards. '+
-      '\u2265 = incomplete attack-history scan. Net is an approximate swing, not an official personal metric. '+
-      (captured?.lastFetch?'Last checked '+esc(age(captured.lastFetch))+'.':
-        'Awaiting current-war attack history.')+'</p>');
+      '<div class="ws-inline-metrics"><span><b>Earned:</b> '+warPoints(score?.our)+'</span>'+
+      '<span><b>Given:</b> '+warPoints(score?.enemy)+'</span>'+
+      '<span><b>Lead:</b> '+warPoints(score?.net)+'</span></div>'+
+      '<p>Official Torn score / '+esc(age(state.data.updated.wars))+'</p>'+
+      '<p>'+esc(attributionLabel(captured))+(captured?' / attack scan '+esc(age(captured.lastFetch)):'')+'</p>');
   }
 
   function liveWarRoom(){
@@ -8157,7 +8213,7 @@
     return '<article class="ws-player-row"><div class="ws-player-heading">'+
       infoButton(p.name,p.id)+(row.skull?'<span class="ws-skull-mark" aria-label="Black Skull">\u2620</span>':'')+
       '<span class="ws-player-status '+tone+'">'+esc(fresh?p.status:'Cached: '+p.status)+(timer?' / '+timer:'')+'</span></div>'+
-      '<p class="ws-player-glance">'+esc(own?'Given '+(!impact.complete&&impact.given!==null?'at least ':'')+scoreLabel(impact.given)+' captured points':strength.short)+(workspace.sort==='ffs'?' / FFS '+(Number.isFinite(row.personalFF)?row.personalFF.toFixed(2):'unknown'):'')+'</p>'+
+      '<p class="ws-player-glance">'+esc(own?'Given '+(!impact.complete&&impact.given!==null?'at least ':'')+warPoints(impact.given)+' captured points':strength.short)+(workspace.sort==='ffs'?' / FFS '+(Number.isFinite(row.personalFF)?row.personalFF.toFixed(2):'unknown'):'')+'</p>'+
       '<details data-ws-disclosure="roster-'+side+'-'+p.id+'"><summary>Details and actions</summary>'+
       (own?'':latestPersonalEncounter(p))+
       (scouterDistributionText(p.id)?'<p class="ws-small">'+esc(scouterDistributionText(p.id))+'</p>':'')+
@@ -9113,7 +9169,7 @@
       if(mode==='net')return impact.net;
       if(mode==='share')return impact.share;
       if(mode==='pace')return liveScoringPace('ours',impact.id)?.rate??null;
-      if(mode==='hits')return impact.hits;
+      if(mode==='hits')return impact.attacks;
       return impact.given;
     };
     const keys=new Map(rows.map(row=>{
@@ -9757,6 +9813,7 @@
         'font:850 11px/1.25 system-ui,sans-serif!important}'+
       '.faction-war .wsnw-faction-summary .wsnw-summary-values{display:inline-flex!important;'+
         'gap:9px!important;align-items:center!important;font-variant-numeric:tabular-nums!important}'+
+      '.faction-war .wsnw-attribution{flex-basis:100%!important;color:#bed7e5!important;font-size:11px!important}'+
       '.faction-war .wsnw-faction-summary .wsnw-positive{color:#a1f4c9!important}'+
       '.faction-war .wsnw-faction-summary .wsnw-negative{color:#ffb7bd!important}'+
       '.faction-war .wsnw-faction-summary .wsnw-summary-filters{display:inline-flex!important;gap:4px!important}'+
@@ -9998,9 +10055,11 @@
           return pace?(pace.complete?'':'\u2265')+fmt(pace.rate)+' pts/h over '+
             fmt(pace.minutes)+'m':'Not enough current-war attack data';})())+
         field('Earned per observed attack',perHit)+
-        field('Enemy attacks received',shown(impact?.attacks))+
+        field('Ranked attacks received',shown(impact?.attacks))+
         field('Enemy scoring hits received',shown(impact?.hits))+
-        field('Recent incoming attacks',recent,impact?.underFire?'wsnw-detail-alert':'')+
+        field('Recent ranked attacks',recent,impact?.underFire?'wsnw-detail-alert':'')+
+        (impact?.recentIncoming||[]).map(row=>field(stamp(row.at)+' / '+row.type,
+          row.attacker+' / '+row.result+(row.type==='Ranked'?' / '+(row.points==null?'points unknown':warPoints(row.points)+' given'):''))).join('')+
         field('Enemy score share',impact?.share===null||impact?.share===undefined?
           'Unknown':shown(impact.share)+'%')+
         field('Role',cfg.blackSkulls[p.id]?'Black Skull \u00b7 heavy hitter':'Faction member')+
@@ -10048,24 +10107,19 @@
       sortable('given','GIVEN','points the opponent earned attacking this member')+
       sortable('net','NET','observed earned minus given (net proxy)')+
       sortable('share','ENEMY %','observed proportion of the enemy faction score')+
-      sortable('hits','HITS','enemy scoring hits received'):
+      sortable('hits','WAR IN','incoming ranked attacks, including zero-point results'):
       '<span>ROLE</span><span>STATUS / PLACE</span><span>SEEN</span><span>BSS</span><span>FF</span><span>'+enemyMetricLabel+'</span>';
     if(heading.innerHTML!==columns)heading.innerHTML=columns;
     heading.removeAttribute('title');
-    // Compact faction-wide observed impact and an explicit Black Skulls-only
-    // filter immediately above our native Torn member roster.
+    // Show the faction scoreboard even when the member attack feed is missing.
     if(ours){
       let bar=heading.previousElementSibling;
       if(!bar?.classList?.contains('wsnw-faction-summary')){
         bar=el('div','wsnw-faction-summary');heading.before(bar);
       }
-      const snap=concessionSnapshot(),complete=Boolean(snap?.complete),
-        known=Boolean(snap?.known),prefix=complete?'':'\u2265',
-        earned=known?prefix+(nativeCompactTotal(snap.ourTotal)||'0'):'\u2014',
-        conceded=known?prefix+(nativeCompactTotal(snap.total)||'0'):'\u2014',
-        delta=known?snap.ourTotal-snap.total:null,
-        net=delta===null?'\u2014':'~'+(delta>=0?'+':'\u2212')+
-          (nativeCompactTotal(Math.abs(delta))||'0'),
+      const snap=cfg.autoConceded===false?null:concessionSnapshot(),score=warScore(),
+        earned=warPoints(score?.our),conceded=warPoints(score?.enemy),delta=score?.net??null,
+        net=delta===null?'\u2014':(delta>0?'+':'')+warPoints(delta),
         black=cfg.nativeFriendlyFilter==='black',
         count=state.data.ours.filter(p=>cfg.blackSkulls[p.id]).length;
       const html='<span class="wsnw-summary-values">'+
@@ -10076,10 +10130,10 @@
         '<button type="button" data-wsnw-friendly-filter="all" aria-pressed="'+
           (!black?'true':'false')+'">All '+state.data.ours.length+'</button>'+
         '<button type="button" data-wsnw-friendly-filter="black" aria-pressed="'+
-          (black?'true':'false')+'">\u2620 Skulls '+count+'</button></span>';
+          (black?'true':'false')+'">\u2620 Skulls '+count+'</button></span>'+'<small class="wsnw-attribution">'+esc(attributionLabel(snap))+'</small>';
       if(bar.innerHTML!==html)bar.innerHTML=html;
-      bar.setAttribute('aria-label','Captured faction earned and conceded attack points, '+
-        (complete?'scan caught up':'partial scan')+'; net is an estimate');
+      bar.setAttribute('aria-label','Official faction score. Earned '+earned+', given '+conceded+
+        ', net '+net+'. '+attributionLabel(snap));
     }
   }
   // Android/Torn PDA can leave WebView title tooltips stuck on screen.
@@ -10405,19 +10459,18 @@
           for(const key of ['bss','ff','warpoints','order','conceded','received','impact'])chip(key,'');
           const impact=cfg.autoConceded===false?null:liveWarMemberImpact(id),
             captured=Boolean(impact?.known),complete=Boolean(impact?.complete),
-            observed=value=>value===null||value===undefined?'\u2014':
-              (complete?'':'\u2265')+(nativeCompactTotal(value)||'0'),
-            earned=observed(impact?.earned??null),given=observed(impact?.given??null),
+            observed=(value,covered=complete)=>value==null?'\u2014':(covered?'':'\u2265')+warPoints(value),
+            earned=observed(impact?.earned,impact?.outgoingComplete),given=observed(impact?.given,impact?.incomingComplete),
             net=impact?.net===null||impact?.net===undefined?'\u2014':
-              (complete?'~':'')+(impact.net>=0?'+':'\u2212')+
-                (nativeCompactTotal(Math.abs(impact.net))||'0'),
+              '~'+(impact.net>=0?'+':'\u2212')+
+                warPoints(Math.abs(impact.net)),
             share=impact?.share===null||impact?.share===undefined?'\u2014':
-              (complete?'':'\u2265')+fmt(impact.share)+'%',
-            hits=observed(impact?.hits??null),hot=Boolean(impact?.underFire),
+              (impact.incomingComplete?'':'\u2265')+fmt(impact.share)+'%',
+            hits=observed(impact?.attacks,impact?.incomingComplete),hot=Boolean(impact?.underFire),
             source=cfg.autoConceded===false?'Live impact scanning disabled in Settings':
               !captured?'Awaiting current-war attack-history scan':
               complete?'Scanned through '+stamp(impact.lastFetch):
-                'Incomplete attack-history scan; earned/given are minimums and net is uncertain',
+                'Incomplete attack-history scan or scoreboard difference; individual totals can change',
             detail='Earned: points we gained against the opponent. Given: points the enemy gained hitting this member. '+
               'These are observed ranked-war attack respect gains, not a verified official per-member score. '+source+
               (impact?.error?' | '+impact.error:'');
@@ -10429,9 +10482,9 @@
             'Net = earned minus given, a proxy, not an official personal war score. '+source);
           chip('share',expanded?'ENEMY SCORE SHARE '+share:share,'',
             'Observed share of the official live enemy faction score from attacks on this member. '+source);
-          chip('hits',expanded?'ENEMY SCORING HITS '+hits:hits+(hot?'!':''),
+          chip('hits',expanded?'RANKED ATTACKS RECEIVED '+hits:hits+(hot?'!':''),
             hot?'wsnw-under-fire-chip':'',
-            'Scoring enemy attacks received; ! = repeated attacks recently. '+source);
+            'Incoming ranked attacks, including zero-point results. Expand for attacker, result and points. '+source);
           chip('underfire',expanded&&hot?'REPEATED HITS: '+impact.in30+
             ' in 30m / '+impact.in60+' in 60m':'','wsnw-under-fire-chip',
             'Repeated incoming attack pressure; review turtling or protection');
