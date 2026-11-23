@@ -244,6 +244,34 @@ with sync_playwright() as pw:
     assert 'Attacker hidden or unknown / Hospitalized / 8.45 given' in member.inner_text()
     assert member.locator('.wsnw-expanded-detail').evaluate('e=>e.scrollWidth<=e.clientWidth+2')
     print('Native score reconciliation passed at 360px: official score, honest gap, automatic replay and defender evidence.')
+    # The compact faction overview in Torn PDA is a different route from the war roster.
+    page.goto('https://www.torn.com/index.php')
+    page.goto('https://www.torn.com/factions.php')
+    page.evaluate("""data=>{
+      const now=Date.now();
+      data.war.start=Math.floor(now/1000)-(3*86400+3*3600+33*60+1);
+      data.war.factions=[{id:20,name:'Rivals',score:1319},{id:10,name:'Our side',score:2023}];
+      data.war.opponentName='Rivals';data.war.target=1392;data.updated.wars=now;
+      localStorage.setItem('warstaxx-data-v1',JSON.stringify(data));
+      localStorage.setItem('warstaxx-config-v1',JSON.stringify({ourId:10,enemyId:20}));
+      document.querySelector('#native').innerHTML='<div class="chain">00:00</div><article id="war-fixture">'+
+        '<header>Rivals vs Our side</header><div><b id="left-score">1,319</b><span><small>Lead Target</small><em id="margin">704 / 1,392</em></span><b id="right-score">2,023</b></div>'+
+        '<footer style="display:flex;align-items:center;justify-content:space-between"><span>8 / 15</span><time>03:03:33:01</time><span>6 / 11</span></footer></article>';
+    }""",data)
+    inject()
+    note=page.locator('#war-fixture time + #ws-finish-clock')
+    assert note.locator('b').inner_text()=='Win in ~23h 27m'
+    assert 'if scores hold' in note.inner_text()
+    assert page.locator('#war-fixture footer').evaluate('e=>e.scrollWidth<=e.clientWidth')
+    page.evaluate("""()=>{document.querySelector('#left-score').textContent='2,023';document.querySelector('#right-score').textContent='1,319';}""")
+    note.get_by_text('Loss in ~23h 27m').wait_for(timeout=10000)
+    page.evaluate("""()=>{document.querySelector('#margin').textContent='0 / 1,392';document.querySelector('#right-score').textContent='2,023';
+      document.querySelector('#war-fixture footer').outerHTML='<footer><time>03:03:33:12</time></footer>';}""")
+    note.get_by_text('Tied').wait_for(timeout=10000)
+    assert page.locator('#ws-finish-clock').count()==1
+    page.locator('#war-fixture').evaluate('el=>el.remove()')
+    assert page.locator('#ws-finish-clock').count()==0
+    print('Native finish clock passed at 360px: faction overview, winner reversal, tie, card replacement and cleanup.')
     assert not errors, errors
     print('360px Chromium passed: 8 hub routes, installer reinjection, archive reload, country order, inline expansion, horizontal grid, filters, flight settings and attack-page entry.')
     worker.stdin.close();worker.wait(timeout=5)

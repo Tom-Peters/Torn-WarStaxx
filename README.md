@@ -1,3 +1,9 @@
+## 3.0.6 – Finish time if scores hold
+
+The ranked-war card on the faction page shows **Win in ~23h 27m** or **Loss in ~23h 27m** beside Torn’s elapsed clock. It uses the current lead and the next hourly target reduction that would put the leading faction over the line. A tie has no projected winner. The calculation runs on the device using the visible scoreboard and existing war data.
+
+The default estimate uses standard decay, with the first 1% reduction at hour 24. If the device first sees the war after decay starts, it estimates the opening target from the current target and elapsed hour. For a different template, select **Tactical briefing → Weekly war rules**. Day War uses the 24-hour deadline. Other winning conditions can be marked **Other template** to suppress the estimate. Times assume neither side scores again.
+
 ## 3.0.5 – Ranked-war points and incoming attacks
 
 The friendly roster now shows Torn’s official faction scores and lead. Underneath, **traced to defenders** totals the ranked attack gains assigned to individual members. A difference from the scoreboard stays visible. Whole faction points can differ from decimal attack totals through rounding or refresh timing. Member values show up to two decimal places.
