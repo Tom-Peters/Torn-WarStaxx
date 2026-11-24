@@ -21,7 +21,7 @@ function fixture(){
       put(row){disk.set(row.id,structuredClone(row));}});
     for(const req of reads)req.onsuccess();
   };
-  const api=runInNewContext(source+';({effortFor,effortFields,observedFlights,flightDisclosure,factionEnergyLine,observeFlight,backfillFlightHistory,captureBatchDepartures,flightHistoryQueue,flightStoreKey})',scope);
+  const api=runInNewContext(source+';({effortAttacks,hourlyEffort,effortFor,effortFields,observedFlights,flightDisclosure,factionEnergyLine,observeFlight,backfillFlightHistory,captureBatchDepartures,flightHistoryQueue,flightStoreKey})',scope);
   return {now,w,state,archive,scan,scope,disk,...api};
 }
 test('initiator, war window and attack ID determine energy independently of points and outcome',()=>{
@@ -34,20 +34,42 @@ test('initiator, war window and attack ID determine energy independently of poin
   }
   f.state.data.attacks=[attack(1),attack(9,{result:'Lost',ranked:false,defenderFaction:0})];
   const own=f.effortFor(f.w,10,1);
-  assert.deepEqual({...own},{war:3,other:2,total:6,unknown:1,warShare:null,pointsPer100:null,flights:null,log:null});
+  assert.deepEqual({...own},{war:3,outside:1,friendly:null,total:6,unknown:2,warShare:null,pointsPer100:null,flights:null,log:null});
   const labels=f.effortFields(own,(k,v)=>k+' '+v+' ');
   assert.match(labels,/War hits \/ E 3 \/ ~75 E/);
   assert.match(labels,/Total attack E ~150 E/);
   assert.equal(f.effortFor(f.w,20,2).war,1);
-  assert.equal(f.effortFor(f.w,20,2).other,null);
-  assert.equal(f.effortFor(f.w,10,3).other,0);
+  assert.equal(f.effortFor(f.w,20,2).outside,null);
+  assert.equal(f.effortFor(f.w,10,3).outside,0);
   f.scan.effortArchived=false;
-  assert.equal(f.effortFor(f.w,10,3).other,null);
+  assert.equal(f.effortFor(f.w,10,3).outside,null);
   f.scan.effortArchived=true;
   f.archive.fights.set(10,attack(10,{attackerFaction:0,attacker:0,defenderFaction:10}));
   f.archive.fightRevision++;
   assert.equal(f.effortFor(f.w,20,3).war,null);
   assert.equal(f.effortFor(f.w,10,3).war,0);
+});
+test('own-member and outside energy stay separate for both factions across UTC hours',()=>{
+  const f=fixture(),boundary=Math.floor(f.now/3600000)*3600000;
+  f.w.start=boundary-3600000;f.w.end=boundary+1000;
+  const attacks=[
+    {id:1,at:boundary,startedAt:boundary-1,attacker:1,attackerFaction:10,defenderFaction:10,result:'Lost'},
+    {id:2,at:boundary,attacker:1,attackerFaction:10,defenderFaction:20,result:'Stalemate'},
+    {id:3,at:boundary,attacker:1,attackerFaction:10,defenderFactionless:true,ranked:false},
+    {id:4,at:boundary,attacker:1,attackerFaction:10,ranked:false},
+    {id:5,at:boundary,attacker:2,attackerFaction:20,defenderFaction:20},
+    {id:6,at:boundary,defenderFaction:10,ranked:true}
+  ];
+  for(const a of attacks)f.archive.fights.set(a.id,a);
+  f.state.data.attacks=[...attacks];
+  const own=f.effortFor(f.w,10,1),enemy=f.effortFor(f.w,20,2);
+  assert.deepEqual([own.war,own.outside,own.friendly,own.total,own.warShare,own.unknown],[1,1,1,4,25,1]);
+  assert.deepEqual([enemy.friendly,enemy.outside,enemy.total],[1,null,1]);
+  const {hours}=f.effortAttacks(f.w);
+  assert.equal(hours.get(boundary-3600000).get(10).friendly,1);
+  assert.equal(hours.get(boundary).get(10).total,3);
+  assert.equal(hours.get(boundary).get(20).total,2,'anonymous enemy attack included once');
+  assert.match(f.hourlyEffort(f.w,hours),/Own-member ~25 E/);
 });
 test('a flight already underway, repeated checks, landings and scanner history count distinct wartime departures',()=>{
   const f=fixture(),row={};

@@ -1,3 +1,9 @@
+## 3.0.10 – Separate outside hits from own-member hits
+
+In **E & flights**, **Own hits E** shows energy spent attacking a member of the attacker’s own faction during the war. **Outside E** covers players in other factions and confirmed factionless targets. Each attempt counts once, including losses and stalemates. Older attacks with missing faction information stay unclassified. **War %** shows the share of recorded attack energy spent on the war opponent.
+
+Tap any energy-view heading to sort that faction, then tap again to reverse. With **Countries** on, the sort applies within each country. Tap a player’s flight count for destinations and departure times. **Hourly E** opens a TCT comparison of both sides. Tap an hourly total for its war, outside and own-member breakdown. The same figures appear in the hit ledger and after-action reports.
+
 ## 3.0.9 – Switch the compact war roster
 
 On Torn’s ranked-war page, tap **E & flights** beside **Countries**. Switch it on to see war energy, non-war energy and one-way flights for each player in both factions. Switch it off for points and attacks. **ATK OUT** counts recorded attacks on the war opponent, including losses and stalemates. **WAR IN** on the friendly roster counts incoming attempts. A dash means coverage is missing. Your device remembers the view across reloads. Country grouping, sorting and filters work independently of the view.

@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      3.0.9
+// @version      3.0.10
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -71,7 +71,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='3.0.9';
+  const id='war', version='3.0.10';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -184,7 +184,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='3.0.9', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='3.0.10', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics','dashboard','scouting','archive','scouter','squad','brief','heatmap','flights','combat'];
   const labels={scouter:'FFScouter Premium',overview:'Live war',enemy:'Players',reports:'Tools & reports',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics',dashboard:'Full dashboard',scouting:'Faction scouting',archive:'Detailed reports',squad:'Black Skull command',brief:'War briefing',heatmap:'Activity and forecasts',flights:'Defensive travel',combat:'Combat archive'};
@@ -305,6 +305,7 @@
     for(const k of archiveNumbers)if(typeof raw[k]==='number'&&Number.isFinite(raw[k])&&raw[k]>=0&&(!['attackerFaction','defenderFaction','warId','startedAt','endedAt'].includes(k)||raw[k]>0))row[k]=raw[k];
     for(const k of ['result','attackerName','defenderName'])if(typeof raw[k]==='string'&&raw[k])row[k]=raw[k].slice(0,80);
     if(typeof raw.ranked==='boolean')row.ranked=raw.ranked;
+    if(raw.defenderFactionless===true&&!row.defenderFaction)row.defenderFactionless=true;
     const dated={};
     for(const [side,who] of [['attacker',row.attacker],['defender',row.defender]]){
       const prior=raw.spyEvidence?.[side],live=spy(who);
@@ -1927,7 +1928,7 @@
     const legacy=state.data.attacks,revision=combatArchive.fightRevision;
     const key=[w.id,w.ourId,w.enemyId,w.start,w.active&&!w.stale?0:w.end].join('/');
     if(effortCache?.key===key&&effortCache.revision===revision&&effortCache.legacy===legacy)return effortCache;
-    const members=new Map(),factionAttempts=new Map(),unattributed=new Set();
+    const members=new Map(),factionAttempts=new Map(),unattributed=new Set(),hours=new Map();
     function count(a){
       const at=a.startedAt||a.at;
       if(!at||at<w.start||at>w.end)return;
@@ -1935,27 +1936,36 @@
       const defender=a.defenderFaction;
       const side=a.attackerFaction||(a.ranked===true?(defender===w.ourId?w.enemyId:defender===w.enemyId?w.ourId:0):0);
       const opponent=side===w.ourId?w.enemyId:side===w.enemyId?w.ourId:0;
-      if(opponent)factionAttempts.set(side,(factionAttempts.get(side)||0)+1);
-      if(!opponent||!a.attacker){
-        if(opponent)unattributed.add(side);
-        else if(!side){unattributed.add(w.ourId);unattributed.add(w.enemyId);}
+      if(!opponent){
+        if(!side){unattributed.add(w.ourId);unattributed.add(w.enemyId);}
         return;
       }
-      const id=side+'/'+a.attacker,row=members.get(id)||{id:a.attacker,side,name:a.attackerName,war:0,other:0,unknown:0,points:0};
-      if(a.defenderFaction===opponent||(a.ranked===true&&!a.defenderFaction)){
-        row.war++;
+      let kind='unknown';
+      if(defender===opponent||(a.ranked===true&&!defender))kind='war';
+      else if(defender===side)kind='friendly';
+      else if(defender||a.defenderFactionless===true)kind='outside';
+      else if(a.ranked===false)kind='unknownNonWar';
+      factionAttempts.set(side,(factionAttempts.get(side)||0)+1);
+      const hour=Math.floor(at/HOUR)*HOUR;
+      if(!hours.has(hour))hours.set(hour,new Map());
+      const bucket=hours.get(hour).get(side)||{war:0,friendly:0,outside:0,unknown:0,total:0};
+      bucket[kind==='unknownNonWar'?'unknown':kind]++;bucket.total++;
+      hours.get(hour).set(side,bucket);
+      if(!a.attacker){unattributed.add(side);return;}
+      const id=side+'/'+a.attacker,row=members.get(id)||{id:a.attacker,side,name:a.attackerName,
+        war:0,friendly:0,outside:0,unknownNonWar:0,unknown:0,total:0,points:0};
+      row[kind]++;row.total++;
+      if(kind==='war'){
         if(a.ranked===true&&Number.isFinite(a.respect)&&a.respect>=0){
           if(row.points!==null)row.points+=a.respect;
         }else if(a.ranked!==false&&a.respect!==0&&!/^(lost|defeated|stalemate|timeout)$/i.test(a.result||''))row.points=null;
-      }
-      else if(a.ranked===false||(a.defenderFaction&&a.ranked!==true))row.other++;
-      else {row.unknown++;row.points=null;}
+      }else if(kind==='unknown')row.points=null;
       members.set(id,row);
     }
     for(const a of combatArchive.fights.values())count(a);
     // Older installations have a unique-by-ID local cache while IndexedDB opens.
     for(const a of legacy)if(a.id&&!combatArchive.fights.has(a.id))count(a);
-    effortCache={key,legacy,revision,members,factionAttempts,unattributed};
+    effortCache={key,legacy,revision,members,factionAttempts,unattributed,hours};
     return effortCache;
   }
 
@@ -2073,15 +2083,17 @@
     const covered=effortScanCovered(w)&&!indexed.unattributed.has(faction);
     const own=faction===w.ourId,classified=!counts?.unknown;
     const war=counts?.war||((covered&&classified)?0:null);
-    const other=counts?.other||((own&&covered&&classified)?0:null);
+    const knownNonWar=own&&covered&&classified&&!counts?.unknownNonWar;
+    const outside=counts?.outside||(knownNonWar?0:null);
+    const friendly=counts?.friendly||(knownNonWar?0:null);
     const roster=combatArchive.hours.get(flightStoreKey(w,faction,id));
     const owner=positive(state.data.meta.ownerId);
     const premium=owner&&scouterPremiumActive()?combatArchive.hours.get(flightStoreKey(w,faction,id,owner)):null;
-    const total=counts?counts.war+counts.other+counts.unknown:(war===0&&other===0?0:null);
+    const total=counts?.total??(war===0&&outside===0&&friendly===0?0:null);
     const warShare=total&&classified?100*counts.war/total:null;
     const pointsPer100=total&&Number.isFinite(counts.points)?100*counts.points/(total*25):null;
     const log=observedFlights(roster,premium,w.end);
-    return {war,other,total,unknown:counts?.unknown||0,warShare,pointsPer100,flights:log?.length??null,log};
+    return {war,outside,friendly,total,unknown:(counts?.unknown||0)+(counts?.unknownNonWar||0),warShare,pointsPer100,flights:log?.length??null,log};
   }
   const effortCostLabel=count=>count===null?'\u2014':fmt(count)+' / ~'+fmt(count*25)+' E';
   const effortEnergyLabel=count=>count===null?'\u2014':'~'+fmt(count*25)+' E';
@@ -2099,18 +2111,35 @@
       (entries?'<ul>'+entries+'</ul>':'<p>'+(e.flights===null?'Flight records unavailable.':'No wartime departures recorded.')+'</p>')+'</details>';
   }
   function effortFields(e,field,key){
-    return field('War hits / E',effortCostLabel(e.war))+field('Non-war hits / E',effortCostLabel(e.other))+
+    return field('War hits / E',effortCostLabel(e.war))+field('Outside hits / E',effortCostLabel(e.outside))+
+      field('Own-member hits / E',effortCostLabel(e.friendly))+
       (e.unknown?field('Unclassified / E',effortCostLabel(e.unknown)):'')+flightDisclosure(e,key)+
       field('Total attack E',effortEnergyLabel(e.total))+field('Recorded war E %',effortShareLabel(e))+
       field('Pts / 100 E',effortRateLabel(e));
   }
-  const effortGuide='Energy uses 25 E per recorded outgoing attempt, including losses and stalemates. War E % is the share spent on war targets. Pts / 100 E divides captured ranked points by all recorded attack energy, including non-war hits. Enemy attacks on third parties are usually outside our feed. Tap Flights for destinations and departure times in TCT. A dash means the figure is unavailable.';
+  const effortGuide='Energy uses 25 E per recorded outgoing attempt, including losses and stalemates. Own-member E covers hits on the same faction. Outside E covers other identified targets. War E % is the share of recorded attack energy spent on war targets. Pts / 100 E divides captured ranked points by all recorded attack energy, including non-war hits. Enemy attacks on third parties are usually outside our feed. Tap Flights for destinations and departure times in TCT. A dash means the figure is unavailable.';
+  function hourlyEffort(w,hours){
+    const cell=(bucket,hour,faction)=>{
+      if(!bucket)return '<td aria-label="No attacks recorded">&#8212;</td>';
+      const split=[['War',bucket.war],['Outside',bucket.outside],['Own-member',bucket.friendly],['Unclassified',bucket.unknown]]
+        .filter(([,count])=>count).map(([label,count])=>label+' '+effortEnergyLabel(count)).join('<br>');
+      return '<td><details data-ws-disclosure="hourly-'+w.id+'-'+hour+'-'+faction+'"><summary>'+effortEnergyLabel(bucket.total)+'</summary>'+split+'</details></td>';
+    };
+    const rows=[...hours.keys()].sort((a,b)=>b-a).map(hour=>{
+      const factions=hours.get(hour);
+      return '<tr><th scope="row">'+esc(stamp(hour))+'</th>'+cell(factions.get(w.ourId),hour,w.ourId)+cell(factions.get(w.enemyId),hour,w.enemyId)+'</tr>';
+    });
+    return '<details class="ws-hourly-effort" data-ws-disclosure="hourly-effort-'+w.id+'"><summary>Hourly attack energy (TCT)</summary>'+
+      (rows.length?'<p>Recorded attacks by start hour. Tap a total for the split. A dash means no attacks were recorded for that side in that hour.</p>'+
+        '<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Hour starting</th><th>Our E</th><th>Enemy E</th></tr></thead><tbody>'+
+        rows.join('')+'</tbody></table></div>':'<p>No wartime attacks recorded yet.</p>')+'</details>';
+  }
   function effortReport(w){
     if(!w)return '';
     const index=effortAttacks(w);
     const groups=[['Our faction',w.ourId,'ours'],['Opponents',w.enemyId,'enemies']];
     return card('Attack energy and flights', '<p>'+effortGuide+' '+a('FFScouter data policy','https://ffscouter.com/#data-policy')+'</p>'+
-      groups.map(([title,faction,side])=>{
+      hourlyEffort(w,index.hours)+groups.map(([title,faction,side])=>{
         const timeline=state.data.warTimelines[w.id]?.sides?.[side]?.players||{};
         const members=new Map();
         for(const r of combatArchive.hours.values()){
@@ -2122,9 +2151,10 @@
         const rows=[...members.values()].map(p=>({id:p.id,name:p.name||'#'+p.id,...effortFor(w,faction,p.id)}))
           .sort((a,b)=>(b.war??-1)-(a.war??-1)||a.name.localeCompare(b.name));
         return '<details data-ws-disclosure="effort-'+w.id+'-'+side+'"><summary>'+title+' ('+rows.length+')</summary>'+
-          (rows.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Player</th><th>War hits / E</th><th>Non-war / E</th><th>Total E</th><th>War E %</th><th>Pts / 100 E</th><th>Flights</th></tr></thead><tbody>'+
-          rows.map(r=>'<tr><td>'+esc(r.name)+'</td><td>'+effortCostLabel(r.war)+'</td><td>'+effortCostLabel(r.other)+
-            (r.unknown?'<br><small>Unclassified '+effortCostLabel(r.unknown)+'</small>':'')+'</td><td>'+effortEnergyLabel(r.total)+'</td><td>'+effortShareLabel(r)+'</td><td>'+effortRateLabel(r)+'</td><td>'+flightDisclosure(r,[w.id,faction,r.id].join('-'))+'</td></tr>').join('')+'</tbody></table></div>':empty('No players recorded for this faction.'))+'</details>';
+          (rows.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Player</th><th>War hits / E</th><th>Outside hits / E</th><th>Own-member hits / E</th><th>Total E</th><th>War E %</th><th>Pts / 100 E</th><th>Flights</th></tr></thead><tbody>'+
+          rows.map(r=>'<tr><td>'+esc(r.name)+'</td><td>'+effortCostLabel(r.war)+'</td><td>'+effortCostLabel(r.outside)+'</td><td>'+effortCostLabel(r.friendly)+'</td><td>'+
+            effortEnergyLabel(r.total)+
+            (r.unknown?'<br><small>Unclassified '+effortCostLabel(r.unknown)+'</small>':'')+'</td><td>'+effortShareLabel(r)+'</td><td>'+effortRateLabel(r)+'</td><td>'+flightDisclosure(r,[w.id,faction,r.id].join('-'))+'</td></tr>').join('')+'</tbody></table></div>':empty('No players recorded for this faction.'))+'</details>';
       }).join(''));
   }
   const flightHistoryQueue={busy:false,next:0,attempts:new Map(),scope:''};
@@ -2264,12 +2294,15 @@
         a.attacker?.faction?.id??a.attacker?.faction_id);
       const defenderFaction=positive(a.defender_faction??a.defender_faction_id??
         a.defender?.faction?.id??a.defender?.faction_id);
+      const defenderFactionless=!defenderFaction&&(
+        a.defender?.faction===null||[a.defender_faction,a.defender_faction_id,a.defender?.faction?.id,a.defender?.faction_id]
+          .some(value=>value===0||value==='0'));
       const warFlag=a.is_ranked_war??a.ranked_war;
       const ranked=warFlag===true||warFlag===1||warFlag==='1';
       return {id:positive(a.id||a.attack_id),
         at:epochMs(a.timestamp_ended||a.ended||a.timestamp_started||a.started||a.timestamp||a.start),
         startedAt:epochMs(a.timestamp_started||a.started||a.start),
-        attacker,defender,attackerFaction,defenderFaction,hiddenAttacker:!attacker&&(a.attacker===null||a.is_stealthed===true),ranked:warFlag==null?null:ranked,
+        attacker,defender,attackerFaction,defenderFaction,defenderFactionless,hiddenAttacker:!attacker&&(a.attacker===null||a.is_stealthed===true),ranked:warFlag==null?null:ranked,
         endedAt:epochMs(a.timestamp_ended||a.ended),respectLoss:officialNumber(a.respect_loss),
         modifierWarlord:officialNumber(a.modifiers?.warlord),
         attackerName:String(a.attacker?.name||a.attacker_name||'').slice(0,80),
@@ -8593,7 +8626,7 @@
     const strengthOrder=workspace.sort==='lowest'||workspace.sort==='highest';
     if(workspace.sort==='ffs')for(const row of selected){const source=ffscouter(row.player.id);row.personalFF=source&&!ffIsStale(source)&&Number.isFinite(source.ff)?source.ff:Infinity;}
     if(strengthOrder)for(const row of selected)row.total=nativeWarStrength(row.player).total;
-    const effortSort=['war','other','flights','warShare','pointsPer100'].includes(workspace.sort);
+    const effortSort=['war','outside','friendly','flights','warShare','pointsPer100'].includes(workspace.sort);
     if(effortSort){
       const w=effortWindow();
       for(const row of selected)row.sortEffort=w&&(side==='ours'||cfg.enemyId===w.enemyId)?
@@ -8651,7 +8684,7 @@
       workspaceTabs([['enemies','Opponents'],['ours','Our faction']],data.side,'workspace-side:')+
       '<div class="ws-roster-controls"><input id="ws-roster-query" type="search" value="'+esc(workspace.query)+'" placeholder="Find name or ID" aria-label="Search roster">'+
       options('ws-roster-country',[['all','All countries'],...data.countries.map(x=>[x,x])],workspace.country)+
-      options('ws-roster-sort',[['status','Okay first'],['hospital','Hospital expiry'],['name','Name A-Z'],['recent','Recent activity'],...(effortWindow()?[['war','Most war energy'],['other','Most non-war energy'],['flights','Most flights seen'],['warShare','Highest recorded war E %'],['pointsPer100','Most points per 100 E']]:[]),['lowest','Lowest total stats'],['highest','Highest total stats'],...(!own?[['ffs','Lowest personal FFS']]:[]),['points',own?'Most points given':'Most points scored'],...(own?[['net','Best net']]:[])],workspace.sort)+'</div>'+
+      options('ws-roster-sort',[['status','Okay first'],['hospital','Hospital expiry'],['name','Name A-Z'],['recent','Recent activity'],...(effortWindow()?[['war','Most war energy'],['outside','Most outside energy'],['friendly','Most own-member energy'],['flights','Most flights seen'],['warShare','Highest recorded war E %'],['pointsPer100','Most points per 100 E']]:[]),['lowest','Lowest total stats'],['highest','Highest total stats'],...(!own?[['ffs','Lowest personal FFS']]:[]),['points',own?'Most points given':'Most points scored'],...(own?[['net','Best net']]:[])],workspace.sort)+'</div>'+
       workspaceTabs([['all','All'],['okay','Okay'],['hospital','Hospital'],['away','Away'],['here','Here'],['releasing','Hospital within 15m'],['skulls','Skulls'],['watched','Watched']],workspace.filter,'workspace-filter:')+
       '<div class="ws-live-meta"><span>'+data.rows.length+' / '+data.total+' players | '+(data.fresh?'Roster '+esc(age(state.data.updated[data.side])):'STALE ROSTER')+'</span>'+b('Reset filters','workspace-reset')+'</div>'+
       '<p class="ws-small">Points are captured ranked-war attack respect, not official member scores. Partial values are minimums; net* is uncertain when either side is incomplete.</p>';
@@ -9455,10 +9488,31 @@
     if(mode==='hospital')return [kind==='hospital'?0:1,kind==='hospital'?eta:group,p.id];
     return [t?0:group,t?-t.at:eta,p.id];
   }
+  const nativeEffortColumns=[
+    ['war','War E','war energy'],['outside','Outside E','outside energy'],['friendly','Own hits E','energy spent hitting own faction members'],
+    ['warShare','War %','percentage of recorded attack energy spent on the war opponent'],['flights','Flights','observed flights']
+  ];
+  function nativeEffortComparator(side,rows){
+    const pref=cfg.nativeEffortSort?.[side];
+    if(!nativeEffortColumns.some(([key])=>key===pref?.key))return null;
+    const w=effortWindow();
+    if(!w||side==='enemy'&&w.enemyId!==cfg.enemyId)return null;
+    const faction=side==='your'?w.ourId:w.enemyId;
+    const values=new Map(rows.map(row=>{
+      const id=nativeWarPlayerId(row);
+      return [id,effortFor(w,faction,id)[pref.key]];
+    }));
+    return (idA,idB)=>{
+      const a=values.get(idA),b=values.get(idB);
+      if(a===null||b===null)return Number(a===null)-Number(b===null);
+      return pref.ascending?a-b:b-a;
+    };
+  }
   function nativeWarSort(list,playerMap,mode){
     if(!list)return false;
+    const byEffort=cfg.nativeRosterView==='energy'&&nativeEffortComparator('enemy',nativeWarRows(list));
     const priorHeaders=Array.from(list.querySelectorAll(':scope > li.wsnw-country-heading'));
-    if(nativeWarActiveSortConflict(list)&&(cfg.nativeWarCountryGroups===false||mode==='torn')){
+    if(!byEffort&&nativeWarActiveSortConflict(list)&&(cfg.nativeWarCountryGroups===false||mode==='torn')){
       clearCountryOrder(list);
       // In ungrouped mode, release the list to the external sorter.
       priorHeaders.forEach(h=>h.remove());
@@ -9474,7 +9528,7 @@
       nativeWarState.original.set(list,new Map(rows.map((r,i)=>[nativeWarPlayerId(r),i])));
     }
     const original=nativeWarState.original.get(list),own=nativeWarOwnLocation(),
-      grouping=mode!=='torn'&&cfg.nativeWarCountryGroups!==false;
+      grouping=(byEffort||mode!=='torn')&&cfg.nativeWarCountryGroups!==false;
     const sorted=rows.slice().sort((a,b)=>{
       const pa=playerMap.get(nativeWarPlayerId(a)),pb=playerMap.get(nativeWarPlayerId(b));
       if(!pa||!pb)return (original.get(nativeWarPlayerId(a))??Infinity)-
@@ -9484,7 +9538,11 @@
           nativeWarLocation(pb).country,own);
         if(country)return country;
       }
-      // Okay targets always precede hospitalised/jailed/flying players in each country.
+      if(byEffort){
+        const difference=byEffort(pa.id,pb.id);
+        if(difference)return difference;
+      }
+      // Availability breaks ties when the player explicitly sorts by energy.
       if(grouping||!['torn','warpoints','warhits','warpace'].includes(mode)){
         const availability=nativeWarAvailabilityRank(pa)-nativeWarAvailabilityRank(pb);
         if(availability)return availability;
@@ -9544,7 +9602,7 @@
       }
     }else expected.push(...sorted);
     for(const old of priorHeaders)if(!expected.includes(old))old.remove();
-    if(grouping&&(nativeWarActiveSortConflict(list)||rows.length!==all.length)){
+    if((grouping||byEffort)&&(nativeWarActiveSortConflict(list)||rows.length!==all.length)){
       applyCountryOrder(list,expected,rows);
       return true;
     }
@@ -9564,8 +9622,9 @@
   // The selected impact metric sorts within each country/availability group.
   function nativeWarSortFriendly(list,mode='given'){
     if(!list)return false;
+    const byEffort=cfg.nativeRosterView==='energy'&&nativeEffortComparator('your',nativeWarRows(list));
     const priorHeaders=Array.from(list.querySelectorAll(':scope > li.wsnw-country-heading'));
-    if(nativeWarActiveSortConflict(list)&&(cfg.nativeWarCountryGroups===false||mode==='torn')){
+    if(!byEffort&&nativeWarActiveSortConflict(list)&&(cfg.nativeWarCountryGroups===false||mode==='torn')){
       clearCountryOrder(list);
       priorHeaders.forEach(h=>h.remove());
       return false;
@@ -9579,7 +9638,7 @@
     if(!nativeWarState.ourOriginal.has(list))
       nativeWarState.ourOriginal.set(list,new Map(rows.map((r,i)=>[nativeWarPlayerId(r),i])));
     const original=nativeWarState.ourOriginal.get(list),desc=cfg.nativeFriendlyDesc!==false,
-      grouping=cfg.nativeWarCountryGroups!==false&&mode!=='torn',
+      grouping=cfg.nativeWarCountryGroups!==false&&(byEffort||mode!=='torn'),
       own=nativeWarOwnLocation(),players=new Map(state.data.ours.map(p=>[p.id,p]));
     const measure=impact=>{
       if(mode==='earned')return impact.earned;
@@ -9594,12 +9653,18 @@
     }));
     const sorted=rows.slice().sort((a,b)=>{
       const idA=nativeWarPlayerId(a),idB=nativeWarPlayerId(b);
-      if(mode==='torn')return (original.get(idA)??Infinity)-(original.get(idB)??Infinity);
+      if(!byEffort&&mode==='torn')return (original.get(idA)??Infinity)-(original.get(idB)??Infinity);
       const pa=players.get(idA),pb=players.get(idB);
       if(grouping&&pa&&pb){
         const country=nativeWarCountryCompare(nativeWarLocation(pa).country,
           nativeWarLocation(pb).country,own);
         if(country)return country;
+      }
+      if(byEffort){
+        const difference=byEffort(idA,idB);
+        if(difference)return difference;
+      }
+      if(grouping&&pa&&pb){
         const availability=nativeWarAvailabilityRank(pa)-nativeWarAvailabilityRank(pb);
         if(availability)return availability;
       }
@@ -9657,7 +9722,7 @@
       }
     }else expected.push(...sorted);
     for(const old of priorHeaders)if(!expected.includes(old))old.remove();
-    if(grouping&&(nativeWarActiveSortConflict(list)||rows.length!==all.length)){
+    if((grouping||byEffort)&&(nativeWarActiveSortConflict(list)||rows.length!==all.length)){
       applyCountryOrder(list,expected,rows);
       return true;
     }
@@ -10298,9 +10363,9 @@
     // Headings and collapsed player rows share column definitions in both views.
     for(const [side,legend,points,energy] of [
       ['your','.wsnw-our-legend','minmax(0,1.35fr) repeat(4,minmax(0,1fr)) repeat(2,minmax(0,.74fr))',
-        'minmax(0,1.35fr) repeat(3,minmax(0,1fr))'],
+        'minmax(0,1.2fr) repeat(5,minmax(0,1fr))'],
       ['enemy',':not(.wsnw-our-legend)','24px minmax(0,1.3fr) minmax(0,.8fr) minmax(0,1.1fr) repeat(3,minmax(0,.75fr))',
-        '26px minmax(0,1.3fr) repeat(3,minmax(0,1fr))']
+        '22px minmax(0,1.2fr) repeat(5,minmax(0,1fr))']
     ]){
       const heading='.faction-war .wsnw-legend'+legend;
       const bar='.faction-war ul.members-list li.'+side+'.wsnw-enhanced:not(.wsnw-expanded)>.wsnw-intel';
@@ -10308,12 +10373,15 @@
         const attr='[data-wsnw-view="'+view+'"]';
         style.textContent+=heading+attr+','+bar+attr+'{grid-template-columns:'+columns+'!important}';
       }
-      for(const [key,col] of [['outgoing',7],['war-e',-4],['other-e',-3],['flights',-2]]){
+      for(const [key,col] of [['outgoing',7],['war-e',-6],['outside-e',-5],['friendly-e',-4],['war-share',-3],['flights',-2]]){
         style.textContent+=bar+' > [data-wsnw-chip="'+key+'"]{display:inline-flex!important;grid-row:1!important;'+
           'grid-column:'+col+'!important;min-width:0!important;justify-content:center!important;font-variant-numeric:tabular-nums}';
       }
     }
     style.textContent+='#wsnw-toolbar [data-wsnw-action="roster-view"][aria-pressed="true"]{background:#155277;color:#fff;border-color:#61caff}';
+    style.textContent+='.faction-war .wsnw-legend button[data-wsnw-effort-sort]{min-width:0;min-height:32px;padding:2px 0;border:0;border-radius:3px;background:#193a51;color:#c2deed;font:750 10px/1.1 system-ui;white-space:normal;text-transform:uppercase;cursor:pointer}'+
+      '.faction-war .wsnw-legend button[data-wsnw-effort-sort][aria-pressed="true"]{background:#155277;color:#fff;box-shadow:inset 0 -2px #61caff}'+
+      '.faction-war .wsnw-intel button[data-wsnw-chip="flights"]{cursor:pointer;text-decoration:underline;text-underline-offset:2px}';
     document.head.appendChild(style);
   }
   // An opt-in small, draggable chain indicator. Never mounted over an attack page.
@@ -10546,7 +10614,14 @@
     const energy=cfg.nativeRosterView==='energy';
     heading.dataset.wsnwView=energy?'energy':'points';
     const statusColumns=ours?'<span>STATUS</span>':'<span>ROLE</span><span>STATUS / PLACE</span>';
-    const columns=energy?statusColumns+'<span>WAR E</span><span>NON-WAR E</span><span>FLIGHTS</span>':ours?
+    const side=ours?'your':'enemy',sort=cfg.nativeEffortSort?.[side];
+    const energyHeadings=energy?nativeEffortColumns.map(([key,label,meaning])=>{
+      const active=sort?.key===key,direction=active?(sort.ascending?' \u2191':' \u2193'):'';
+      return '<button type="button" data-wsnw-effort-sort="'+key+'" data-side="'+side+'" aria-pressed="'+active+
+        '" aria-label="Sort '+(ours?'our faction':'opponents')+' by '+meaning+(active?(sort.ascending?', lowest first':', highest first'):'')+'">'+
+        label+direction+'</button>';
+    }).join(''):'';
+    const columns=energy?statusColumns+energyHeadings:ours?
       '<span aria-label="Skull marker, status timer and last seen">STATUS</span>'+
       sortable('earned','EARN','points our member earned attacking the other faction')+
       sortable('given','GIVEN','points the opponent earned attacking this member')+
@@ -10690,6 +10765,7 @@
           (cfg.nativeWarCountryGroups!==false?'Countries ON':'Countries OFF')+'</button>'+
       '<button type="button" data-wsnw-action="roster-view" aria-label="Energy and flights roster view" aria-pressed="'+
         (cfg.nativeRosterView==='energy')+'">E &amp; flights '+(cfg.nativeRosterView==='energy'?'ON':'OFF')+'</button>'+
+      (cfg.nativeRosterView==='energy'&&!preparation?'<button type="button" data-wsnw-action="hourly-effort">Hourly E</button>':'')+
       '<button type="button" data-wsnw-action="more" aria-expanded="'+
         (nativeWarState.toolbarExpanded?'true':'false')+'">'+
         (nativeWarState.toolbarExpanded?'Close filters':'Sort / filters')+'</button>'+
@@ -10815,7 +10891,11 @@
         const chip=(key,value,variant='',title='')=>{
           let x=infoBar.querySelector('[data-wsnw-chip="'+key+'"]');
           if(value===null||value===undefined||value===''){x?.remove();return;}
-          if(!x){x=el('span','wsnw-chip');x.dataset.wsnwChip=key;infoBar.appendChild(x);}
+          if(!x){
+            x=el(key==='flights'?'button':'span','wsnw-chip');
+            if(key==='flights')x.type='button';
+            x.dataset.wsnwChip=key;infoBar.appendChild(x);
+          }
           const cls='wsnw-chip '+(key==='status'?'wsnw-status':key==='role'?'wsnw-role':'')+' '+variant;
           if(x.className!==cls)x.className=cls;
           if(x.textContent!==value)x.textContent=value;
@@ -10885,8 +10965,10 @@
         }
         if(rowView==='energy'){
           chip('war-e',effortEnergyLabel(effort?.war??null),'','Estimated energy used on recorded war attempts');
-          chip('other-e',effortEnergyLabel(effort?.other??null),'','Estimated energy used on recorded non-war attempts');
-          chip('flights',effortFlightLabel(effort?.flights??null),'','Observed one-way flights, including returns');
+          chip('outside-e',effortEnergyLabel(effort?.outside??null),'','Energy spent attacking outside targets');
+          chip('friendly-e',effortEnergyLabel(effort?.friendly??null),'','Energy spent attacking own faction members');
+          chip('war-share',effortShareLabel(effort||{warShare:null}),'','Share of recorded attack energy spent on war targets');
+          chip('flights',effortFlightLabel(effort?.flights??null),'','Show flight destinations for '+p.name);
         }else if(enemy){
           const strength=nativeWarStrength(p);
           const strengthChip=chip('bss',strength.short,'',strength.detail);
@@ -11140,6 +11222,31 @@
       cfg.nativeFriendlyFilter=ourFilter.dataset.wsnwFriendlyFilter==='black'?'black':'all';
       saveCfg();syncNativeWar();return;
     }
+    const effortHeading=e.target?.closest?.('.faction-war .wsnw-legend [data-wsnw-effort-sort]');
+    if(effortHeading&&isNativeWarPage()){
+      e.preventDefault();e.stopPropagation();
+      const {side,wsnwEffortSort:key}=effortHeading.dataset;
+      if(!['your','enemy'].includes(side)||!nativeEffortColumns.some(c=>c[0]===key))return;
+      const pref=cfg.nativeEffortSort?.[side];
+      cfg.nativeEffortSort={...cfg.nativeEffortSort,[side]:{key,ascending:pref?.key===key&&!pref.ascending}};
+      saveCfg();syncNativeWar();
+      document.querySelector('.wsnw-legend [data-side="'+side+'"][data-wsnw-effort-sort="'+key+'"]')?.focus({preventScroll:true});
+      return;
+    }
+    const flightCount=e.target?.closest?.('.faction-war button[data-wsnw-chip="flights"]');
+    if(flightCount&&isNativeWarPage()){
+      e.preventDefault();e.stopPropagation();
+      const row=flightCount.closest('li');
+      nativeWarState.expandedId=nativeWarPlayerId(row);
+      syncNativeWar();
+      const log=row.querySelector('.ws-flight-log');
+      if(log){
+        log.open=true;syncNativeWar();
+        const summary=row.querySelector('.ws-flight-log summary');
+        summary?.focus({preventScroll:true});summary?.scrollIntoView({block:'nearest'});
+      }
+      return;
+    }
     const sortHeading=e.target?.closest?.('.faction-war .wsnw-our-legend [data-wsnw-sort-field]');
     if(sortHeading&&isNativeWarPage()){
       e.preventDefault();e.stopPropagation();
@@ -11161,6 +11268,7 @@
       e.preventDefault();e.stopPropagation();
       const mode=String(quick.dataset.wsnwQuickSort||'');
       if(['net','given','earned'].includes(mode)){
+        delete cfg.nativeEffortSort?.your;
         if(cfg.nativeFriendlySort===mode)cfg.nativeFriendlyDesc=cfg.nativeFriendlyDesc===false;
         else {cfg.nativeFriendlySort=mode;cfg.nativeFriendlyDesc=true;}
         saveCfg();syncNativeWar();
@@ -11171,6 +11279,12 @@
     if(button&&isNativeWarPage()){
       e.preventDefault();e.stopPropagation();
       if(button.dataset.wsnwAction==='reset-filters'){cfg.nativeWarFilter='all';cfg.nativeFriendlyFilter='all';saveCfg();syncNativeWar();return;}
+      if(button.dataset.wsnwAction==='hourly-effort'){
+        open({section:'ledger'});
+        const hours=root.querySelector('.ws-hourly-effort');
+        if(hours){hours.open=true;hours.querySelector('summary')?.focus({preventScroll:true});hours.scrollIntoView({block:'start'});}
+        return;
+      }
       if(button.dataset.wsnwAction==='roster-view'){
         cfg.nativeRosterView=cfg.nativeRosterView==='energy'?'points':'energy';
         saveCfg();syncNativeWar();
@@ -11187,6 +11301,7 @@
         saveCfg();syncNativeWar();return;
       }
       if(button.dataset.wsnwAction==='friendly-direction'){
+        delete cfg.nativeEffortSort?.your;
         cfg.nativeFriendlyDesc=cfg.nativeFriendlyDesc===false;
         saveCfg();syncNativeWar();return;
       }
@@ -11213,7 +11328,7 @@
   },true);
   document.addEventListener('keydown',e=>{
     const bar=e.target?.closest?.('.faction-war .wsnw-intel[data-wsnw-toggle]');
-    if(!bar||e.target.closest('.ws-flight-log')||!isNativeWarPage()||!['Enter',' '].includes(e.key))return;
+    if(!bar||e.target.closest('.ws-flight-log,button[data-wsnw-chip="flights"]')||!isNativeWarPage()||!['Enter',' '].includes(e.key))return;
     e.preventDefault();e.stopPropagation();
     const id=positive(bar.dataset.wsnwToggle);
     nativeWarState.expandedId=nativeWarState.expandedId===id?0:id;
@@ -11226,7 +11341,9 @@
     const header=e.target?.closest?.(
       '.faction-war .white-grad .member,.faction-war .white-grad .level,'+
       '.faction-war .white-grad .points,.faction-war .white-grad .status');
-    if(!header||cfg.nativeWarCountryGroups!==false||(cfg.nativeWarSort==='torn'&&cfg.nativeFriendlySort==='torn'))return;
+    if(!header||cfg.nativeWarCountryGroups!==false)return;
+    if(cfg.nativeWarSort==='torn'&&cfg.nativeFriendlySort==='torn'&&!cfg.nativeEffortSort?.your&&!cfg.nativeEffortSort?.enemy)return;
+    delete cfg.nativeEffortSort;
     cfg.nativeWarSort='torn';cfg.nativeFriendlySort='torn';saveCfg();
     setTimeout(()=>{
       const box=document.querySelector('.faction-war');
@@ -11241,11 +11358,11 @@
       metric=e.target?.closest?.('#wsnw-toolbar [data-wsnw-metric]'),
       friendlySort=e.target?.closest?.('#wsnw-toolbar [data-wsnw-friendly-sort]'),
       filter=e.target?.closest?.('#wsnw-toolbar [data-wsnw-filter]');
-    if(sort){cfg.nativeWarSort=String(sort.value);if(sort.value==='torn')cfg.nativeWarCountryGroups=false;saveCfg();syncNativeWar();}
+    if(sort){delete cfg.nativeEffortSort?.enemy;cfg.nativeWarSort=String(sort.value);if(sort.value==='torn')cfg.nativeWarCountryGroups=false;saveCfg();syncNativeWar();}
     if(metric&&['points','pace','hits'].includes(metric.value)){
       cfg.nativeEnemyMetric=String(metric.value);saveCfg();syncNativeWar();
     }
-    if(friendlySort){cfg.nativeFriendlySort=String(friendlySort.value);if(friendlySort.value==='torn')cfg.nativeWarCountryGroups=false;cfg.nativeFriendlyDesc=true;saveCfg();syncNativeWar();}
+    if(friendlySort){delete cfg.nativeEffortSort?.your;cfg.nativeFriendlySort=String(friendlySort.value);if(friendlySort.value==='torn')cfg.nativeWarCountryGroups=false;cfg.nativeFriendlyDesc=true;saveCfg();syncNativeWar();}
     if(filter){cfg.nativeWarFilter=String(filter.value);saveCfg();syncNativeWar();}
   });
   function mountFactionShortcut(){

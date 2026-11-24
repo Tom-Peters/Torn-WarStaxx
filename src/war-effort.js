@@ -5,7 +5,7 @@
     const legacy=state.data.attacks,revision=combatArchive.fightRevision;
     const key=[w.id,w.ourId,w.enemyId,w.start,w.active&&!w.stale?0:w.end].join('/');
     if(effortCache?.key===key&&effortCache.revision===revision&&effortCache.legacy===legacy)return effortCache;
-    const members=new Map(),factionAttempts=new Map(),unattributed=new Set();
+    const members=new Map(),factionAttempts=new Map(),unattributed=new Set(),hours=new Map();
     function count(a){
       const at=a.startedAt||a.at;
       if(!at||at<w.start||at>w.end)return;
@@ -13,27 +13,36 @@
       const defender=a.defenderFaction;
       const side=a.attackerFaction||(a.ranked===true?(defender===w.ourId?w.enemyId:defender===w.enemyId?w.ourId:0):0);
       const opponent=side===w.ourId?w.enemyId:side===w.enemyId?w.ourId:0;
-      if(opponent)factionAttempts.set(side,(factionAttempts.get(side)||0)+1);
-      if(!opponent||!a.attacker){
-        if(opponent)unattributed.add(side);
-        else if(!side){unattributed.add(w.ourId);unattributed.add(w.enemyId);}
+      if(!opponent){
+        if(!side){unattributed.add(w.ourId);unattributed.add(w.enemyId);}
         return;
       }
-      const id=side+'/'+a.attacker,row=members.get(id)||{id:a.attacker,side,name:a.attackerName,war:0,other:0,unknown:0,points:0};
-      if(a.defenderFaction===opponent||(a.ranked===true&&!a.defenderFaction)){
-        row.war++;
+      let kind='unknown';
+      if(defender===opponent||(a.ranked===true&&!defender))kind='war';
+      else if(defender===side)kind='friendly';
+      else if(defender||a.defenderFactionless===true)kind='outside';
+      else if(a.ranked===false)kind='unknownNonWar';
+      factionAttempts.set(side,(factionAttempts.get(side)||0)+1);
+      const hour=Math.floor(at/HOUR)*HOUR;
+      if(!hours.has(hour))hours.set(hour,new Map());
+      const bucket=hours.get(hour).get(side)||{war:0,friendly:0,outside:0,unknown:0,total:0};
+      bucket[kind==='unknownNonWar'?'unknown':kind]++;bucket.total++;
+      hours.get(hour).set(side,bucket);
+      if(!a.attacker){unattributed.add(side);return;}
+      const id=side+'/'+a.attacker,row=members.get(id)||{id:a.attacker,side,name:a.attackerName,
+        war:0,friendly:0,outside:0,unknownNonWar:0,unknown:0,total:0,points:0};
+      row[kind]++;row.total++;
+      if(kind==='war'){
         if(a.ranked===true&&Number.isFinite(a.respect)&&a.respect>=0){
           if(row.points!==null)row.points+=a.respect;
         }else if(a.ranked!==false&&a.respect!==0&&!/^(lost|defeated|stalemate|timeout)$/i.test(a.result||''))row.points=null;
-      }
-      else if(a.ranked===false||(a.defenderFaction&&a.ranked!==true))row.other++;
-      else {row.unknown++;row.points=null;}
+      }else if(kind==='unknown')row.points=null;
       members.set(id,row);
     }
     for(const a of combatArchive.fights.values())count(a);
     // Older installations have a unique-by-ID local cache while IndexedDB opens.
     for(const a of legacy)if(a.id&&!combatArchive.fights.has(a.id))count(a);
-    effortCache={key,legacy,revision,members,factionAttempts,unattributed};
+    effortCache={key,legacy,revision,members,factionAttempts,unattributed,hours};
     return effortCache;
   }
 
@@ -151,15 +160,17 @@
     const covered=effortScanCovered(w)&&!indexed.unattributed.has(faction);
     const own=faction===w.ourId,classified=!counts?.unknown;
     const war=counts?.war||((covered&&classified)?0:null);
-    const other=counts?.other||((own&&covered&&classified)?0:null);
+    const knownNonWar=own&&covered&&classified&&!counts?.unknownNonWar;
+    const outside=counts?.outside||(knownNonWar?0:null);
+    const friendly=counts?.friendly||(knownNonWar?0:null);
     const roster=combatArchive.hours.get(flightStoreKey(w,faction,id));
     const owner=positive(state.data.meta.ownerId);
     const premium=owner&&scouterPremiumActive()?combatArchive.hours.get(flightStoreKey(w,faction,id,owner)):null;
-    const total=counts?counts.war+counts.other+counts.unknown:(war===0&&other===0?0:null);
+    const total=counts?.total??(war===0&&outside===0&&friendly===0?0:null);
     const warShare=total&&classified?100*counts.war/total:null;
     const pointsPer100=total&&Number.isFinite(counts.points)?100*counts.points/(total*25):null;
     const log=observedFlights(roster,premium,w.end);
-    return {war,other,total,unknown:counts?.unknown||0,warShare,pointsPer100,flights:log?.length??null,log};
+    return {war,outside,friendly,total,unknown:(counts?.unknown||0)+(counts?.unknownNonWar||0),warShare,pointsPer100,flights:log?.length??null,log};
   }
   const effortCostLabel=count=>count===null?'\u2014':fmt(count)+' / ~'+fmt(count*25)+' E';
   const effortEnergyLabel=count=>count===null?'\u2014':'~'+fmt(count*25)+' E';
@@ -177,18 +188,35 @@
       (entries?'<ul>'+entries+'</ul>':'<p>'+(e.flights===null?'Flight records unavailable.':'No wartime departures recorded.')+'</p>')+'</details>';
   }
   function effortFields(e,field,key){
-    return field('War hits / E',effortCostLabel(e.war))+field('Non-war hits / E',effortCostLabel(e.other))+
+    return field('War hits / E',effortCostLabel(e.war))+field('Outside hits / E',effortCostLabel(e.outside))+
+      field('Own-member hits / E',effortCostLabel(e.friendly))+
       (e.unknown?field('Unclassified / E',effortCostLabel(e.unknown)):'')+flightDisclosure(e,key)+
       field('Total attack E',effortEnergyLabel(e.total))+field('Recorded war E %',effortShareLabel(e))+
       field('Pts / 100 E',effortRateLabel(e));
   }
-  const effortGuide='Energy uses 25 E per recorded outgoing attempt, including losses and stalemates. War E % is the share spent on war targets. Pts / 100 E divides captured ranked points by all recorded attack energy, including non-war hits. Enemy attacks on third parties are usually outside our feed. Tap Flights for destinations and departure times in TCT. A dash means the figure is unavailable.';
+  const effortGuide='Energy uses 25 E per recorded outgoing attempt, including losses and stalemates. Own-member E covers hits on the same faction. Outside E covers other identified targets. War E % is the share of recorded attack energy spent on war targets. Pts / 100 E divides captured ranked points by all recorded attack energy, including non-war hits. Enemy attacks on third parties are usually outside our feed. Tap Flights for destinations and departure times in TCT. A dash means the figure is unavailable.';
+  function hourlyEffort(w,hours){
+    const cell=(bucket,hour,faction)=>{
+      if(!bucket)return '<td aria-label="No attacks recorded">&#8212;</td>';
+      const split=[['War',bucket.war],['Outside',bucket.outside],['Own-member',bucket.friendly],['Unclassified',bucket.unknown]]
+        .filter(([,count])=>count).map(([label,count])=>label+' '+effortEnergyLabel(count)).join('<br>');
+      return '<td><details data-ws-disclosure="hourly-'+w.id+'-'+hour+'-'+faction+'"><summary>'+effortEnergyLabel(bucket.total)+'</summary>'+split+'</details></td>';
+    };
+    const rows=[...hours.keys()].sort((a,b)=>b-a).map(hour=>{
+      const factions=hours.get(hour);
+      return '<tr><th scope="row">'+esc(stamp(hour))+'</th>'+cell(factions.get(w.ourId),hour,w.ourId)+cell(factions.get(w.enemyId),hour,w.enemyId)+'</tr>';
+    });
+    return '<details class="ws-hourly-effort" data-ws-disclosure="hourly-effort-'+w.id+'"><summary>Hourly attack energy (TCT)</summary>'+
+      (rows.length?'<p>Recorded attacks by start hour. Tap a total for the split. A dash means no attacks were recorded for that side in that hour.</p>'+
+        '<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Hour starting</th><th>Our E</th><th>Enemy E</th></tr></thead><tbody>'+
+        rows.join('')+'</tbody></table></div>':'<p>No wartime attacks recorded yet.</p>')+'</details>';
+  }
   function effortReport(w){
     if(!w)return '';
     const index=effortAttacks(w);
     const groups=[['Our faction',w.ourId,'ours'],['Opponents',w.enemyId,'enemies']];
     return card('Attack energy and flights', '<p>'+effortGuide+' '+a('FFScouter data policy','https://ffscouter.com/#data-policy')+'</p>'+
-      groups.map(([title,faction,side])=>{
+      hourlyEffort(w,index.hours)+groups.map(([title,faction,side])=>{
         const timeline=state.data.warTimelines[w.id]?.sides?.[side]?.players||{};
         const members=new Map();
         for(const r of combatArchive.hours.values()){
@@ -200,9 +228,10 @@
         const rows=[...members.values()].map(p=>({id:p.id,name:p.name||'#'+p.id,...effortFor(w,faction,p.id)}))
           .sort((a,b)=>(b.war??-1)-(a.war??-1)||a.name.localeCompare(b.name));
         return '<details data-ws-disclosure="effort-'+w.id+'-'+side+'"><summary>'+title+' ('+rows.length+')</summary>'+
-          (rows.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Player</th><th>War hits / E</th><th>Non-war / E</th><th>Total E</th><th>War E %</th><th>Pts / 100 E</th><th>Flights</th></tr></thead><tbody>'+
-          rows.map(r=>'<tr><td>'+esc(r.name)+'</td><td>'+effortCostLabel(r.war)+'</td><td>'+effortCostLabel(r.other)+
-            (r.unknown?'<br><small>Unclassified '+effortCostLabel(r.unknown)+'</small>':'')+'</td><td>'+effortEnergyLabel(r.total)+'</td><td>'+effortShareLabel(r)+'</td><td>'+effortRateLabel(r)+'</td><td>'+flightDisclosure(r,[w.id,faction,r.id].join('-'))+'</td></tr>').join('')+'</tbody></table></div>':empty('No players recorded for this faction.'))+'</details>';
+          (rows.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Player</th><th>War hits / E</th><th>Outside hits / E</th><th>Own-member hits / E</th><th>Total E</th><th>War E %</th><th>Pts / 100 E</th><th>Flights</th></tr></thead><tbody>'+
+          rows.map(r=>'<tr><td>'+esc(r.name)+'</td><td>'+effortCostLabel(r.war)+'</td><td>'+effortCostLabel(r.outside)+'</td><td>'+effortCostLabel(r.friendly)+'</td><td>'+
+            effortEnergyLabel(r.total)+
+            (r.unknown?'<br><small>Unclassified '+effortCostLabel(r.unknown)+'</small>':'')+'</td><td>'+effortShareLabel(r)+'</td><td>'+effortRateLabel(r)+'</td><td>'+flightDisclosure(r,[w.id,faction,r.id].join('-'))+'</td></tr>').join('')+'</tbody></table></div>':empty('No players recorded for this faction.'))+'</details>';
       }).join(''));
   }
   const flightHistoryQueue={busy:false,next:0,attempts:new Map(),scope:''};
