@@ -1,3 +1,7 @@
+## 3.0.9 – Switch the compact war roster
+
+On Torn’s ranked-war page, tap **E & flights** beside **Countries**. Switch it on to see war energy, non-war energy and one-way flights for each player in both factions. Switch it off for points and attacks. **ATK OUT** counts recorded attacks on the war opponent, including losses and stalemates. **WAR IN** on the friendly roster counts incoming attempts. A dash means coverage is missing. Your device remembers the view across reloads. Country grouping, sorting and filters work independently of the view.
+
 ## 3.0.8 – Faction energy, hitter efficiency and flight details
 
 The live scoreboard shows estimated attack energy recorded for each faction, including anonymous attacks when the faction can be identified. On **Players**, sort by **Highest recorded war E %** or **Most points per 100 E**. War E % is the share of a member's recorded attack energy used against war targets. Points per 100 E uses captured ranked points and **all** recorded attack energy, including non-war attacks and unsuccessful attempts. Missing evidence or a zero denominator can leave a ratio unavailable. Enemy outside attacks have limited coverage.

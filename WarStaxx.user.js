@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      3.0.8
+// @version      3.0.9
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -71,7 +71,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='3.0.8';
+  const id='war', version='3.0.9';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -184,7 +184,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='3.0.8', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='3.0.9', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics','dashboard','scouting','archive','scouter','squad','brief','heatmap','flights','combat'];
   const labels={scouter:'FFScouter Premium',overview:'Live war',enemy:'Players',reports:'Tools & reports',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics',dashboard:'Full dashboard',scouting:'Faction scouting',archive:'Detailed reports',squad:'Black Skull command',brief:'War briefing',heatmap:'Activity and forecasts',flights:'Defensive travel',combat:'Combat archive'};
@@ -200,7 +200,7 @@
   const link=id=>'https://www.torn.com/profiles.php?XID='+positive(id);
   const attackLink=id=>'https://www.torn.com/loader.php?sid=attack&user2ID='+positive(id);
   const apiKeyPda=typeof window.PDA_APIKEY==='string'?window.PDA_APIKEY:'###PDA-APIKEY###';
-  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,autoConceded:true,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},controlAssignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,warStripCompact:true,warStripScope:'contextual',nativeWarEnabled:true,nativeWarCountryGroups:true,nativeWarSort:'availability',nativeEnemyMetric:'points',nativeFriendlySort:'given',nativeFriendlyDesc:true,nativeWarFilter:'all',nativeFriendlyFilter:'all',nativeChainBubble:false,priorityNotifications:true,hitterRisk:{},heavyPolicy:{version:2,mode:'relative',percent:40,minBss:0},manualHeavyTargetsByEnemy:{},shared:{enabled:false,endpoint:'',token:'',canWrite:false},hidden:false};
+  const defaults={key:'',ourId:0,enemyId:0,factionAuto:true,factionSource:'',factionVerifiedAt:0,refreshSeconds:120,historyLimit:12,enableAttacks:false,autoConceded:true,ffEnabled:false,ffConsent:false,ffKey:'',assignments:{},ordersByEnemy:{},turtlePlans:{},controlAssignments:{},blackSkulls:{},spies:{},notes:{},watchlist:{},planStatus:{},leaderNotes:{},manualReadiness:{},autoOwnerReadiness:true,warStripCompact:true,warStripScope:'contextual',nativeWarEnabled:true,nativeWarCountryGroups:true,nativeRosterView:'points',nativeWarSort:'availability',nativeEnemyMetric:'points',nativeFriendlySort:'given',nativeFriendlyDesc:true,nativeWarFilter:'all',nativeFriendlyFilter:'all',nativeChainBubble:false,priorityNotifications:true,hitterRisk:{},heavyPolicy:{version:2,mode:'relative',percent:40,minBss:0},manualHeavyTargetsByEnemy:{},shared:{enabled:false,endpoint:'',token:'',canWrite:false},hidden:false};
   const cfg=Object.assign({},defaults,safeRead(CONFIG,{}));
   if(!cfg.commandMetric)cfg.commandMetric=['percent','min-bss'].includes(cfg.heavyPolicy?.mode)?'legacy':'bse';
   if(cfg.nativeWarCountryGroups!==false){
@@ -10295,6 +10295,25 @@
       '.faction-war ul.members-list.wsnw-country-order>*{order:var(--wsnw-order,0)!important}'+
       '.faction-war ul.members-list li.wsnw-enhanced.wsnw-flight-row:not(.wsnw-expanded){height:88px!important;min-height:88px!important}'+
       '.faction-war ul.members-list li.wsnw-flight-row>.wsnw-flight-line{position:absolute!important;bottom:0;left:0;right:0;padding:2px 6px;background:#102d40;color:#b1e6f1;font:600 11px/16px system-ui;text-align:left;touch-action:pan-y}';
+    // Headings and collapsed player rows share column definitions in both views.
+    for(const [side,legend,points,energy] of [
+      ['your','.wsnw-our-legend','minmax(0,1.35fr) repeat(4,minmax(0,1fr)) repeat(2,minmax(0,.74fr))',
+        'minmax(0,1.35fr) repeat(3,minmax(0,1fr))'],
+      ['enemy',':not(.wsnw-our-legend)','24px minmax(0,1.3fr) minmax(0,.8fr) minmax(0,1.1fr) repeat(3,minmax(0,.75fr))',
+        '26px minmax(0,1.3fr) repeat(3,minmax(0,1fr))']
+    ]){
+      const heading='.faction-war .wsnw-legend'+legend;
+      const bar='.faction-war ul.members-list li.'+side+'.wsnw-enhanced:not(.wsnw-expanded)>.wsnw-intel';
+      for(const [view,columns] of [['points',points],['energy',energy]]){
+        const attr='[data-wsnw-view="'+view+'"]';
+        style.textContent+=heading+attr+','+bar+attr+'{grid-template-columns:'+columns+'!important}';
+      }
+      for(const [key,col] of [['outgoing',7],['war-e',-4],['other-e',-3],['flights',-2]]){
+        style.textContent+=bar+' > [data-wsnw-chip="'+key+'"]{display:inline-flex!important;grid-row:1!important;'+
+          'grid-column:'+col+'!important;min-width:0!important;justify-content:center!important;font-variant-numeric:tabular-nums}';
+      }
+    }
+    style.textContent+='#wsnw-toolbar [data-wsnw-action="roster-view"][aria-pressed="true"]{background:#155277;color:#fff;border-color:#61caff}';
     document.head.appendChild(style);
   }
   // An opt-in small, draggable chain indicator. Never mounted over an attack page.
@@ -10524,14 +10543,17 @@
         (active?(desc?' \u2193':' \u2191'):' \u2195')+'</button>';
     };
     const enemyMetricLabel={points:'PTS',pace:'PTS/H',hits:'HITS'}[cfg.nativeEnemyMetric]||'PTS';
-    const columns=ours?
+    const energy=cfg.nativeRosterView==='energy';
+    heading.dataset.wsnwView=energy?'energy':'points';
+    const statusColumns=ours?'<span>STATUS</span>':'<span>ROLE</span><span>STATUS / PLACE</span>';
+    const columns=energy?statusColumns+'<span>WAR E</span><span>NON-WAR E</span><span>FLIGHTS</span>':ours?
       '<span aria-label="Skull marker, status timer and last seen">STATUS</span>'+
       sortable('earned','EARN','points our member earned attacking the other faction')+
       sortable('given','GIVEN','points the opponent earned attacking this member')+
       sortable('net','NET','observed earned minus given (net proxy)')+
       sortable('share','ENEMY %','observed proportion of the enemy faction score')+
-      sortable('hits','WAR IN','incoming ranked attacks, including zero-point results'):
-      '<span>ROLE</span><span>STATUS / PLACE</span><span>SEEN</span><span>BSS</span><span>FF</span><span>'+enemyMetricLabel+'</span>';
+      sortable('hits','WAR IN','incoming ranked attacks, including zero-point results')+'<span aria-label="Outgoing war attempts">ATK OUT</span>':
+      '<span>ROLE</span><span>STATUS / PLACE</span><span>SEEN</span><span>BSS</span><span>FF</span><span>'+enemyMetricLabel+'</span><span aria-label="Outgoing war attempts">ATK OUT</span>';
     if(heading.innerHTML!==columns)heading.innerHTML=columns;
     heading.removeAttribute('title');
     // Show the faction scoreboard even when the member attack feed is missing.
@@ -10628,7 +10650,7 @@
       cfg.nativeEnemyMetric:'points';
     const pulse=nativeWarTacticalPulse(bands),pulseHtml=nativeWarPulseMarkup(pulse,filter);
     const signature=[preparation,mode,filter,friendlySort,friendlyDesc,metric,conflict,nativeWarState.toolbarExpanded,
-      cfg.nativeWarCountryGroups,cfg.nativeFriendlyFilter].join(':');
+      cfg.nativeWarCountryGroups,cfg.nativeRosterView,cfg.nativeFriendlyFilter].join(':');
     const scoreText=preparation?'War preparation':score?'Us '+fmt(score.our)+' / Them '+fmt(score.enemy):'LIVE WAR',
       chainText=preparation?prepStartLabel(state.data.war):chain.fresh?'Chain '+fmt(chain.count)+' ('+chain.remaining+'s)':'Chain unknown';
     const energyText=preparation?'':factionEnergyLine(effortWindow());
@@ -10666,6 +10688,8 @@
         '<button type="button" data-wsnw-action="countries" aria-pressed="'+
           (cfg.nativeWarCountryGroups!==false?'true':'false')+'">'+
           (cfg.nativeWarCountryGroups!==false?'Countries ON':'Countries OFF')+'</button>'+
+      '<button type="button" data-wsnw-action="roster-view" aria-label="Energy and flights roster view" aria-pressed="'+
+        (cfg.nativeRosterView==='energy')+'">E &amp; flights '+(cfg.nativeRosterView==='energy'?'ON':'OFF')+'</button>'+
       '<button type="button" data-wsnw-action="more" aria-expanded="'+
         (nativeWarState.toolbarExpanded?'true':'false')+'">'+
         (nativeWarState.toolbarExpanded?'Close filters':'Sort / filters')+'</button>'+
@@ -10722,6 +10746,7 @@
       concessions=cfg.autoConceded===false?null:inboundWarImpact(state.data.war.id);
     const conflict=lists.some(nativeWarActiveSortConflict);
     nativeWarToolbar(box,conflict,score,chain,band,!live);
+    const effortWar=live?effortWindow():null;
     renderNativeChainBubble(chain);
     const orders=new Map();
     for(const [friendId,targetId] of Object.entries(cfg.assignments)){
@@ -10770,6 +10795,11 @@
         if(!infoBar){
           infoBar=el('div','wsnw-intel');infoBar.setAttribute('aria-label','WarStaxx player intelligence');
           row.appendChild(infoBar);
+        }
+        const rowView=expanded?'expanded':cfg.nativeRosterView==='energy'?'energy':'points';
+        if(infoBar.dataset.wsnwView!==rowView){
+          infoBar.querySelectorAll(':scope > [data-wsnw-chip]').forEach(x=>x.remove());
+          infoBar.dataset.wsnwView=rowView;
         }
         infoBar.dataset.wsnwToggle=String(id);
         infoBar.setAttribute('role','button');
@@ -10841,13 +10871,23 @@
           enemy?'BLACK SKULL TARGET: high-strength opponent reserved for Black Skulls; not a guaranteed win':'Your Black Skulls member');
         if(roleChip&&enemy&&band.heavy.has(id)&&timer&&roleChip.nextElementSibling!==timer)
           infoBar.insertBefore(roleChip,timer);
-        const country=chip('country',place.country!=='Torn'&&place.country!=='Unknown'&&kind!=='away'?place.country:'',
+        const country=chip('country',rowView!=='energy'&&place.country!=='Torn'&&place.country!=='Unknown'&&kind!=='away'?place.country:'',
           'wsnw-country','Reported location: '+place.country+' | '+place.source);
-        const seen=chip('presence',enemy||expanded?nativeWarLastSeen(p,now):'',isOnline(p)?'wsnw-online':'wsnw-presence',
+        const seen=chip('presence',rowView!=='energy'&&(enemy||expanded)?nativeWarLastSeen(p,now):'',isOnline(p)?'wsnw-online':'wsnw-presence',
           'Last Torn action '+age(p.lastAt)+' | status '+p.lastAction);
         if(seen){seen.dataset.wsnwLastAt=String(positive(p.lastAt));
           seen.dataset.wsnwAction=String(p.lastAction||'Unknown');}
-        if(enemy){
+        const effort=!expanded&&effortWar&&(!enemy||cfg.enemyId===effortWar.enemyId)?
+          effortFor(effortWar,enemy?effortWar.enemyId:effortWar.ourId,id):null;
+        if(rowView==='points'){
+          const attempts=effort?.war??null;
+          chip('outgoing',attempts===null?'\u2014':fmt(attempts),'','Recorded outgoing war attempts, including losses and stalemates');
+        }
+        if(rowView==='energy'){
+          chip('war-e',effortEnergyLabel(effort?.war??null),'','Estimated energy used on recorded war attempts');
+          chip('other-e',effortEnergyLabel(effort?.other??null),'','Estimated energy used on recorded non-war attempts');
+          chip('flights',effortFlightLabel(effort?.flights??null),'','Observed one-way flights, including returns');
+        }else if(enemy){
           const strength=nativeWarStrength(p);
           const strengthChip=chip('bss',strength.short,'',strength.detail);
           if(country&&strengthChip&&country.nextElementSibling!==strengthChip)infoBar.insertBefore(country,strengthChip);
@@ -11131,6 +11171,12 @@
     if(button&&isNativeWarPage()){
       e.preventDefault();e.stopPropagation();
       if(button.dataset.wsnwAction==='reset-filters'){cfg.nativeWarFilter='all';cfg.nativeFriendlyFilter='all';saveCfg();syncNativeWar();return;}
+      if(button.dataset.wsnwAction==='roster-view'){
+        cfg.nativeRosterView=cfg.nativeRosterView==='energy'?'points':'energy';
+        saveCfg();syncNativeWar();
+        document.querySelector('#wsnw-toolbar [data-wsnw-action="roster-view"]')?.focus({preventScroll:true});
+        return;
+      }
       if(button.dataset.wsnwAction==='countries'){
         cfg.nativeWarCountryGroups=cfg.nativeWarCountryGroups===false;
         if(cfg.nativeWarCountryGroups){
