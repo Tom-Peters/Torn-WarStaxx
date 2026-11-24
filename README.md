@@ -1,3 +1,11 @@
+## 3.0.7 – Attack energy and flights
+
+**Players → Our faction / Opponents** shows each player's war attempts, non-war attempts, estimated energy for each, total recorded attack energy, and observed flights. Sort within each country by war energy, non-war energy or flights. The same figures appear when you expand a player on Torn's war page. **Hit ledger** compares both rosters. **After action** keeps the breakdown for finished wars using the records on this device.
+
+Each outgoing attack ID counts once, including losses, stalemates and assists. The attack start determines which war window it falls in. Attempts against the opposing faction count even when they award zero points. Energy is estimated at the standard 25 E per attempt. The faction attack scan reads back to war start when the key has access. Enemy hits on third parties are generally invisible to our faction feed. A dash means unknown.
+
+Flights count individual departures, so flying out and returning counts twice. WarStaxx recognises flight transitions in Torn's roster. With FFScouter Premium enabled, it also checks current departures and gradually retrieves recent flight history while the war page, Players, or Hit ledger is open. Repeated sightings of the same leg count once. A flight seen in progress at the first roster check needs evidence that it departed during the war. Flight counts show observed legs and can be incomplete. Flight evidence is stored on this device for the activity archive's 30-day retention period.
+
 ## 3.0.6 – Finish time if scores hold
 
 The ranked-war card on the faction page shows **Win in ~23h 27m** or **Loss in ~23h 27m** beside Torn’s elapsed clock. It uses the current lead and the next hourly target reduction that would put the leading faction over the line. A tie has no projected winner. The calculation runs on the device using the visible scoreboard and existing war data.

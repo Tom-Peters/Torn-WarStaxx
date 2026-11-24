@@ -1,8 +1,9 @@
   // Locally stored evidence is shared between sessions on this Torn origin.
-  const combatArchive = {db:null, fights:new Map(), pairs:new Map(), people:new Map(), hours:new Map(), error:'', ready:false};
+  const combatArchive = {db:null, fights:new Map(), fightRevision:0, pairs:new Map(), people:new Map(), hours:new Map(), error:'', ready:false};
   const idKey = v => Number.isSafeInteger(v) && v>0 && v<=9999999999;
   const pairKey = (a,b) => Math.min(a,b)+'/'+Math.max(a,b);
   function indexFight(row){
+    combatArchive.fightRevision++;
     combatArchive.fights.set(row.id,row);
     if(!row.attacker||!row.defender)return;
     const key=pairKey(row.attacker,row.defender);
@@ -60,7 +61,8 @@
   const permittedSources=['Torn personal','Torn faction','Torn ranked attacks','Legacy local','Local import'];
   async function keepFights(rows,source){
     await archiveReady;
-    if(!combatArchive.db||!rows.length)return;
+    if(!combatArchive.db)return false;
+    if(!rows.length)return true;
     const staged=new Map();let newCount=0,existingCount=0;
     await transact('fights',store=>{
       const total=store.count();total.onsuccess=()=>{existingCount=total.result;};
@@ -85,6 +87,7 @@
       }
     });
     for(const row of staged.values())if(row)indexFight(row);
+    return rows.every(raw=>staged.get(raw.id));
   }
   function readArchiveStore(name){
     return new Promise((resolve,reject)=>{
