@@ -39,6 +39,7 @@
     for(const k of archiveNumbers)if(typeof raw[k]==='number'&&Number.isFinite(raw[k])&&raw[k]>=0&&(!['attackerFaction','defenderFaction','warId','startedAt','endedAt'].includes(k)||raw[k]>0))row[k]=raw[k];
     for(const k of ['result','attackerName','defenderName'])if(typeof raw[k]==='string'&&raw[k])row[k]=raw[k].slice(0,80);
     if(typeof raw.ranked==='boolean')row.ranked=raw.ranked;
+    if(raw.defenderFactionless===true&&!row.defenderFaction)row.defenderFactionless=true;
     const dated={};
     for(const [side,who] of [['attacker',row.attacker],['defender',row.defender]]){
       const prior=raw.spyEvidence?.[side],live=spy(who);

@@ -253,7 +253,9 @@ with sync_playwright() as pw:
         if(path.endsWith('/wars'))body={wars:{ranked:data.war}};
         if(path.endsWith('/members'))body={members:(path.includes('/10/')?data.ours:data.enemies).map(p=>({id:p.id,name:p.name,status:{state:'Okay'},last_action:{status:'Online'}}))};
         if(path.endsWith('/faction/attacks'))body={attacks:[hit(101,1,14.6,{id:3,faction:{id:20}}),hit(102,2,8.45,null),
-          {...hit(103,99,0,{id:1,faction:{id:10}}),is_ranked_war:false,defender:{id:99,faction:{id:30}},result:'Stalemate'}]};
+          {...hit(103,99,0,{id:1,faction:{id:10}}),is_ranked_war:false,defender:{id:99,faction:{id:30}},result:'Stalemate'},
+          ...[[104,1,2],[105,2,1],[106,2,1]].map(([id,attacker,defender])=>({...hit(id,defender,0,{id:attacker,faction:{id:10}}),
+            is_ranked_war:false,result:id===105?'Lost':'Hospitalized'}))]};
         setTimeout(()=>r.onload({status:200,responseText:JSON.stringify(body)}),0);
       };
     }""",[data,cfg])
@@ -296,11 +298,30 @@ with sync_playwright() as pw:
         assert row.locator('[data-wsnw-chip="outgoing"]').count()==0
         assert row.locator('.wsnw-intel').evaluate('e=>e.scrollWidth<=e.clientWidth+2')
     for header in page.locator('.wsnw-legend').all():
-        assert 'NON-WAR E' in header.inner_text() and 'FLIGHTS' in header.inner_text()
-    assert friendly.locator('[data-wsnw-chip="other-e"]').inner_text()=='~25 E'
+        assert [b.inner_text().upper() for b in header.locator('[data-wsnw-effort-sort]').all()]==['WAR E','OUTSIDE E','OWN HITS E','WAR %','FLIGHTS']
+    assert friendly.locator('[data-wsnw-chip="outside-e"]').inner_text()=='~25 E'
     assert friendly.locator('[data-wsnw-chip="flights"]').inner_text()=='1 seen'
-    assert enemy.locator('[data-wsnw-chip="other-e"]').inner_text()=='—'
+    assert enemy.locator('[data-wsnw-chip="outside-e"]').inner_text()=='—'
+    assert friendly.locator('[data-wsnw-chip="friendly-e"]').inner_text()=='~25 E'
+    assert friendly.locator('[data-wsnw-chip="war-share"]').inner_text()=='33.3%'
+    friendly.locator('button[data-wsnw-chip="flights"]').click()
+    log=friendly.locator('.ws-flight-log')
+    assert log.evaluate('e=>e.open') and 'To Japan' in log.inner_text()
+    friendly.locator('.wsnw-intel').focus()
+    friendly.locator('.wsnw-intel').press('Enter')
     countries.click()
+    sort=page.locator('[data-side="your"][data-wsnw-effort-sort="friendly"]')
+    our_rows=page.locator('li.your[data-player_id]')
+    sort.click()
+    assert our_rows.first.get_attribute('data-player_id')=='2'
+    sort.click()
+    assert our_rows.first.get_attribute('data-player_id')=='1'
+    assert page.locator('[data-side="enemy"][data-wsnw-effort-sort="friendly"]').get_attribute('aria-pressed')=='false'
+    page.get_by_role('button',name='Hourly E',exact=True).click()
+    hours=page.locator('#warstaxx-root .ws-hourly-effort')
+    assert hours.evaluate('e=>e.open')
+    assert 'Own-member ~75 E' in hours.text_content()
+    page.evaluate("document.dispatchEvent(new CustomEvent('staxx:closeall'))")
     assert view.get_attribute('aria-pressed')=='true' and countries.get_attribute('aria-pressed')=='false'
     page.reload()
     page.locator('#native').evaluate("(el,html)=>el.innerHTML=html",roster_html)
@@ -329,7 +350,7 @@ with sync_playwright() as pw:
     note=page.locator('#war-fixture time + #ws-finish-clock')
     assert note.locator('b').inner_text()=='Win in ~23h 27m'
     assert 'if scores hold' in note.inner_text()
-    page.locator('#ws-score-energy').filter(has_text='Recorded attack energy: Us ~50 E').wait_for()
+    page.locator('#ws-score-energy').filter(has_text='Recorded attack energy: Us ~125 E').wait_for()
     assert page.locator('#war-fixture footer').evaluate('e=>e.scrollWidth<=e.clientWidth')
     page.evaluate("""()=>{document.querySelector('#left-score').textContent='2,023';document.querySelector('#right-score').textContent='1,319';}""")
     note.get_by_text('Loss in ~23h 27m').wait_for(timeout=10000)
