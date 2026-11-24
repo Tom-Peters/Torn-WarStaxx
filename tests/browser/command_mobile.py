@@ -82,6 +82,11 @@ with sync_playwright() as pw:
     effort=page.locator(".ws-player-row").filter(has_text="Hitter").locator(".ws-effort")
     assert "1 / ~25 E" in effort.inner_text()
     assert "Total attack E".lower() in effort.inner_text().lower()
+    assert '100%' in effort.inner_text()
+    assert 'Pts / 100 E'.lower() in effort.inner_text().lower()
+    effort.locator(".ws-flight-log summary").click()
+    assert "Flight records unavailable" in effort.inner_text()
+    assert effort.evaluate('e=>e.closest("article").scrollWidth<=e.closest("article").clientWidth+2')
     assert effort.evaluate("e=>e.scrollWidth<=e.clientWidth+2")
     page.locator('[data-action="workspace-side:enemies"]').click()
     page.locator("#ws-roster-sort").select_option("status")
@@ -159,7 +164,7 @@ with sync_playwright() as pw:
     assert 'stalemates' in page.locator('.ws-content').inner_text().lower()
     open_view(page,"enemy")
     assert page.locator('.ws-country-title').all_text_contents()==["Torn","Canada"]
-    page.locator('.ws-roster-grid details summary').first.click()
+    page.locator('.ws-roster-grid details[data-ws-disclosure^="roster-"] summary').first.click()
     assert page.locator('.ws-roster-grid details[open]').count()==1
     assert 'Your attack / Stalemate' in page.locator('.ws-roster-grid details[open]').inner_text()
     open_view(page,'heatmap')
@@ -251,6 +256,12 @@ with sync_playwright() as pw:
     assert 'unaccounted' not in summary.inner_text()
     member.locator('[data-wsnw-chip="given"]').click()
     assert 'Attacker hidden or unknown / Hospitalized / 8.45 given' in member.inner_text()
+    native_log=member.locator('.wsnw-expanded-detail .ws-flight-log')
+    native_log.locator('summary').click()
+    assert native_log.evaluate('e=>e.open') and member.locator('.wsnw-expanded-detail').is_visible()
+    native_log.locator('summary').focus()
+    native_log.locator('summary').press('Enter')
+    assert not native_log.evaluate('e=>e.open')
     assert member.locator('.wsnw-expanded-detail').evaluate('e=>e.scrollWidth<=e.clientWidth+2')
     print('Native score reconciliation passed at 360px: official score, honest gap, automatic replay and defender evidence.')
     # The compact faction overview in Torn PDA is a different route from the war roster.
@@ -271,6 +282,7 @@ with sync_playwright() as pw:
     note=page.locator('#war-fixture time + #ws-finish-clock')
     assert note.locator('b').inner_text()=='Win in ~23h 27m'
     assert 'if scores hold' in note.inner_text()
+    assert 'Recorded attack energy: Us ~25 E' in page.locator('#ws-score-energy').inner_text()
     assert page.locator('#war-fixture footer').evaluate('e=>e.scrollWidth<=e.clientWidth')
     page.evaluate("""()=>{document.querySelector('#left-score').textContent='2,023';document.querySelector('#right-score').textContent='1,319';}""")
     note.get_by_text('Loss in ~23h 27m').wait_for(timeout=10000)

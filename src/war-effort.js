@@ -3,33 +3,37 @@
   let effortCache=null;
   function effortAttacks(w){
     const legacy=state.data.attacks,revision=combatArchive.fightRevision;
-    const key=[w.id,w.ourId,w.enemyId,w.start,w.active?0:w.end].join('/');
+    const key=[w.id,w.ourId,w.enemyId,w.start,w.active&&!w.stale?0:w.end].join('/');
     if(effortCache?.key===key&&effortCache.revision===revision&&effortCache.legacy===legacy)return effortCache;
-    const members=new Map(),unattributed=new Set();
+    const members=new Map(),factionAttempts=new Map(),unattributed=new Set();
     function count(a){
       const at=a.startedAt||a.at;
       if(!at||at<w.start||at>w.end)return;
-      const side=a.attackerFaction,opponent=side===w.ourId?w.enemyId:side===w.enemyId?w.ourId:0;
+      // A hidden ranked attacker can still be attributed to the opposing faction.
+      const defender=a.defenderFaction;
+      const side=a.attackerFaction||(a.ranked===true?(defender===w.ourId?w.enemyId:defender===w.enemyId?w.ourId:0):0);
+      const opponent=side===w.ourId?w.enemyId:side===w.enemyId?w.ourId:0;
+      if(opponent)factionAttempts.set(side,(factionAttempts.get(side)||0)+1);
       if(!opponent||!a.attacker){
         if(opponent)unattributed.add(side);
-        else if(!side){
-          const defender=a.defenderFaction;
-          if(a.ranked===true&&defender===w.ourId)unattributed.add(w.enemyId);
-          else if(a.ranked===true&&defender===w.enemyId)unattributed.add(w.ourId);
-          else {unattributed.add(w.ourId);unattributed.add(w.enemyId);}
-        }
+        else if(!side){unattributed.add(w.ourId);unattributed.add(w.enemyId);}
         return;
       }
-      const id=side+'/'+a.attacker,row=members.get(id)||{id:a.attacker,side,name:a.attackerName,war:0,other:0,unknown:0};
-      if(a.defenderFaction===opponent||(a.ranked===true&&!a.defenderFaction))row.war++;
+      const id=side+'/'+a.attacker,row=members.get(id)||{id:a.attacker,side,name:a.attackerName,war:0,other:0,unknown:0,points:0};
+      if(a.defenderFaction===opponent||(a.ranked===true&&!a.defenderFaction)){
+        row.war++;
+        if(a.ranked===true&&Number.isFinite(a.respect)&&a.respect>=0){
+          if(row.points!==null)row.points+=a.respect;
+        }else if(a.ranked!==false&&a.respect!==0&&!/^(lost|defeated|stalemate|timeout)$/i.test(a.result||''))row.points=null;
+      }
       else if(a.ranked===false||(a.defenderFaction&&a.ranked!==true))row.other++;
-      else row.unknown++;
+      else {row.unknown++;row.points=null;}
       members.set(id,row);
     }
     for(const a of combatArchive.fights.values())count(a);
     // Older installations have a unique-by-ID local cache while IndexedDB opens.
     for(const a of legacy)if(a.id&&!combatArchive.fights.has(a.id))count(a);
-    effortCache={key,legacy,revision,members,unattributed};
+    effortCache={key,legacy,revision,members,factionAttempts,unattributed};
     return effortCache;
   }
 
@@ -80,7 +84,16 @@
   function storePremiumFlights(w,faction,rows,at,owner,history=false){
     return writeFlightObservations(w,faction,rows,at,owner,(record,entry)=>{
       const times=new Set(record.departures||[]);
-      for(const takeoff of entry.times)if(Number.isSafeInteger(takeoff)&&takeoff>=w.start&&takeoff<=Math.min(at,w.end))times.add(takeoff);
+      const destinations=record.destinations||(record.destinations={});
+      for(const leg of entry.legs){
+        const takeoff=leg.takeoff;
+        if(!Number.isSafeInteger(takeoff)||takeoff<w.start||takeoff>Math.min(at,w.end))continue;
+        times.add(takeoff);
+        if(leg.description){
+          const country=nativeWarLocation({status:'Traveling',statusText:leg.description}).country;
+          if(country&&country!=='Unknown')destinations[takeoff]=country;
+        }
+      }
       record.departures=[...times].sort((a,b)=>a-b);
       if(history)record.historyAt=Math.max(at,record.historyAt||0);
     });
@@ -90,31 +103,52 @@
     if(!owner||!w?.start||!activeWarNow()||cfg.enemyId!==w.enemyId)return;
     for(const [side,faction] of [['ours',w.ourId],['enemies',w.enemyId]]){
       const entries=state.data[side].filter(p=>batch[p.id]?.current?.takeoff>=w.start)
-        .map(p=>({id:p.id,times:[batch[p.id].current.takeoff]}));
+        .map(p=>({id:p.id,legs:[batch[p.id].current]}));
       if(entries.length)storePremiumFlights(w,faction,entries,Date.now(),owner).catch(archiveFailure);
     }
   }
-  function countedFlights(roster,premium,end){
-    const dated=(premium?.departures||[]).filter(t=>t<=end);
-    if(!roster?.lastCheck&&!dated.length&&!premium?.historyAt)return null;
-    let count=dated.length;
+  function observedFlights(roster,premium,end){
+    const flights=(premium?.departures||[]).filter(t=>t<=end)
+      .map(t=>({at:t,country:premium.destinations?.[t]||'Unknown',dated:true}));
+    if(!roster?.lastCheck&&!flights.length&&!premium?.historyAt)return null;
     for(const leg of roster?.legs||[]){
-      // Independent observations of the same leg share one departure. The
-      // scanner may first detect takeoff after Torn already showed travelling.
-      if(leg.after&&leg.first<=end&&!dated.some(t=>t>leg.after&&t<=leg.last))count++;
+      if(leg.first>end)continue;
+      // Match one dated departure to the nearest compatible roster observation.
+      let match=null;
+      for(const f of flights){
+        if(!f.dated||f.matched||f.at<=leg.after||f.at>leg.last||
+          (f.country!=='Unknown'&&leg.country!=='Unknown'&&f.country!==leg.country))continue;
+        if(!match||Math.abs(f.at-leg.first)<Math.abs(match.at-leg.first))match=f;
+      }
+      if(match){
+        match.matched=true;
+        if(match.country==='Unknown')match.country=leg.country;
+      }else if(leg.after)flights.push({at:leg.first,after:leg.after,country:leg.country,dated:false});
     }
-    return count;
+    return flights.sort((a,b)=>b.at-a.at);
   }
   function effortWindow(id=state.data.war?.id){
     const w=warAttackWindow(id);
-    if(w?.active&&!activeWarNow())w.end=Math.min(w.end,state.data.war?.observed||state.data.updated.wars||0);
+    if(w?.active&&!activeWarNow()){
+      w.end=Math.min(w.end,state.data.war?.observed||state.data.updated.wars||0);w.stale=true;
+    }
     return w?.start&&w.end>=w.start&&w.ourId&&w.enemyId?w:null;
+  }
+  function effortScanCovered(w){
+    const scan=concessionRecord(w.id);
+    return combatArchive.ready&&!combatArchive.error&&scan?.effortArchived&&scan.complete&&!scan.error&&
+      (w.active?w.end-scan.caughtUpAt<2*MIN:scan.cursor*1000>=w.end);
+  }
+  function factionEnergyLine(w){
+    if(!w)return '';
+    const index=effortAttacks(w);
+    const energy=id=>effortEnergyLabel(index.factionAttempts.get(id)??
+      (id===w.ourId&&effortScanCovered(w)&&!index.unattributed.has(id)?0:null));
+    return 'Recorded attack energy: Us '+energy(w.ourId)+' / Them '+energy(w.enemyId);
   }
   function effortFor(w,faction,id){
     const indexed=effortAttacks(w),counts=indexed.members.get(faction+'/'+id);
-    const scan=concessionRecord(w.id);
-    const covered=combatArchive.ready&&!combatArchive.error&&scan?.effortArchived&&scan.complete&&!scan.error&&
-      (w.active?w.end-scan.caughtUpAt<2*MIN:scan.cursor*1000>=w.end)&&!indexed.unattributed.has(faction);
+    const covered=effortScanCovered(w)&&!indexed.unattributed.has(faction);
     const own=faction===w.ourId,classified=!counts?.unknown;
     const war=counts?.war||((covered&&classified)?0:null);
     const other=counts?.other||((own&&covered&&classified)?0:null);
@@ -122,17 +156,33 @@
     const owner=positive(state.data.meta.ownerId);
     const premium=owner&&scouterPremiumActive()?combatArchive.hours.get(flightStoreKey(w,faction,id,owner)):null;
     const total=counts?counts.war+counts.other+counts.unknown:(war===0&&other===0?0:null);
-    return {war,other,total,unknown:counts?.unknown||0,flights:countedFlights(roster,premium,w.end)};
+    const warShare=total&&classified?100*counts.war/total:null;
+    const pointsPer100=total&&Number.isFinite(counts.points)?100*counts.points/(total*25):null;
+    const log=observedFlights(roster,premium,w.end);
+    return {war,other,total,unknown:counts?.unknown||0,warShare,pointsPer100,flights:log?.length??null,log};
   }
   const effortCostLabel=count=>count===null?'\u2014':fmt(count)+' / ~'+fmt(count*25)+' E';
   const effortEnergyLabel=count=>count===null?'\u2014':'~'+fmt(count*25)+' E';
   const effortFlightLabel=count=>count===null?'\u2014':fmt(count)+' seen';
-  function effortFields(e,field){
-    return field('War hits / E',effortCostLabel(e.war))+field('Non-war hits / E',effortCostLabel(e.other))+
-      (e.unknown?field('Unclassified / E',effortCostLabel(e.unknown)):'')+field('Flights',effortFlightLabel(e.flights))+
-      field('Total attack E',effortEnergyLabel(e.total));
+  const effortShareLabel=e=>e.warShare===null?'\u2014':fmt(e.warShare)+'%';
+  const effortRateLabel=e=>e.pointsPer100===null?'\u2014':warPoints(e.pointsPer100);
+  function flightDisclosure(e,key){
+    const entries=e.log?.map(f=>{
+      const time=f.dated?'Takeoff '+stamp(f.at)+' (FFScouter)':
+        'Departed between '+stamp(f.after)+' and '+stamp(f.at)+' (Torn roster)';
+      return '<li><b>'+esc(f.country==='Unknown'?'Destination unknown':'To '+f.country)+'</b><br>'+esc(time)+'</li>';
+    }).join('');
+    return '<details class="ws-flight-log" data-ws-disclosure="flight-'+key+'"><summary aria-label="Flights, '+(e.flights??'unknown')+
+      ' recorded. Show destinations and departures"><small>Flights</small><b>'+effortFlightLabel(e.flights)+'</b></summary>'+
+      (entries?'<ul>'+entries+'</ul>':'<p>'+(e.flights===null?'Flight records unavailable.':'No wartime departures recorded.')+'</p>')+'</details>';
   }
-  const effortGuide='Each recorded outgoing attempt counts, including losses, stalemates and assists. Energy uses the standard 25 E per attack. Enemy attacks on third parties are usually outside our feed. Flights count observed one-way departures, including returns. Gaps can hide hits or flights. A dash means unknown.';
+  function effortFields(e,field,key){
+    return field('War hits / E',effortCostLabel(e.war))+field('Non-war hits / E',effortCostLabel(e.other))+
+      (e.unknown?field('Unclassified / E',effortCostLabel(e.unknown)):'')+flightDisclosure(e,key)+
+      field('Total attack E',effortEnergyLabel(e.total))+field('Recorded war E %',effortShareLabel(e))+
+      field('Pts / 100 E',effortRateLabel(e));
+  }
+  const effortGuide='Energy uses 25 E per recorded outgoing attempt, including losses and stalemates. War E % is the share spent on war targets. Pts / 100 E divides captured ranked points by all recorded attack energy, including non-war hits. Enemy attacks on third parties are usually outside our feed. Tap Flights for destinations and departure times in TCT. A dash means the figure is unavailable.';
   function effortReport(w){
     if(!w)return '';
     const index=effortAttacks(w);
@@ -147,12 +197,12 @@
         for(const p of [...index.members.values()].filter(p=>p.side===faction))members.set(p.id,p);
         for(const p of [...Object.values(timeline),...(state.data.reports[w.id]?.factions?.find(f=>f.id===faction)?.members||[]),
           ...(w.active&&(side==='ours'||cfg.enemyId===w.enemyId)?state.data[side]:[])])members.set(p.id,p);
-        const rows=[...members.values()].map(p=>({name:p.name||'#'+p.id,...effortFor(w,faction,p.id)}))
+        const rows=[...members.values()].map(p=>({id:p.id,name:p.name||'#'+p.id,...effortFor(w,faction,p.id)}))
           .sort((a,b)=>(b.war??-1)-(a.war??-1)||a.name.localeCompare(b.name));
         return '<details data-ws-disclosure="effort-'+w.id+'-'+side+'"><summary>'+title+' ('+rows.length+')</summary>'+
-          (rows.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Player</th><th>War hits / E</th><th>Non-war / E</th><th>Total E</th><th>Flights</th></tr></thead><tbody>'+
+          (rows.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Player</th><th>War hits / E</th><th>Non-war / E</th><th>Total E</th><th>War E %</th><th>Pts / 100 E</th><th>Flights</th></tr></thead><tbody>'+
           rows.map(r=>'<tr><td>'+esc(r.name)+'</td><td>'+effortCostLabel(r.war)+'</td><td>'+effortCostLabel(r.other)+
-            (r.unknown?'<br><small>Unclassified '+effortCostLabel(r.unknown)+'</small>':'')+'</td><td>'+effortEnergyLabel(r.total)+'</td><td>'+effortFlightLabel(r.flights)+'</td></tr>').join('')+'</tbody></table></div>':empty('No players recorded for this faction.'))+'</details>';
+            (r.unknown?'<br><small>Unclassified '+effortCostLabel(r.unknown)+'</small>':'')+'</td><td>'+effortEnergyLabel(r.total)+'</td><td>'+effortShareLabel(r)+'</td><td>'+effortRateLabel(r)+'</td><td>'+flightDisclosure(r,[w.id,faction,r.id].join('-'))+'</td></tr>').join('')+'</tbody></table></div>':empty('No players recorded for this faction.'))+'</details>';
       }).join(''));
   }
   const flightHistoryQueue={busy:false,next:0,attempts:new Map(),scope:''};
@@ -182,8 +232,9 @@
       if(!flightHistoryVisible()||!activeWarNow()||!scouterPremiumActive()||ffApiKey()!==key||state.data.meta.ownerId!==owner||
         state.data.war?.id!==w.id||cfg.ourId!==w.ourId||cfg.enemyId!==w.enemyId||!state.data[next.side].some(p=>p.id===next.id))return;
       if(Number(body?.player_id)!==next.id||!Array.isArray(body.recent_flights))return;
-      const times=[body.current,...body.recent_flights].map(t=>ffTimestamp(t?.takeoff_time));
-      await storePremiumFlights(w,next.faction,[{id:next.id,times}],at,owner,true);
+      const legs=[body.current,...body.recent_flights].filter(Boolean)
+        .map(t=>({takeoff:ffTimestamp(t.takeoff_time),description:t.status_description}));
+      await storePremiumFlights(w,next.faction,[{id:next.id,legs}],at,owner,true);
       if(state.open&&['enemy','ledger'].includes(state.tab))render();
     }catch(e){
       q.next=Date.now()+Math.max(60,Number(e.retryAfter)||0)*1000;

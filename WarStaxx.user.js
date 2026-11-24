@@ -3,7 +3,7 @@
 // @namespace    https://github.com/Tom-Peters/Torn-WarStaxx
 // @homepageURL  https://github.com/Tom-Peters/Torn-WarStaxx
 // @supportURL   https://github.com/Tom-Peters/Torn-WarStaxx/issues
-// @version      3.0.7
+// @version      3.0.8
 // @description  Ranked-war strategy, roster monitoring, prior-war intelligence, verified FF observations and player assignments.
 // @author       IamEEKY
 // @match        https://www.torn.com/*
@@ -71,7 +71,7 @@
       !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxProbe) return;
   window.__warStaxxProbe = true;
-  const id='war', version='3.0.7';
+  const id='war', version='3.0.8';
   function emit(name,detail) {
     try{document.dispatchEvent(new CustomEvent('staxx:'+name,{detail}));}catch(_){}
   }
@@ -184,7 +184,7 @@
   if (typeof document === 'undefined' || !/^(www\.)?torn\.com$/i.test(location.hostname) ||
       window.top !== window.self || window.__warStaxxBooted) return;
   window.__warStaxxBooted = true;
-  const ID='war', VER='3.0.7', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
+  const ID='war', VER='3.0.8', CONFIG='warstaxx-config-v1', DATA='warstaxx-data-v1';
   const API='https://api.torn.com/v2', MIN=60000, HOUR=3600000;
   const sections=['overview','enemy','reports','leader','skulls','commander','operations','ledger','threats','control','turtle','command','pace','afteraction','targets','matchups','timeline','intel','history','activity','strategy','assignments','alerts','settings','diagnostics','dashboard','scouting','archive','scouter','squad','brief','heatmap','flights','combat'];
   const labels={scouter:'FFScouter Premium',overview:'Live war',enemy:'Players',reports:'Tools & reports',leader:'Skull Capo command',skulls:'Black Skulls',commander:'Quick command',operations:'Operations',ledger:'Hit ledger',threats:'Enemy threats',control:'Hospital control',turtle:'Turtling',command:'Leadership',pace:'War pace',afteraction:'After action',intel:'Enemy intel',targets:'Players',matchups:'Matchups',timeline:'War timelines',strategy:'Strategy',activity:'Activity',history:'Past wars',assignments:'Orders',alerts:'Alerts',settings:'Settings',diagnostics:'Diagnostics',dashboard:'Full dashboard',scouting:'Faction scouting',archive:'Detailed reports',squad:'Black Skull command',brief:'War briefing',heatmap:'Activity and forecasts',flights:'Defensive travel',combat:'Combat archive'};
@@ -1819,7 +1819,7 @@
 
   // Locate the Lead Target card on the faction overview as well as the full war page.
   // The elapsed clock and war start identify the match without relying on CSS hashes.
-  let finishAnchor=null,finishNote=null;
+  let finishAnchor=null,finishNote=null,scoreEnergyNote=null;
   function findFinishAnchor(start,now){
     function clockMatches(clock){
       const seconds=elapsedSeconds(clock);
@@ -1884,9 +1884,19 @@
     const factionPage=(!viewed||viewed===cfg.ourId||viewed===w?.opponentId)&&location.pathname==='/factions.php'&&cfg.nativeWarEnabled!==false&&activeWarNow()&&w?.start>0;
     finishAnchor=factionPage?findFinishAnchor(w.start*1000,now):null;
     if(!finishAnchor){
-      finishNote?.remove();finishNote=null;return;
+      finishNote?.remove();finishNote=null;scoreEnergyNote?.remove();scoreEnergyNote=null;return;
     }
     const shown=shownWarTarget(finishAnchor),score=warScore(),rules=localWarRules();
+    if(!scoreEnergyNote){
+      scoreEnergyNote=document.createElement('small');scoreEnergyNote.id='ws-score-energy';
+      scoreEnergyNote.style.cssText='display:block;text-align:center;line-height:1.25;font-size:11px;overflow-wrap:anywhere';
+    }
+    const energy=factionEnergyLine(effortWindow());
+    if(scoreEnergyNote.textContent!==energy)scoreEnergyNote.textContent=energy;
+    const scoreRow=shown?.block.parentElement;
+    if(scoreRow&&scoreRow!==finishAnchor.box&&finishAnchor.box.contains(scoreRow)&&!scoreRow.contains(finishAnchor.clock)){
+      if(scoreRow.nextElementSibling!==scoreEnergyNote)scoreRow.after(scoreEnergyNote);
+    }else if(scoreEnergyNote.parentElement!==finishAnchor.box)finishAnchor.box.append(scoreEnergyNote);
     const entry=state.data.scoreTimelines?.[w.id]?.firstTarget;
     const opening=entry?.at<w.start*1000+(rules.after??24)*HOUR?entry.value:null;
     const net=widgetMargin(finishAnchor,shown,w,score);
@@ -1915,33 +1925,37 @@
   let effortCache=null;
   function effortAttacks(w){
     const legacy=state.data.attacks,revision=combatArchive.fightRevision;
-    const key=[w.id,w.ourId,w.enemyId,w.start,w.active?0:w.end].join('/');
+    const key=[w.id,w.ourId,w.enemyId,w.start,w.active&&!w.stale?0:w.end].join('/');
     if(effortCache?.key===key&&effortCache.revision===revision&&effortCache.legacy===legacy)return effortCache;
-    const members=new Map(),unattributed=new Set();
+    const members=new Map(),factionAttempts=new Map(),unattributed=new Set();
     function count(a){
       const at=a.startedAt||a.at;
       if(!at||at<w.start||at>w.end)return;
-      const side=a.attackerFaction,opponent=side===w.ourId?w.enemyId:side===w.enemyId?w.ourId:0;
+      // A hidden ranked attacker can still be attributed to the opposing faction.
+      const defender=a.defenderFaction;
+      const side=a.attackerFaction||(a.ranked===true?(defender===w.ourId?w.enemyId:defender===w.enemyId?w.ourId:0):0);
+      const opponent=side===w.ourId?w.enemyId:side===w.enemyId?w.ourId:0;
+      if(opponent)factionAttempts.set(side,(factionAttempts.get(side)||0)+1);
       if(!opponent||!a.attacker){
         if(opponent)unattributed.add(side);
-        else if(!side){
-          const defender=a.defenderFaction;
-          if(a.ranked===true&&defender===w.ourId)unattributed.add(w.enemyId);
-          else if(a.ranked===true&&defender===w.enemyId)unattributed.add(w.ourId);
-          else {unattributed.add(w.ourId);unattributed.add(w.enemyId);}
-        }
+        else if(!side){unattributed.add(w.ourId);unattributed.add(w.enemyId);}
         return;
       }
-      const id=side+'/'+a.attacker,row=members.get(id)||{id:a.attacker,side,name:a.attackerName,war:0,other:0,unknown:0};
-      if(a.defenderFaction===opponent||(a.ranked===true&&!a.defenderFaction))row.war++;
+      const id=side+'/'+a.attacker,row=members.get(id)||{id:a.attacker,side,name:a.attackerName,war:0,other:0,unknown:0,points:0};
+      if(a.defenderFaction===opponent||(a.ranked===true&&!a.defenderFaction)){
+        row.war++;
+        if(a.ranked===true&&Number.isFinite(a.respect)&&a.respect>=0){
+          if(row.points!==null)row.points+=a.respect;
+        }else if(a.ranked!==false&&a.respect!==0&&!/^(lost|defeated|stalemate|timeout)$/i.test(a.result||''))row.points=null;
+      }
       else if(a.ranked===false||(a.defenderFaction&&a.ranked!==true))row.other++;
-      else row.unknown++;
+      else {row.unknown++;row.points=null;}
       members.set(id,row);
     }
     for(const a of combatArchive.fights.values())count(a);
     // Older installations have a unique-by-ID local cache while IndexedDB opens.
     for(const a of legacy)if(a.id&&!combatArchive.fights.has(a.id))count(a);
-    effortCache={key,legacy,revision,members,unattributed};
+    effortCache={key,legacy,revision,members,factionAttempts,unattributed};
     return effortCache;
   }
 
@@ -1992,7 +2006,16 @@
   function storePremiumFlights(w,faction,rows,at,owner,history=false){
     return writeFlightObservations(w,faction,rows,at,owner,(record,entry)=>{
       const times=new Set(record.departures||[]);
-      for(const takeoff of entry.times)if(Number.isSafeInteger(takeoff)&&takeoff>=w.start&&takeoff<=Math.min(at,w.end))times.add(takeoff);
+      const destinations=record.destinations||(record.destinations={});
+      for(const leg of entry.legs){
+        const takeoff=leg.takeoff;
+        if(!Number.isSafeInteger(takeoff)||takeoff<w.start||takeoff>Math.min(at,w.end))continue;
+        times.add(takeoff);
+        if(leg.description){
+          const country=nativeWarLocation({status:'Traveling',statusText:leg.description}).country;
+          if(country&&country!=='Unknown')destinations[takeoff]=country;
+        }
+      }
       record.departures=[...times].sort((a,b)=>a-b);
       if(history)record.historyAt=Math.max(at,record.historyAt||0);
     });
@@ -2002,31 +2025,52 @@
     if(!owner||!w?.start||!activeWarNow()||cfg.enemyId!==w.enemyId)return;
     for(const [side,faction] of [['ours',w.ourId],['enemies',w.enemyId]]){
       const entries=state.data[side].filter(p=>batch[p.id]?.current?.takeoff>=w.start)
-        .map(p=>({id:p.id,times:[batch[p.id].current.takeoff]}));
+        .map(p=>({id:p.id,legs:[batch[p.id].current]}));
       if(entries.length)storePremiumFlights(w,faction,entries,Date.now(),owner).catch(archiveFailure);
     }
   }
-  function countedFlights(roster,premium,end){
-    const dated=(premium?.departures||[]).filter(t=>t<=end);
-    if(!roster?.lastCheck&&!dated.length&&!premium?.historyAt)return null;
-    let count=dated.length;
+  function observedFlights(roster,premium,end){
+    const flights=(premium?.departures||[]).filter(t=>t<=end)
+      .map(t=>({at:t,country:premium.destinations?.[t]||'Unknown',dated:true}));
+    if(!roster?.lastCheck&&!flights.length&&!premium?.historyAt)return null;
     for(const leg of roster?.legs||[]){
-      // Independent observations of the same leg share one departure. The
-      // scanner may first detect takeoff after Torn already showed travelling.
-      if(leg.after&&leg.first<=end&&!dated.some(t=>t>leg.after&&t<=leg.last))count++;
+      if(leg.first>end)continue;
+      // Match one dated departure to the nearest compatible roster observation.
+      let match=null;
+      for(const f of flights){
+        if(!f.dated||f.matched||f.at<=leg.after||f.at>leg.last||
+          (f.country!=='Unknown'&&leg.country!=='Unknown'&&f.country!==leg.country))continue;
+        if(!match||Math.abs(f.at-leg.first)<Math.abs(match.at-leg.first))match=f;
+      }
+      if(match){
+        match.matched=true;
+        if(match.country==='Unknown')match.country=leg.country;
+      }else if(leg.after)flights.push({at:leg.first,after:leg.after,country:leg.country,dated:false});
     }
-    return count;
+    return flights.sort((a,b)=>b.at-a.at);
   }
   function effortWindow(id=state.data.war?.id){
     const w=warAttackWindow(id);
-    if(w?.active&&!activeWarNow())w.end=Math.min(w.end,state.data.war?.observed||state.data.updated.wars||0);
+    if(w?.active&&!activeWarNow()){
+      w.end=Math.min(w.end,state.data.war?.observed||state.data.updated.wars||0);w.stale=true;
+    }
     return w?.start&&w.end>=w.start&&w.ourId&&w.enemyId?w:null;
+  }
+  function effortScanCovered(w){
+    const scan=concessionRecord(w.id);
+    return combatArchive.ready&&!combatArchive.error&&scan?.effortArchived&&scan.complete&&!scan.error&&
+      (w.active?w.end-scan.caughtUpAt<2*MIN:scan.cursor*1000>=w.end);
+  }
+  function factionEnergyLine(w){
+    if(!w)return '';
+    const index=effortAttacks(w);
+    const energy=id=>effortEnergyLabel(index.factionAttempts.get(id)??
+      (id===w.ourId&&effortScanCovered(w)&&!index.unattributed.has(id)?0:null));
+    return 'Recorded attack energy: Us '+energy(w.ourId)+' / Them '+energy(w.enemyId);
   }
   function effortFor(w,faction,id){
     const indexed=effortAttacks(w),counts=indexed.members.get(faction+'/'+id);
-    const scan=concessionRecord(w.id);
-    const covered=combatArchive.ready&&!combatArchive.error&&scan?.effortArchived&&scan.complete&&!scan.error&&
-      (w.active?w.end-scan.caughtUpAt<2*MIN:scan.cursor*1000>=w.end)&&!indexed.unattributed.has(faction);
+    const covered=effortScanCovered(w)&&!indexed.unattributed.has(faction);
     const own=faction===w.ourId,classified=!counts?.unknown;
     const war=counts?.war||((covered&&classified)?0:null);
     const other=counts?.other||((own&&covered&&classified)?0:null);
@@ -2034,17 +2078,33 @@
     const owner=positive(state.data.meta.ownerId);
     const premium=owner&&scouterPremiumActive()?combatArchive.hours.get(flightStoreKey(w,faction,id,owner)):null;
     const total=counts?counts.war+counts.other+counts.unknown:(war===0&&other===0?0:null);
-    return {war,other,total,unknown:counts?.unknown||0,flights:countedFlights(roster,premium,w.end)};
+    const warShare=total&&classified?100*counts.war/total:null;
+    const pointsPer100=total&&Number.isFinite(counts.points)?100*counts.points/(total*25):null;
+    const log=observedFlights(roster,premium,w.end);
+    return {war,other,total,unknown:counts?.unknown||0,warShare,pointsPer100,flights:log?.length??null,log};
   }
   const effortCostLabel=count=>count===null?'\u2014':fmt(count)+' / ~'+fmt(count*25)+' E';
   const effortEnergyLabel=count=>count===null?'\u2014':'~'+fmt(count*25)+' E';
   const effortFlightLabel=count=>count===null?'\u2014':fmt(count)+' seen';
-  function effortFields(e,field){
-    return field('War hits / E',effortCostLabel(e.war))+field('Non-war hits / E',effortCostLabel(e.other))+
-      (e.unknown?field('Unclassified / E',effortCostLabel(e.unknown)):'')+field('Flights',effortFlightLabel(e.flights))+
-      field('Total attack E',effortEnergyLabel(e.total));
+  const effortShareLabel=e=>e.warShare===null?'\u2014':fmt(e.warShare)+'%';
+  const effortRateLabel=e=>e.pointsPer100===null?'\u2014':warPoints(e.pointsPer100);
+  function flightDisclosure(e,key){
+    const entries=e.log?.map(f=>{
+      const time=f.dated?'Takeoff '+stamp(f.at)+' (FFScouter)':
+        'Departed between '+stamp(f.after)+' and '+stamp(f.at)+' (Torn roster)';
+      return '<li><b>'+esc(f.country==='Unknown'?'Destination unknown':'To '+f.country)+'</b><br>'+esc(time)+'</li>';
+    }).join('');
+    return '<details class="ws-flight-log" data-ws-disclosure="flight-'+key+'"><summary aria-label="Flights, '+(e.flights??'unknown')+
+      ' recorded. Show destinations and departures"><small>Flights</small><b>'+effortFlightLabel(e.flights)+'</b></summary>'+
+      (entries?'<ul>'+entries+'</ul>':'<p>'+(e.flights===null?'Flight records unavailable.':'No wartime departures recorded.')+'</p>')+'</details>';
   }
-  const effortGuide='Each recorded outgoing attempt counts, including losses, stalemates and assists. Energy uses the standard 25 E per attack. Enemy attacks on third parties are usually outside our feed. Flights count observed one-way departures, including returns. Gaps can hide hits or flights. A dash means unknown.';
+  function effortFields(e,field,key){
+    return field('War hits / E',effortCostLabel(e.war))+field('Non-war hits / E',effortCostLabel(e.other))+
+      (e.unknown?field('Unclassified / E',effortCostLabel(e.unknown)):'')+flightDisclosure(e,key)+
+      field('Total attack E',effortEnergyLabel(e.total))+field('Recorded war E %',effortShareLabel(e))+
+      field('Pts / 100 E',effortRateLabel(e));
+  }
+  const effortGuide='Energy uses 25 E per recorded outgoing attempt, including losses and stalemates. War E % is the share spent on war targets. Pts / 100 E divides captured ranked points by all recorded attack energy, including non-war hits. Enemy attacks on third parties are usually outside our feed. Tap Flights for destinations and departure times in TCT. A dash means the figure is unavailable.';
   function effortReport(w){
     if(!w)return '';
     const index=effortAttacks(w);
@@ -2059,12 +2119,12 @@
         for(const p of [...index.members.values()].filter(p=>p.side===faction))members.set(p.id,p);
         for(const p of [...Object.values(timeline),...(state.data.reports[w.id]?.factions?.find(f=>f.id===faction)?.members||[]),
           ...(w.active&&(side==='ours'||cfg.enemyId===w.enemyId)?state.data[side]:[])])members.set(p.id,p);
-        const rows=[...members.values()].map(p=>({name:p.name||'#'+p.id,...effortFor(w,faction,p.id)}))
+        const rows=[...members.values()].map(p=>({id:p.id,name:p.name||'#'+p.id,...effortFor(w,faction,p.id)}))
           .sort((a,b)=>(b.war??-1)-(a.war??-1)||a.name.localeCompare(b.name));
         return '<details data-ws-disclosure="effort-'+w.id+'-'+side+'"><summary>'+title+' ('+rows.length+')</summary>'+
-          (rows.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Player</th><th>War hits / E</th><th>Non-war / E</th><th>Total E</th><th>Flights</th></tr></thead><tbody>'+
+          (rows.length?'<div class="ws-table-wrap"><table class="ws-compact-table"><thead><tr><th>Player</th><th>War hits / E</th><th>Non-war / E</th><th>Total E</th><th>War E %</th><th>Pts / 100 E</th><th>Flights</th></tr></thead><tbody>'+
           rows.map(r=>'<tr><td>'+esc(r.name)+'</td><td>'+effortCostLabel(r.war)+'</td><td>'+effortCostLabel(r.other)+
-            (r.unknown?'<br><small>Unclassified '+effortCostLabel(r.unknown)+'</small>':'')+'</td><td>'+effortEnergyLabel(r.total)+'</td><td>'+effortFlightLabel(r.flights)+'</td></tr>').join('')+'</tbody></table></div>':empty('No players recorded for this faction.'))+'</details>';
+            (r.unknown?'<br><small>Unclassified '+effortCostLabel(r.unknown)+'</small>':'')+'</td><td>'+effortEnergyLabel(r.total)+'</td><td>'+effortShareLabel(r)+'</td><td>'+effortRateLabel(r)+'</td><td>'+flightDisclosure(r,[w.id,faction,r.id].join('-'))+'</td></tr>').join('')+'</tbody></table></div>':empty('No players recorded for this faction.'))+'</details>';
       }).join(''));
   }
   const flightHistoryQueue={busy:false,next:0,attempts:new Map(),scope:''};
@@ -2094,8 +2154,9 @@
       if(!flightHistoryVisible()||!activeWarNow()||!scouterPremiumActive()||ffApiKey()!==key||state.data.meta.ownerId!==owner||
         state.data.war?.id!==w.id||cfg.ourId!==w.ourId||cfg.enemyId!==w.enemyId||!state.data[next.side].some(p=>p.id===next.id))return;
       if(Number(body?.player_id)!==next.id||!Array.isArray(body.recent_flights))return;
-      const times=[body.current,...body.recent_flights].map(t=>ffTimestamp(t?.takeoff_time));
-      await storePremiumFlights(w,next.faction,[{id:next.id,times}],at,owner,true);
+      const legs=[body.current,...body.recent_flights].filter(Boolean)
+        .map(t=>({takeoff:ffTimestamp(t.takeoff_time),description:t.status_description}));
+      await storePremiumFlights(w,next.faction,[{id:next.id,legs}],at,owner,true);
       if(state.open&&['enemy','ledger'].includes(state.tab))render();
     }catch(e){
       q.next=Date.now()+Math.max(60,Number(e.retryAfter)||0)*1000;
@@ -4532,7 +4593,7 @@
     '#warstaxx-root .ws-segments{display:flex;gap:5px;flex-wrap:wrap;margin:10px 0 14px}#warstaxx-root .ws-segments button{background:#112a40;border:1px solid #31516a;border-radius:8px;min-height:40px;padding:7px 11px;font-size:12px;color:#c7daeb}#warstaxx-root .ws-segments button[aria-pressed=true]{background:#135a83;border-color:#62d7f5;color:#fff}#warstaxx-root .ws-priority-grid,#warstaxx-root .ws-roster-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}#warstaxx-root .ws-action-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}',
     '#warstaxx-root .ws-launch-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}#warstaxx-root .ws-tool-group{margin:18px 0 24px}#warstaxx-root .ws-tool-tile{display:flex;flex-direction:column;gap:6px;text-align:left;padding:14px;border:1px solid #294b66;border-radius:10px;background:#10273b;min-height:83px;color:#e3f5ff}#warstaxx-root .ws-tool-tile:hover{border-color:#55c6f4;background:#16354d}#warstaxx-root .ws-tool-tile span{color:#a7bfd3;font-size:12px}',
     '#warstaxx-root .ws-roster-controls{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px}#warstaxx-root .ws-roster-controls>*{width:100%;min-width:0;min-height:42px}#warstaxx-root .ws-country-title{padding:10px 12px;margin:16px 0 8px;background:#153b56;border-left:4px solid #59d2ef;border-radius:5px;color:#def8ff}#warstaxx-root .ws-player-row{min-width:0;background:#102438;border:1px solid #2b465d;border-radius:11px;padding:11px}#warstaxx-root .ws-player-heading{display:flex;flex-wrap:wrap;align-items:center;gap:6px}#warstaxx-root .ws-player-heading>.ws-btn{font-size:16px;font-weight:800;background:none;border:0;text-align:left;padding:4px 0;color:#c5f1ff;max-width:100%;overflow-wrap:anywhere}#warstaxx-root .ws-player-status{margin-left:auto;font-size:11px;padding:4px 7px;background:#24384b;border-radius:6px}#warstaxx-root .ws-player-status.soon{background:#163e32;color:#86f6b8}#warstaxx-root .ws-player-status.near{background:#513415;color:#ffcc82}#warstaxx-root .ws-skull-mark{background:#6332a0;color:white;border-radius:5px;padding:2px 7px}',
-    '#warstaxx-root .ws-player-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:8px 0;padding:9px 0;border-block:1px solid #294256}#warstaxx-root .ws-effort{grid-template-columns:repeat(4,minmax(0,1fr))}#warstaxx-root .ws-player-metrics small{display:block;font-size:10px;text-transform:uppercase}#warstaxx-root .ws-player-metrics b{font-size:14px;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}#warstaxx-root .ws-player-foot{display:flex;align-items:center;justify-content:space-between;gap:6px;color:#a7bfd3;font-size:10px}#warstaxx-root .ws-player-row details{margin-bottom:0}#warstaxx-root .ws-player-row summary{font-size:11px;padding:7px 0;min-height:34px}#warstaxx-root .ws-route-back{margin-bottom:8px}#warstaxx-root button:focus-visible,#warstaxx-root summary:focus-visible{outline:2px solid #70dcff;outline-offset:3px}',
+    '#warstaxx-root .ws-player-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:8px 0;padding:9px 0;border-block:1px solid #294256}#warstaxx-root .ws-effort{grid-template-columns:repeat(3,minmax(0,1fr))}#warstaxx-root .ws-effort .ws-flight-log[open]{grid-column:1/-1}#warstaxx-root .ws-focus-context .ws-score-energy{flex-basis:100%;font-weight:500}#warstaxx-root .ws-flight-log summary{cursor:pointer;color:#a8dcff}#warstaxx-root .ws-flight-log ul,.faction-war .ws-flight-log ul{margin:4px 0;padding-left:16px;white-space:normal}.faction-war .wsnw-detail-grid .ws-flight-log[open]{grid-column:1/-1}.faction-war .ws-flight-log summary{cursor:pointer;color:#a8dcff}.faction-war .ws-flight-log summary small{margin-right:4px}#warstaxx-root .ws-player-metrics small{display:block;font-size:10px;text-transform:uppercase}#warstaxx-root .ws-player-metrics b{font-size:14px;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}#warstaxx-root .ws-player-foot{display:flex;align-items:center;justify-content:space-between;gap:6px;color:#a7bfd3;font-size:10px}#warstaxx-root .ws-player-row details{margin-bottom:0}#warstaxx-root .ws-player-row summary{font-size:11px;padding:7px 0;min-height:34px}#warstaxx-root .ws-route-back{margin-bottom:8px}#warstaxx-root button:focus-visible,#warstaxx-root summary:focus-visible{outline:2px solid #70dcff;outline-offset:3px}',
     '@media(max-width:680px){#warstaxx-root .ws-content{padding:10px}#warstaxx-root .ws-priority-grid,#warstaxx-root .ws-roster-grid{grid-template-columns:1fr}#warstaxx-root .ws-launch-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#warstaxx-root .ws-roster-controls{grid-template-columns:1fr 1fr}#warstaxx-root .ws-roster-controls input{grid-column:1/-1}#warstaxx-root .ws-tabs button{padding:6px 3px;font-size:12px}#warstaxx-root .ws-segments button{flex:1 0 auto}#warstaxx-root .ws-tool-tile{padding:11px}#warstaxx-root .ws-head small{letter-spacing:0}}',
     '#warstaxx-root .ws-focus-home{max-width:760px;margin:8px auto}#warstaxx-root .ws-focus-context{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-weight:700;color:#cee8f8;margin:6px 4px 24px}#warstaxx-root .ws-focus-context span{font-size:12px;color:#91abc1;font-weight:400}#warstaxx-root .ws-next-step{position:relative;padding:32px;background:radial-gradient(ellipse at top right,#164f70,transparent 75%),linear-gradient(150deg,#15334f,#0c1e32);border:1px solid #3b7297;border-radius:20px;box-shadow:0 18px 45px #0005}#warstaxx-root .ws-step-marker{display:grid;place-items:center;background:#1b5579;color:#b9eeff;width:40px;height:40px;border-radius:12px;font-size:24px;margin-bottom:18px}#warstaxx-root .ws-next-step.attention{border-left:4px solid #f4aa62}#warstaxx-root .ws-next-step.ready{border-left:4px solid #75dfae}#warstaxx-root .ws-next-step h1{font-size:clamp(25px,5vw,36px);max-width:25ch;margin:0 0 14px}#warstaxx-root .ws-next-step p{font-size:15px;line-height:1.7;max-width:52ch;color:#b8cfe0;margin-bottom:25px}#warstaxx-root .ws-primary-action{display:flex;align-items:center;justify-content:space-between;gap:22px;width:100%;min-height:54px;border:1px solid #75d4ff;border-radius:11px;padding:13px 18px;background:linear-gradient(110deg,#1775ac,#135588);color:white;font-weight:800;box-shadow:0 6px 16px #0004}#warstaxx-root .ws-primary-action:disabled{opacity:.6;cursor:wait}#warstaxx-root .ws-focus-freshness{font-size:11px;text-align:center;color:#8da9bd;margin:14px}#warstaxx-root .ws-focus-extra{margin-top:28px;background:transparent;border-color:#243b50}#warstaxx-root .ws-player-glance{font-size:12px;color:#a9bfd1}#warstaxx-root .ws-focus-extra>summary{font-weight:500} @media(max-width:600px){#warstaxx-root .ws-next-step{padding:23px}#warstaxx-root .ws-focus-context{margin-bottom:18px}}',
     '@media(max-width:420px){#warstaxx-root .ws-head-buttons{flex-shrink:0}#warstaxx-root .ws-head-buttons button{padding:6px 9px;min-width:42px}#warstaxx-root .ws-refresh-label{display:none}#warstaxx-root .ws-head strong{font-size:17px}#warstaxx-root .ws-head small{letter-spacing:0;font-size:8px}#warstaxx-root .ws-row{align-items:flex-start}}'
@@ -8495,7 +8556,7 @@
     const situation=preparingWar()?'War preparation':score?(score.net>=0?'Leading by ':'Behind by ')+fmt(Math.abs(score.net))+' points':'No confirmed live score';
     return '<div class="ws-focus-home">'+
       (state.error?'<p class="ws-note ws-warn" role="alert">'+esc(state.error)+'</p>':'')+
-      '<p class="ws-focus-context">'+esc(live?(state.data.war.opponentName||'Current war'):'WarStaxx')+'<span>'+esc(situation+(score?' / '+fmt(score.our)+' - '+fmt(score.enemy):''))+'</span></p>'+
+      '<p class="ws-focus-context">'+esc(live?(state.data.war.opponentName||'Current war'):'WarStaxx')+'<span>'+esc(situation+(score?' / '+fmt(score.our)+' - '+fmt(score.enemy):''))+'</span>'+(live?'<small class="ws-score-energy">'+esc(factionEnergyLine(effortWindow()))+'</small>':'')+'</p>'+
       '<section class="ws-next-step '+next.tone+'"><div class="ws-step-marker" aria-hidden="true">'+
         (next.tone==='attention'?'!':next.tone==='ready'?'\u2197':'\u2022')+'</div><h1>'+esc(next.title)+'</h1>'+
       '<p>'+esc(next.reason)+'</p><button class="ws-primary-action" type="button" data-action="'+esc(next.action)+'" '+
@@ -8532,7 +8593,7 @@
     const strengthOrder=workspace.sort==='lowest'||workspace.sort==='highest';
     if(workspace.sort==='ffs')for(const row of selected){const source=ffscouter(row.player.id);row.personalFF=source&&!ffIsStale(source)&&Number.isFinite(source.ff)?source.ff:Infinity;}
     if(strengthOrder)for(const row of selected)row.total=nativeWarStrength(row.player).total;
-    const effortSort=['war','other','flights'].includes(workspace.sort);
+    const effortSort=['war','other','flights','warShare','pointsPer100'].includes(workspace.sort);
     if(effortSort){
       const w=effortWindow();
       for(const row of selected)row.sortEffort=w&&(side==='ours'||cfg.enemyId===w.enemyId)?
@@ -8568,7 +8629,7 @@
       infoButton(p.name,p.id)+(row.skull?'<span class="ws-skull-mark" aria-label="Black Skull">\u2620</span>':'')+
       '<span class="ws-player-status '+tone+'">'+esc(fresh?p.status:'Cached: '+p.status)+(timer?' / '+timer:'')+'</span></div>'+
       '<p class="ws-player-glance">'+esc(own?'Given '+(!impact.complete&&impact.given!==null?'at least ':'')+warPoints(impact.given)+' captured points':strength.short)+(workspace.sort==='ffs'?' / FFS '+(Number.isFinite(row.personalFF)?row.personalFF.toFixed(2):'unknown'):'')+'</p>'+
-      (effort?'<div class="ws-player-metrics ws-effort">'+effortFields(effort,(label,value)=>'<span><small>'+esc(label)+'</small><b>'+esc(value)+'</b></span>')+'</div>':'')+
+      (effort?'<div class="ws-player-metrics ws-effort">'+effortFields(effort,(label,value)=>'<span><small>'+esc(label)+'</small><b>'+esc(value)+'</b></span>',[w.id,own?w.ourId:w.enemyId,p.id].join('-'))+'</div>':'')+
       '<details data-ws-disclosure="roster-'+side+'-'+p.id+'"><summary>Details and actions</summary>'+
       (own?'':latestPersonalEncounter(p))+
       (scouterDistributionText(p.id)?'<p class="ws-small">'+esc(scouterDistributionText(p.id))+'</p>':'')+
@@ -8590,7 +8651,7 @@
       workspaceTabs([['enemies','Opponents'],['ours','Our faction']],data.side,'workspace-side:')+
       '<div class="ws-roster-controls"><input id="ws-roster-query" type="search" value="'+esc(workspace.query)+'" placeholder="Find name or ID" aria-label="Search roster">'+
       options('ws-roster-country',[['all','All countries'],...data.countries.map(x=>[x,x])],workspace.country)+
-      options('ws-roster-sort',[['status','Okay first'],['hospital','Hospital expiry'],['name','Name A-Z'],['recent','Recent activity'],...(effortWindow()?[['war','Most war energy'],['other','Most non-war energy'],['flights','Most flights seen']]:[]),['lowest','Lowest total stats'],['highest','Highest total stats'],...(!own?[['ffs','Lowest personal FFS']]:[]),['points',own?'Most points given':'Most points scored'],...(own?[['net','Best net']]:[])],workspace.sort)+'</div>'+
+      options('ws-roster-sort',[['status','Okay first'],['hospital','Hospital expiry'],['name','Name A-Z'],['recent','Recent activity'],...(effortWindow()?[['war','Most war energy'],['other','Most non-war energy'],['flights','Most flights seen'],['warShare','Highest recorded war E %'],['pointsPer100','Most points per 100 E']]:[]),['lowest','Lowest total stats'],['highest','Highest total stats'],...(!own?[['ffs','Lowest personal FFS']]:[]),['points',own?'Most points given':'Most points scored'],...(own?[['net','Best net']]:[])],workspace.sort)+'</div>'+
       workspaceTabs([['all','All'],['okay','Okay'],['hospital','Hospital'],['away','Away'],['here','Here'],['releasing','Hospital within 15m'],['skulls','Skulls'],['watched','Watched']],workspace.filter,'workspace-filter:')+
       '<div class="ws-live-meta"><span>'+data.rows.length+' / '+data.total+' players | '+(data.fresh?'Roster '+esc(age(state.data.updated[data.side])):'STALE ROSTER')+'</span>'+b('Reset filters','workspace-reset')+'</div>'+
       '<p class="ws-small">Points are captured ranked-war attack respect, not official member scores. Partial values are minimums; net* is uncertain when either side is incomplete.</p>';
@@ -10367,7 +10428,7 @@
       field('Roster observation',rosterAge);
     const effortWar=effortWindow();
     if(effortWar&&(!enemy||cfg.enemyId===effortWar.enemyId)){
-      html+=effortFields(effortFor(effortWar,enemy?effortWar.enemyId:effortWar.ourId,p.id),field)+
+      html+=effortFields(effortFor(effortWar,enemy?effortWar.enemyId:effortWar.ourId,p.id),field,[effortWar.id,enemy?effortWar.enemyId:effortWar.ourId,p.id].join('-'))+
         field('Energy estimate','25 E per recorded outgoing attempt, including losses and stalemates.'+
           (enemy?' Enemy hits on third parties are generally outside our feed.':''));
     }
@@ -10570,7 +10631,10 @@
       cfg.nativeWarCountryGroups,cfg.nativeFriendlyFilter].join(':');
     const scoreText=preparation?'War preparation':score?'Us '+fmt(score.our)+' / Them '+fmt(score.enemy):'LIVE WAR',
       chainText=preparation?prepStartLabel(state.data.war):chain.fresh?'Chain '+fmt(chain.count)+' ('+chain.remaining+'s)':'Chain unknown';
+    const energyText=preparation?'':factionEnergyLine(effortWindow());
     if(toolbar.dataset.signature===signature){
+      const energy=toolbar.querySelector('[data-wsnw-energy]');
+      if(energy&&energy.textContent!==energyText)energy.textContent=energyText;
       const headline=toolbar.querySelector('[data-wsnw-score]'),
         clock=toolbar.querySelector('[data-wsnw-chain]');
       if(headline&&headline.textContent!=='WARSTAXX | '+scoreText)
@@ -10592,7 +10656,7 @@
     // Two compact lines; sorting by a native friendly heading is also a direct tap.
     toolbar.innerHTML=
       '<div class="wsnw-topline"><strong data-wsnw-score>WARSTAXX | '+scoreText+'</strong>'+
-      '<span data-wsnw-chain>'+chainText+'</span>'+
+      (energyText?'<small data-wsnw-energy>'+esc(energyText)+'</small>':'')+'<span data-wsnw-chain>'+chainText+'</span>'+
       '<button type="button" data-wsnw-action="quick-ready" '+
         'aria-pressed="'+(filter==='okay'?'true':'false')+'" '+
         'aria-label="Show only opponents currently Okay">\u2713 Ready '+
@@ -10878,6 +10942,9 @@
           // Preserve this container and the row's scroll position during 40s refreshes.
           const wrapper=document.createElement('div');wrapper.innerHTML=detailHtml;
           const generated=wrapper.firstElementChild;
+          const openLog=expandedInfo.querySelector('details.ws-flight-log[open]');
+          const nextLog=openLog&&generated?.querySelector('details.ws-flight-log');
+          if(nextLog&&openLog.dataset.wsDisclosure===nextLog.dataset.wsDisclosure)nextLog.open=true;
           if(generated&&expandedInfo.innerHTML!==generated.innerHTML)
             expandedInfo.innerHTML=generated.innerHTML;
         }else expandedInfo?.remove();
@@ -10997,6 +11064,8 @@
     if(scope)suppressWarStaxxTitles(scope);
   },{capture:true,passive:true});
   document.addEventListener('click',e=>{
+    const flightLog=e.target?.closest?.('.faction-war .wsnw-intel .ws-flight-log');
+    if(flightLog){e.stopPropagation();return;}
     const manualPin=e.target?.closest?.('.faction-war [data-wsnw-heavy]');
     if(manualPin&&isNativeWarPage()){
       e.preventDefault();e.stopPropagation();
@@ -11098,7 +11167,7 @@
   },true);
   document.addEventListener('keydown',e=>{
     const bar=e.target?.closest?.('.faction-war .wsnw-intel[data-wsnw-toggle]');
-    if(!bar||!isNativeWarPage()||!['Enter',' '].includes(e.key))return;
+    if(!bar||e.target.closest('.ws-flight-log')||!isNativeWarPage()||!['Enter',' '].includes(e.key))return;
     e.preventDefault();e.stopPropagation();
     const id=positive(bar.dataset.wsnwToggle);
     nativeWarState.expandedId=nativeWarState.expandedId===id?0:id;
