@@ -1,3 +1,9 @@
+## 3.0.8 – Faction energy, hitter efficiency and flight details
+
+The live scoreboard shows estimated attack energy recorded for each faction, including anonymous attacks when the faction can be identified. On **Players**, sort by **Highest recorded war E %** or **Most points per 100 E**. War E % is the share of a member's recorded attack energy used against war targets. Points per 100 E uses captured ranked points and **all** recorded attack energy, including non-war attacks and unsuccessful attempts. Missing evidence or a zero denominator can leave a ratio unavailable. Enemy outside attacks have limited coverage.
+
+Tap **Flights** on a player or in the hit ledger or after-action report for destinations and departure times in TCT. A FFScouter record shows its reported takeoff time. A Torn-only sighting shows the interval between roster checks. Older saved departures retain their timestamp and display an unknown destination until a matching observation supplies it.
+
 ## 3.0.7 – Attack energy and flights
 
 **Players → Our faction / Opponents** shows each player's war attempts, non-war attempts, estimated energy for each, total recorded attack energy, and observed flights. Sort within each country by war energy, non-war energy or flights. The same figures appear when you expand a player on Torn's war page. **Hit ledger** compares both rosters. **After action** keeps the breakdown for finished wars using the records on this device.

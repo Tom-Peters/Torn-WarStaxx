@@ -47,7 +47,7 @@
 
   // Locate the Lead Target card on the faction overview as well as the full war page.
   // The elapsed clock and war start identify the match without relying on CSS hashes.
-  let finishAnchor=null,finishNote=null;
+  let finishAnchor=null,finishNote=null,scoreEnergyNote=null;
   function findFinishAnchor(start,now){
     function clockMatches(clock){
       const seconds=elapsedSeconds(clock);
@@ -112,9 +112,19 @@
     const factionPage=(!viewed||viewed===cfg.ourId||viewed===w?.opponentId)&&location.pathname==='/factions.php'&&cfg.nativeWarEnabled!==false&&activeWarNow()&&w?.start>0;
     finishAnchor=factionPage?findFinishAnchor(w.start*1000,now):null;
     if(!finishAnchor){
-      finishNote?.remove();finishNote=null;return;
+      finishNote?.remove();finishNote=null;scoreEnergyNote?.remove();scoreEnergyNote=null;return;
     }
     const shown=shownWarTarget(finishAnchor),score=warScore(),rules=localWarRules();
+    if(!scoreEnergyNote){
+      scoreEnergyNote=document.createElement('small');scoreEnergyNote.id='ws-score-energy';
+      scoreEnergyNote.style.cssText='display:block;text-align:center;line-height:1.25;font-size:11px;overflow-wrap:anywhere';
+    }
+    const energy=factionEnergyLine(effortWindow());
+    if(scoreEnergyNote.textContent!==energy)scoreEnergyNote.textContent=energy;
+    const scoreRow=shown?.block.parentElement;
+    if(scoreRow&&scoreRow!==finishAnchor.box&&finishAnchor.box.contains(scoreRow)&&!scoreRow.contains(finishAnchor.clock)){
+      if(scoreRow.nextElementSibling!==scoreEnergyNote)scoreRow.after(scoreEnergyNote);
+    }else if(scoreEnergyNote.parentElement!==finishAnchor.box)finishAnchor.box.append(scoreEnergyNote);
     const entry=state.data.scoreTimelines?.[w.id]?.firstTarget;
     const opening=entry?.at<w.start*1000+(rules.after??24)*HOUR?entry.value:null;
     const net=widgetMargin(finishAnchor,shown,w,score);
