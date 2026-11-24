@@ -223,9 +223,21 @@ with sync_playwright() as pw:
     assert page.locator('#native').is_visible()
     # Native war screen, upgraded mid-war with a previously skipped anonymous ranked hit.
     page.goto('https://www.torn.com/factions.php#/war/7')
-    page.locator('#native').evaluate("""el=>el.innerHTML='<div class="faction-war"><ul class="members-list">'+
-        [1,2].map(id=>'<li class="your" data-player_id="'+id+'"><div class="member">Member '+id+'</div><div class="status">Okay</div></li>').join('')+'</ul></div>'""")
+    roster_html='<div class="faction-war">'+''.join(
+        '<ul class="members-list">'+''.join(
+            f'<li class="{side}" data-player_id="{i}"><div class="member">Member {i}</div><div class="status">Okay</div></li>'
+            for i in ids)+'</ul>' for side,ids in [('your',[1,2]),('enemy',[3,4])])+'</div>'
+    page.locator('#native').evaluate("(el,html)=>el.innerHTML=html",roster_html)
     start=data['war']['start']
+    page.evaluate('''start=>new Promise((resolve,reject)=>{
+      const req=indexedDB.open('warstaxx-intelligence',1);
+      req.onsuccess=()=>{
+        const db=req.result, tx=db.transaction('hours','readwrite'), at=start*1000;
+        tx.objectStore('hours').put({id:['war-flights',7,at,10,1,0].join('/'),source:'war-flights',war:7,faction:10,player:1,
+          hour:Math.floor(Date.now()/3600000)*3600000,lastCheck:at+90000,legs:[{after:at+30000,first:at+60000,last:at+80000,country:'Japan'}]});
+        tx.oncomplete=()=>{db.close();resolve()};tx.onerror=()=>reject(tx.error);
+      };req.onerror=()=>reject(req.error);
+    })''',start)
     data['war']['factions']=[dict(id=10,score=93),dict(id=20,score=23)]
     data['concededWars']={"7":dict(version=4,warId=7,ourId=10,enemyId=20,start=start*1000,cursor=NOW//1000,
         total=14.6,rows=1,ourTotal=0,ourRows=0,fetches=1,lastFetch=NOW,caughtUpAt=NOW,complete=True,
@@ -240,7 +252,8 @@ with sync_playwright() as pw:
         let body={};
         if(path.endsWith('/wars'))body={wars:{ranked:data.war}};
         if(path.endsWith('/members'))body={members:(path.includes('/10/')?data.ours:data.enemies).map(p=>({id:p.id,name:p.name,status:{state:'Okay'},last_action:{status:'Online'}}))};
-        if(path.endsWith('/faction/attacks'))body={attacks:[hit(101,1,14.6,{id:3,faction:{id:20}}),hit(102,2,8.45,null)]};
+        if(path.endsWith('/faction/attacks'))body={attacks:[hit(101,1,14.6,{id:3,faction:{id:20}}),hit(102,2,8.45,null),
+          {...hit(103,99,0,{id:1,faction:{id:10}}),is_ranked_war:false,defender:{id:99,faction:{id:30}},result:'Stalemate'}]};
         setTimeout(()=>r.onload({status:200,responseText:JSON.stringify(body)}),0);
       };
     }""",[data,cfg])
@@ -264,6 +277,40 @@ with sync_playwright() as pw:
     assert not native_log.evaluate('e=>e.open')
     assert member.locator('.wsnw-expanded-detail').evaluate('e=>e.scrollWidth<=e.clientWidth+2')
     print('Native score reconciliation passed at 360px: official score, honest gap, automatic replay and defender evidence.')
+    view=page.get_by_role('button',name='Energy and flights roster view')
+    countries=page.locator('[data-wsnw-action="countries"]')
+    friendly=page.locator('li.your[data-player_id="1"]')
+    enemy=page.locator('li.enemy[data-player_id="3"]')
+    assert countries.evaluate('e=>e.nextElementSibling.dataset.wsnwAction')=='roster-view'
+    assert view.get_attribute('aria-pressed')=='false'
+    assert enemy.locator('[data-wsnw-chip="outgoing"]').inner_text()=='1'
+    headings=page.locator('li.wsnw-country-heading').all_text_contents()
+    assert headings
+    view.click()
+    assert view.get_attribute('aria-pressed')=='true'
+    assert countries.get_attribute('aria-pressed')=='true'
+    assert page.locator('li.wsnw-country-heading').all_text_contents()==headings
+    assert member.locator('.wsnw-expanded-detail').is_visible()
+    for row in [friendly,enemy]:
+        assert row.locator('[data-wsnw-chip="war-e"]').inner_text()=='~25 E'
+        assert row.locator('[data-wsnw-chip="outgoing"]').count()==0
+        assert row.locator('.wsnw-intel').evaluate('e=>e.scrollWidth<=e.clientWidth+2')
+    for header in page.locator('.wsnw-legend').all():
+        assert 'NON-WAR E' in header.inner_text() and 'FLIGHTS' in header.inner_text()
+    assert friendly.locator('[data-wsnw-chip="other-e"]').inner_text()=='~25 E'
+    assert friendly.locator('[data-wsnw-chip="flights"]').inner_text()=='1 seen'
+    assert enemy.locator('[data-wsnw-chip="other-e"]').inner_text()=='—'
+    countries.click()
+    assert view.get_attribute('aria-pressed')=='true' and countries.get_attribute('aria-pressed')=='false'
+    page.reload()
+    page.locator('#native').evaluate("(el,html)=>el.innerHTML=html",roster_html)
+    inject()
+    view.wait_for()
+    assert view.get_attribute('aria-pressed')=='true' and countries.get_attribute('aria-pressed')=='false'
+    view.click()
+    assert friendly.locator('[data-wsnw-chip="given"]').is_visible() and enemy.locator('[data-wsnw-chip="warpoints"]').is_visible()
+    assert enemy.locator('[data-wsnw-chip="outgoing"]').is_visible()
+    assert page.locator('[data-wsnw-chip="war-e"]').count()==0
     # The compact faction overview in Torn PDA is a different route from the war roster.
     page.goto('https://www.torn.com/index.php')
     page.goto('https://www.torn.com/factions.php')
@@ -282,7 +329,7 @@ with sync_playwright() as pw:
     note=page.locator('#war-fixture time + #ws-finish-clock')
     assert note.locator('b').inner_text()=='Win in ~23h 27m'
     assert 'if scores hold' in note.inner_text()
-    assert 'Recorded attack energy: Us ~25 E' in page.locator('#ws-score-energy').inner_text()
+    page.locator('#ws-score-energy').filter(has_text='Recorded attack energy: Us ~50 E').wait_for()
     assert page.locator('#war-fixture footer').evaluate('e=>e.scrollWidth<=e.clientWidth')
     page.evaluate("""()=>{document.querySelector('#left-score').textContent='2,023';document.querySelector('#right-score').textContent='1,319';}""")
     note.get_by_text('Loss in ~23h 27m').wait_for(timeout=10000)
